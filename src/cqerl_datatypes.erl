@@ -9,7 +9,7 @@
 -define(CHAR,  8/big-integer).
 -define(SHORT, 16/big-integer).
 -define(INT,   32/big-integer).
--define(MAX_SHORT, 65536).
+-define(MAX_SHORT, 65535).
 
 -export([encode_string/1, 
          encode_long_string/1, 
@@ -36,7 +36,7 @@ encode_string(String) when is_list(String) ->
   Binary = list_to_binary(String),
   encode_string(Binary);
   
-encode_string(Binary) when is_binary(Binary), size(Binary) < ?MAX_SHORT ->
+encode_string(Binary) when is_binary(Binary), size(Binary) =< ?MAX_SHORT ->
   Size = size(Binary),
   {ok, << Size:?SHORT, Binary/binary >>};
   
@@ -82,7 +82,7 @@ encode_bytes(_) ->
 
 -spec encode_short_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
 
-encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) < ?MAX_SHORT ->
+encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) =< ?MAX_SHORT ->
   Size = size(Bytes),
   {ok, << Size:?SHORT, Bytes/binary >>};
   

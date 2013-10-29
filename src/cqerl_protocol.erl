@@ -6,7 +6,6 @@
 -define(CHAR,  8/big-integer).
 -define(SHORT, 16/big-integer).
 -define(INT,   32/big-integer).
--define(MAX_SHORT, 65536).
 
 -export([startup_frame/2, options_frame/1, auth_frame/2, prepare_frame/2, register_frame/2, 
          query_frame/3, execute_frame/3, batch_frame/2,
