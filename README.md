@@ -5,7 +5,7 @@
 We needed a good erlang CQL3 client for Cassandra. We saw that [one of the option][1] only talks Thrift, 
 and [the other][2] talks a dated CQL over Thrift and has been stalled for 2 years. And so we decided to build one that talks modern CQL3 over 
 the cassandra's [native binary protocol (v2)][3], can be used raw or with managed connection pools using [pooler][4], and takes advantage of
-cassandra's optimization, like query preparation/reuse.
+cassandra's optimization, like pipelining and query preparation/reuse.
 
 *It currently is a work in progress though. Stay tuned*
 
