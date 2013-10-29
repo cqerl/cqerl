@@ -2,9 +2,9 @@
 
 *Native Erlang CQL driver*
 
-We needed a good erlang driver to talk CQL3 with a cassandra deployment. [One][1] only talks Thrift, 
-and [the other][2] talks a dated CQL over Thrift, and has been stalled for 2 years, so we built one.
-It talks modern CQL3 over the [native binary protocol (v2)][3], can be used raw, or with managed connection pools, using [pooler][4].
+We needed a good erlang driver to talk CQL3 with a cassandra cluster. [One of the option][1] only talks Thrift, 
+and [the other][2] talks a dated CQL over Thrift and has been stalled for 2 years. And so we built one that talks modern CQL3 over 
+the cassandra's [native binary protocol (v2)][3], can be used raw, or with managed connection pools, using [pooler][4].
 
 *It currently is a work in progress though. Stay tuned*
 
