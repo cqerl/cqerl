@@ -1,0 +1,13 @@
+{application, cqerl,
+ [
+  {description, "CQErl client for Cassandra"},
+  {vsn, "1"},
+  {registered, [ cqerl ]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  pooler
+                 ]},
+  {mod, { cqerl_app, []}},
+  {env, []}
+ ]}.
