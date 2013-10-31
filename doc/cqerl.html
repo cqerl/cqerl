@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module cqerl</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module cqerl</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Main interface to CQErl cassandra client.
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+<p><b>Authors:</b> Mathieu D'Amours (<a href="mailto:matt@forest.io"><tt>matt@forest.io</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Main interface to CQErl cassandra client.
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-client">client()</a></h3>
+<p><b>abstract datatype</b>: <tt>client()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-inet">inet()</a></h3>
+<p><tt>inet() = {<a href="inet.html#type-ip_address">inet:ip_address()</a> | string(), Port::integer()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-query_tag">query_tag()</a></h3>
+<p><b>abstract datatype</b>: <tt>query_tag()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-result_continuation">result_continuation()</a></h3>
+<p><b>abstract datatype</b>: <tt>result_continuation()</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#close_client-1">close_client/1</a></td><td>Close a client that was previously allocated with <a href="#new_client-0"><code>new_client/0</code></a> or <a href="#new_client-1"><code>new_client/1</code></a>.</td></tr>
+<tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#fetch_more-1">fetch_more/1</a></td><td>Fetch the next page of result from Cassandra for a given continuation.</td></tr>
+<tr><td valign="top"><a href="#fetch_more_async-1">fetch_more_async/1</a></td><td>Asynchronously fetch the next page of result from cassandra for a given continuation.</td></tr>
+<tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#new_client-0">new_client/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#new_client-1">new_client/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#run_query-2">run_query/2</a></td><td>Fetch the next page of result from Cassandra for a given continuation.</td></tr>
+<tr><td valign="top"><a href="#send_query-2">send_query/2</a></td><td>Send a query to be executed asynchronously.</td></tr>
+<tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="close_client-1">close_client/1</a></h3>
+<div class="spec">
+<p><tt>close_client(ClientRef::<a href="#type-client">client()</a>) -&gt; no_return()</tt><br></p>
+</div><p><p>Close a client that was previously allocated with <a href="#new_client-0"><code>new_client/0</code></a> or <a href="#new_client-1"><code>new_client/1</code></a>.</p>
+ 
+  This function will return immediately no matter if the client has already been closed or not.</p>
+
+<h3 class="function"><a name="code_change-3">code_change/3</a></h3>
+<div class="spec">
+<p><tt>code_change(OldVsn, State, Extra) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="fetch_more-1">fetch_more/1</a></h3>
+<div class="spec">
+<p><tt>fetch_more(Continuation::<a href="#type-result_continuation">result_continuation()</a>) -&gt; #cql_result{}</tt><br></p>
+</div><p>Fetch the next page of result from Cassandra for a given continuation. The function will
+       return with the result from Cassandra (synchronously).</p>
+
+<h3 class="function"><a name="fetch_more_async-1">fetch_more_async/1</a></h3>
+<div class="spec">
+<p><tt>fetch_more_async(Continuation::<a href="#type-result_continuation">result_continuation()</a>) -&gt; <a href="#type-query_tag">query_tag()</a></tt><br></p>
+</div><p><p>Asynchronously fetch the next page of result from cassandra for a given continuation.</p>
+ 
+  A success or error message will be sent in response some time later (see <a href="#send_query-2"><code>send_query/2</code></a> for details) unless the
+  connection is dropped.</p>
+
+<h3 class="function"><a name="handle_call-3">handle_call/3</a></h3>
+<div class="spec">
+<p><tt>handle_call(Msg, From, State) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="handle_cast-2">handle_cast/2</a></h3>
+<div class="spec">
+<p><tt>handle_cast(Msg, State) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="handle_info-2">handle_info/2</a></h3>
+<div class="spec">
+<p><tt>handle_info(Msg, State) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="init-1">init/1</a></h3>
+<div class="spec">
+<p><tt>init(X1) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="new_client-0">new_client/0</a></h3>
+<div class="spec">
+<p><tt>new_client() -&gt; <a href="#type-client">client()</a></tt><br></p>
+</div>
+
+<h3 class="function"><a name="new_client-1">new_client/1</a></h3>
+<div class="spec">
+<p><tt>new_client(Inet::<a href="#type-inet">inet()</a>) -&gt; <a href="#type-client">client()</a></tt><br></p>
+</div>
+
+<h3 class="function"><a name="run_query-2">run_query/2</a></h3>
+<div class="spec">
+<p><tt>run_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; #cql_result{}</tt><br></p>
+</div><p><p>Fetch the next page of result from Cassandra for a given continuation. The function will
+       return with the result from Cassandra (synchronously).
+  The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record</p>
+ 
+  <pre>#cql_query{
+    query :: binary(),
+    reusable :: boolean(),
+    consistency :: consistency_level(),
+    named :: boolean(),
+    bindings :: list(number() | boolean() | binary() | list() | inet() | ) | list(tuple())
+  }</pre>
+ 
+  <p><em>Reusable</em> is a boolean indicating whether the query should be reused. <em>Reusing a query</em> means sending it to Cassandra to be prepared, which allows
+  later executions of the <strong>same query</strong> to be performed faster. This parameter is <code>true</code> by default when you provide bindings in the query (positional <code>?</code>
+  parameters or named <code>:var</code> parameters), and <code>false</code> by default when you don't. You can override the defaults.</p>
+ 
+  <p><em>Consistency</em> one of constants defined in <code>cqerl.hrl</code>, namely <code>?CQERL_CONSISTENCY_[Const]</code> where <code>Const</code> can be <code>ANY</code>, <code>ONE</code>,
+  <code>TWO</code>, <code>THREE</code>, <code>QUORUM</code>, <code>ALL</code>, <code>LOCAL_QUORUM</code>, <code>EACH_QUORUM</code>, <code>SERIAL</code>,
+  <code>LOCAL_SERIAL</code> or <code>LOCAL_ONE</code>.</p>
+ 
+  How <em>bindings</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
+  they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
+  parameter names. In the latter case, <em>bindings</em> should be a simple list of values.</p>
+
+<h3 class="function"><a name="send_query-2">send_query/2</a></h3>
+<div class="spec">
+<p><tt>send_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; <a href="#type-query_tag">query_tag()</a></tt><br></p>
+</div><p><p>Send a query to be executed asynchronously. This method returns immediately with a unique tag.</p>
+ 
+  <p>When a successful response is received from cassandra, a <code>{result, Tag, Result :: #cql_result{}}</code>  
+message is sent to the calling process.</p>
+ 
+  <p>If there is an error with the query, a <code>{error, Tag, Error :: #cql_error{}}</code> will be sent to the calling process.</p>
+ 
+  Neither of these messages will be called if the connection is dropped before receiving a response (see <a href="#new_client-0"><code>new_client/0</code></a> for
+  how to handle this case).</p>
+
+<h3 class="function"><a name="start_link-0">start_link/0</a></h3>
+<div class="spec">
+<p><tt>start_link() -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="terminate-2">terminate/2</a></h3>
+<div class="spec">
+<p><tt>terminate(Reason, State) -&gt; any()</tt></p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Oct 31 2013, 15:22:17.</i></p>
+</body>
+</html>

@@ -1,0 +1,5 @@
+%% encoding: UTF-8
+{application,cqerl}.
+{packages,[]}.
+{modules,[cqerl,cqerl_app,cqerl_auth_handler,cqerl_auth_plain_handler,
+          cqerl_client,cqerl_datatypes,cqerl_protocol,cqerl_sup]}.
