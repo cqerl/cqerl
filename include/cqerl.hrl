@@ -18,6 +18,7 @@
 -record(cql_query, {
   query       = <<>> :: binary(),   
   reusable    = undefined :: undefined | boolean(),
+  page_size   = undefined :: undefined | integer(),
   consistency = ?CQERL_CONSISTENCY_ANY :: consistency_level(),
   named       = false :: boolean(),
   bindings    = [] :: list(any())

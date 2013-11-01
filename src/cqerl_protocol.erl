@@ -34,10 +34,7 @@ encode_query_valuelist([]) ->
 encode_query_valuelist(Values) when is_list(Values) ->
   BytesSequence = << <<Bytes/binary>> || {ok, Bytes} <- [ ?DATA:encode_bytes(Value) || Value <- Values ] >>,
   ValuesLength = length(Values),
-  {ok, << ValuesLength:?SHORT, BytesSequence/binary >>};
-
-encode_query_valuelist(_) ->
-  {error, badarg}.
+  {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
 
 
 
@@ -90,10 +87,7 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
       Flags5 = Flags4
   end,
   
-  {ok, iolist_to_binary([ << Consistency:?SHORT, Flags5:?CHAR >>, ValueBin, PageSizeBin, PageStateBin, SerialConsistencyBin ])};
-
-encode_query_parameters(_, _) -> 
-  {error, badarg}.
+  {ok, iolist_to_binary([ << Consistency:?SHORT, Flags5:?CHAR >>, ValueBin, PageSizeBin, PageStateBin, SerialConsistencyBin ])}.
 
 
 
@@ -113,10 +107,7 @@ encode_batch_queries([Query=#cqerl_query{kind=Kind, query=Query, values=Values} 
 encode_batch_queries([], Acc) ->
   Length = length(Acc),
   QueriesBin = iolist_to_binary(lists:reverse(Acc)),
-  {ok, << Length:?SHORT , QueriesBin/binary >>};
-
-encode_batch_queries(_, _) ->
-  {error, badarg}.
+  {ok, << Length:?SHORT , QueriesBin/binary >>}.
 
 
 
@@ -124,14 +115,12 @@ encode_batch_queries(_, _) ->
 
 maybe_compress_body(false, _, Body) ->      {ok, Body};
 maybe_compress_body(true, snappy, Body) ->  snappy:compress(Body);
-maybe_compress_body(true, lz4, Body) ->     lz4:pack(Body);
-maybe_compress_body(_, _, _) ->             {error, badarg}.
+maybe_compress_body(true, lz4, Body) ->     lz4:pack(Body).
 
 
 maybe_decompress_body(false, _, Body) ->      {ok, Body};
 maybe_decompress_body(true, snappy, Body) ->  snappy:decompress(Body);
-maybe_decompress_body(true, lz4, Body) ->     lz4:unpack(Body);
-maybe_decompress_body(_, _, _) ->             {error, badarg}.
+maybe_decompress_body(true, lz4, Body) ->     lz4:unpack(Body).
 
 
 %% =======================
@@ -158,10 +147,7 @@ decode_flags(Flags, [Mask | Rest], Acc) ->
     0 -> false;
     _ -> true
   end,
-  decode_flags(Flags, Rest, [FlagSet | Acc]);
-  
-decode_flags(_, _, _) ->
-  {error, badarg}.
+  decode_flags(Flags, Rest, [FlagSet | Acc]).
   
   
 
@@ -202,10 +188,7 @@ decode_type(<< Type:?SHORT, Rest/binary >>) when Type > 0, Type =< 16 ->
     16 -> inet;
     _ -> unknown
   end,
-  {ok, TypeName, Rest};
-  
-decode_type(_) ->
-  {error, badarg}.
+  {ok, TypeName, Rest}.
   
   
   
@@ -256,10 +239,7 @@ decode_columns_metadata(GlobalSpec, Binary, Remainder, Acc) when is_list(Acc), R
   end,
   {ok, Name, Binary2} = ?DATA:decode_string(Binary1),
   {ok, Type, Binary3} = decode_type(Binary2),
-  decode_columns_metadata(GlobalSpec, Binary3, Remainder-1, [Record#cqerl_result_column_spec{name=Name, type=Type} | Acc]);
-
-decode_columns_metadata(_, _, _, _) ->
-  {error, badarg}.
+  decode_columns_metadata(GlobalSpec, Binary3, Remainder-1, [Record#cqerl_result_column_spec{name=Name, type=Type} | Acc]).
 
 
 
@@ -301,12 +281,9 @@ request_frame(#cqerl_frame{tracing=Tracing,
   FrameFlags = encode_frame_flags(Compression, Tracing),
   {ok, MaybeCompressedBody} = maybe_compress_body(Compression, CompressionType, Body),
   Size = size(MaybeCompressedBody),
-  {ok, iolist_to_binary([ << ?CQERL_FRAME_REQ:?CHAR, FrameFlags:?CHAR, ID:1/big-signed-integer, OpCode:?CHAR >>, 
+  {ok, iolist_to_binary([ << ?CQERL_FRAME_REQ:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR >>, 
                           << Size:?INT >>, 
-                          MaybeCompressedBody ])};
-                          
-request_frame(_, _) ->
-  {error, badarg}.
+                          MaybeCompressedBody ])}.
   
   
   
@@ -318,7 +295,7 @@ request_frame(_, _) ->
   
 startup_frame(Frame, #cqerl_startup_options{cql_version=CQLVersion, compression=Compression}) ->
   {ok, Map} = ?DATA:encode_proplist_to_map([ {'CQL_VERSION', CQLVersion}, 
-                                       {'COMPRESSION', Compression} ]),
+                                             {'COMPRESSION', Compression} ]),
   request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_STARTUP}, Map).
 
 
@@ -330,10 +307,7 @@ startup_frame(Frame, #cqerl_startup_options{cql_version=CQLVersion, compression=
   {ok, binary()} | {error, badarg}.
   
 options_frame(Frame=#cqerl_frame{}) ->
-  request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_OPTIONS});
-  
-options_frame(_) ->
-  {error, badarg}.
+  request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_OPTIONS}).
 
 
 
@@ -345,9 +319,8 @@ options_frame(_) ->
   {ok, binary()} | {error, badarg}.
 
 auth_frame(Frame=#cqerl_frame{}, Data) when is_binary(Data) ->
-  request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_AUTH_RESPONSE}, Data);
-auth_frame(_, _) ->
-  {error, badarg}.
+  Bytes = ?DATA:encode_bytes(Data),
+  request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_AUTH_RESPONSE}, Bytes).
 
 
 
@@ -360,10 +333,7 @@ auth_frame(_, _) ->
 
 prepare_frame(Frame, CQLStatement) when is_binary(CQLStatement) ->
   {ok, Payload} = ?DATA:encode_long_string(CQLStatement),
-  request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_PREPARE}, Payload);
-  
-prepare_frame(_, _) ->
-  {error, badarg}.
+  request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_PREPARE}, Payload).
 
 
 
@@ -389,10 +359,7 @@ register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
     _ ->    RegisteredEvents2
   end,
   {ok, EventStringList} = ?DATA:encode_string_list(RegisteredEvents3),
-  request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_REGISTER}, EventStringList);
-  
-register_frame(_, _) ->
-  {error, badarg}.
+  request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_REGISTER}, EventStringList).
 
 
 
@@ -410,10 +377,7 @@ query_frame(Frame=#cqerl_frame{},
   {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
   {ok, QueryBin} = ?DATA:encode_long_string(Query),
   request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_QUERY}, 
-                << QueryBin/binary, QueryParametersBin/binary >>);
-
-query_frame(_, _, _) ->
-  {error, badarg}.
+                << QueryBin/binary, QueryParametersBin/binary >>).
   
 
 
@@ -431,10 +395,7 @@ execute_frame(Frame=#cqerl_frame{},
   {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
   {ok, QueryIDBin} = ?DATA:encode_short_bytes(QueryID),
   request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_EXECUTE},
-                << QueryIDBin/binary, QueryParametersBin/binary >>);
-
-execute_frame(_, _, _) ->
-  {error, badarg}.
+                << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
 
@@ -450,10 +411,7 @@ batch_frame(Frame=#cqerl_frame{}, #cqerl_query_batch_parameters{consistency=Cons
                                                                 queries=Queries}) ->
   {ok, QueriesBin} = encode_batch_queries(Queries, []),
   request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_BATCH},
-                << Mode:?SHORT, QueriesBin/binary, Consistency:?SHORT >>);
-
-batch_frame(_, _) ->
-  {error, badarg}.
+                << Mode:?SHORT, QueriesBin/binary, Consistency:?SHORT >>).
 
 
 
@@ -470,19 +428,16 @@ batch_frame(_, _) ->
   {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}.
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
-               << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:1/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
-                   when is_binary(Response0),
-                        FrameFlags < 5 andalso FrameFlags > 0 ->
+               << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
+                   when is_binary(Body0),
+                        FrameFlags < 5 andalso FrameFlags >= 0 ->
                           
   {Compression, Tracing} = decode_frame_flags(FrameFlags),
   Response = Response0#cqerl_frame{opcode=OpCode, stream_id=ID, compression=Compression, tracing=Tracing},
   << Body1:Size/binary, Rest/binary >> = Body0,
   {ok, UncompressedBody} = maybe_decompress_body(Compression, CompressionType, Body1),
   {ok, ResponseTerm} = decode_response_term(Response, UncompressedBody),
-  {ok, Response, ResponseTerm, Rest};
-
-response_frame(_, _) ->
-  {error, badarg}.
+  {ok, Response, ResponseTerm, Rest}.
 
 
 -spec decode_response_term(#cqerl_frame{}, binary()) -> {ok, any()} | {error, badarg}.
@@ -528,10 +483,12 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_READY}, _Body) ->
   {ok, undefined};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body) ->
-  ?DATA:decode_string(Body);
+  {ok, String, _Rest} = ?DATA:decode_string(Body),
+  {ok, String};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Body) ->
-  ?DATA:decode_multimap_to_proplist(Body);
+  {ok, Proplist, _Rest} = ?DATA:decode_multimap_to_proplist(Body),
+  {ok, Proplist};
 
 %% Void result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 1:?INT, _Body/binary >>) ->
@@ -585,7 +542,4 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
 decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQERL_OP_AUTH_CHALLENGE;
                                                                AuthCode == ?CQERL_OP_AUTH_SUCCESS ->
   {ok, Bytes, _Rest} = ?DATA:decode_bytes(Body),
-  {ok, Bytes};
-
-decode_response_term(_, _) ->
-  {error, badarg}.
+  {ok, Bytes}.

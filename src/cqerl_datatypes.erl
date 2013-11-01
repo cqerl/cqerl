@@ -38,10 +38,7 @@ encode_string(String) when is_list(String) ->
   
 encode_string(Binary) when is_binary(Binary), size(Binary) =< ?MAX_SHORT ->
   Size = size(Binary),
-  {ok, << Size:?SHORT, Binary/binary >>};
-  
-encode_string(_) ->
-  {error, badarg}.
+  {ok, << Size:?SHORT, Binary/binary >>}.
   
   
   
@@ -56,10 +53,7 @@ encode_long_string(String) when is_list(String) ->
   
 encode_long_string(Binary) when is_binary(Binary) ->
   Size = size(Binary),
-  {ok, << Size:?INT, Binary/binary >>};
-  
-encode_long_string(_) ->
-  {error, badarg}.
+  {ok, << Size:?INT, Binary/binary >>}.
   
   
   
@@ -70,10 +64,7 @@ encode_long_string(_) ->
 
 encode_bytes(Bytes) when is_binary(Bytes) ->
   Size = size(Bytes),
-  {ok, << Size:?INT, Bytes/binary >>};
-  
-encode_bytes(_) ->
-  {error, badarg}.
+  {ok, << Size:?INT, Bytes/binary >>}.
   
   
   
@@ -84,10 +75,7 @@ encode_bytes(_) ->
 
 encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) =< ?MAX_SHORT ->
   Size = size(Bytes),
-  {ok, << Size:?SHORT, Bytes/binary >>};
-  
-encode_short_bytes(_) ->
-  {error, badarg}.
+  {ok, << Size:?SHORT, Bytes/binary >>}.
   
   
   
@@ -104,10 +92,7 @@ encode_string_list(StringList) when is_list(StringList) ->
 
 encode_string_list([String | Rest], Acc) when is_list(String); is_binary(String) ->
   {ok, EncodedString} = encode_string(String),
-  encode_string_list(Rest, [ EncodedString | Acc ]);
-  
-encode_string_list([], Acc) ->
-  {ok, lists:reverse(Acc)}.
+  encode_string_list(Rest, [ EncodedString | Acc ]).
   
   
   
@@ -137,10 +122,7 @@ encode_proplist_to_map([_|Rest], Acc) ->
   encode_proplist_to_map(Rest, Acc);
   
 encode_proplist_to_map([], Acc) ->
-  {ok, lists:reverse(Acc)};
-  
-encode_proplist_to_map(_, _) ->
-  {error, badarg}.
+  {ok, lists:reverse(Acc)}.
 
 
 
@@ -173,10 +155,7 @@ encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_binary(Value) ->
   encode_proplist_to_multimap([{Key, [Value]}|Rest], Acc);
   
 encode_proplist_to_multimap([_|Rest], Acc) ->
-  encode_proplist_to_multimap(Rest, Acc);
-  
-encode_proplist_to_multimap(_, _) ->
-  {error, badarg}.
+  encode_proplist_to_multimap(Rest, Acc).
   
   
 
@@ -186,10 +165,7 @@ decode_string(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length ->
   {ok, String, Rest1};
   
 decode_string(<< Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary};
-
-decode_string(_) -> 
-  {error, badarg}.
+  {error, malformed_binary}.
 
 
 
@@ -199,10 +175,7 @@ decode_long_string(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
   {ok, String, Rest1};
   
 decode_long_string(<< Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary};
-
-decode_long_string(_) -> 
-  {error, badarg}.
+  {error, malformed_binary}.
   
 
 
@@ -212,10 +185,7 @@ decode_bytes(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
   {ok, Bytes, Rest1};
   
 decode_bytes(<< Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary};
-
-decode_bytes(_) -> 
-  {error, badarg}.
+  {error, malformed_binary}.
   
 
 
@@ -225,10 +195,7 @@ decode_short_bytes(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length -
   {ok, Bytes, Rest1};
   
 decode_short_bytes(<< Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary};
-
-decode_short_bytes(_) -> 
-  {error, badarg}.
+  {error, malformed_binary}.
   
   
   
@@ -241,10 +208,7 @@ decode_string_list(Binary, 0, Acc) when is_binary(Binary) ->
 
 decode_string_list(Binary, Num, Acc) when is_binary(Binary) ->
   {ok, String, Rest} = decode_string(Binary),
-  decode_string_list(Rest, Num-1, [String|Acc]);
-
-decode_string_list(_, _, _) ->
-  {error, badarg}.
+  decode_string_list(Rest, Num-1, [String|Acc]).
 
 
 
@@ -259,10 +223,7 @@ decode_map_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
   {ok, KeyString, Rest0} = decode_string(Binary),
   {ok, StringList, Rest1} = decode_string(Rest0),
   Key = binary_to_atom(KeyString, utf8),
-  decode_map_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]);
-
-decode_map_to_proplist(_, _, _) ->
-  {error, badarg}.
+  decode_map_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
 
 
 
@@ -277,10 +238,7 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
   {ok, KeyString, Rest0} = decode_string(Binary),
   {ok, StringList, Rest1} = decode_string_list(Rest0),
   Key = binary_to_atom(KeyString, utf8),
-  decode_multimap_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]);
-
-decode_multimap_to_proplist(_, _, _) ->
-  {error, badarg}.
+  decode_multimap_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
   
   
 -ifdef(TEST).
@@ -346,10 +304,7 @@ bytes_test() ->
   % ... and that's its reverse is correct
   {ok, Bytes1, <<>>} = decode_bytes(EncodedBytes1).
 
-short_bytes_test() -> 
-  % Test that a byte sequence longer than permitted fails
-  WrongBytes = crypto:rand_bytes(100000),
-  {error, badarg} = encode_short_bytes(WrongBytes),
+short_bytes_test() ->
   
   % Test that encoding a proper byte sequence returns a properly encoded binary
   Bytes1 = crypto:rand_bytes(5000),

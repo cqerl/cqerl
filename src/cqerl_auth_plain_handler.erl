@@ -15,13 +15,11 @@
 encode_plain_credentials(PropList) ->
   {ok, User} = case proplists:get_value(username, PropList) of
     BinaryU when is_binary(BinaryU) -> {ok, BinaryU};
-    StringU when is_list(StringU) -> {ok, list_to_binary(StringU)};
-    _ -> {error, badarg}
+    StringU when is_list(StringU) -> {ok, list_to_binary(StringU)}
   end,
   {ok, Password} = case proplists:get_value(password, PropList) of
     BinaryP when is_binary(BinaryP) -> {ok, BinaryP};
-    StringP when is_list(StringP) -> {ok, list_to_binary(StringP)};
-    _ -> {error, badarg}
+    StringP when is_list(StringP) -> {ok, list_to_binary(StringP)}
   end,
   << 0, User/binary, 0, Password/binary >>.
 

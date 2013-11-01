@@ -43,6 +43,8 @@
 -define(RETRY_MAX_DELAY, 1000).
 -define(RETRY_EXP_FACT, 1.15).
 
+-define(DEFAULT_PORT, 9042).
+
 -spec prepare_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> ok.
 prepare_client(Inet, Opts) ->
   gen_server:cast(?MODULE, {prepare_client, prepare_node_info(Inet), Opts}).
@@ -59,7 +61,7 @@ new_client() ->
 
 -spec new_client(Inet :: inet()) ->  client().
 new_client({}) ->
-  new_client({{127, 0, 0, 1}, 9160}, []);
+  new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
 new_client(Inet) -> 
   new_client(Inet, []).
 
@@ -298,7 +300,7 @@ new_pool(Node, LocalOpts, GlobalOpts) ->
                    {cull_interval,  OptGetter(pool_cull_interval)},
                    {max_age,        OptGetter(client_max_age)},
                    {start_mfa,      {cqerl_client, start_link, [Node, 
-                         [  {auth_handler, OptGetter(auth_handler)},
+                         [  {auth, OptGetter(auth)},
                             {ssl, OptGetter(ssl)} ]]} }]).
 
 option_getter(Local, Global) ->
@@ -312,12 +314,12 @@ option_getter(Local, Global) ->
               pool_min_size -> 2;
               pool_cull_interval -> {1, min};
               client_max_age -> {30, sec};
-              auth_handler -> cqerl_auth_plain_handler;
+              auth -> {cqerl_auth_plain_handler, []};
               ssl -> false
             end;
-          GlobalVal -> GlobalVal
+          {Key, GlobalVal} -> GlobalVal
         end;
-      LocalVal -> LocalVal
+      {Key, LocalVal} -> LocalVal
     end
   end.
 
