@@ -319,7 +319,7 @@ options_frame(Frame=#cqerl_frame{}) ->
   {ok, binary()} | {error, badarg}.
 
 auth_frame(Frame=#cqerl_frame{}, Data) when is_binary(Data) ->
-  Bytes = ?DATA:encode_bytes(Data),
+  {ok, Bytes} = ?DATA:encode_bytes(Data),
   request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_AUTH_RESPONSE}, Bytes).
 
 

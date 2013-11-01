@@ -8,7 +8,7 @@
 
 -define(CHAR,  8/big-integer).
 -define(SHORT, 16/big-integer).
--define(INT,   32/big-integer).
+-define(INT,   32/big-signed-integer).
 -define(MAX_SHORT, 65535).
 
 -export([encode_string/1, 
@@ -164,8 +164,8 @@ decode_string(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length ->
   << String:Length/binary, Rest1/binary >> = Rest,
   {ok, String, Rest1};
   
-decode_string(<< Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary}.
+decode_string(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
+  {error, malformed_binary, Bin}.
 
 
 
@@ -174,18 +174,20 @@ decode_long_string(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
   << String:Length/binary, Rest1/binary >> = Rest,
   {ok, String, Rest1};
   
-decode_long_string(<< Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary}.
+decode_long_string(Bin = << Length:?INT, Rest/binary >>) when size(Rest) < Length ->
+  {error, malformed_binary, Bin}.
   
 
 
+decode_bytes(<< NegativeLength:?INT, _Rest/binary >>) when NegativeLength < 0 ->
+  {ok, undefined, <<>>};
 
 decode_bytes(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
   << Bytes:Length/binary, Rest1/binary >> = Rest,
   {ok, Bytes, Rest1};
   
-decode_bytes(<< Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary}.
+decode_bytes(Bin = << Length:?INT, Rest/binary >>) when size(Rest) < Length ->
+  {error, malformed_binary, Bin}.
   
 
 
@@ -194,8 +196,8 @@ decode_short_bytes(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length -
   << Bytes:Length/binary, Rest1/binary >> = Rest,
   {ok, Bytes, Rest1};
   
-decode_short_bytes(<< Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary}.
+decode_short_bytes(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
+  {error, malformed_binary, Bin}.
   
   
   
