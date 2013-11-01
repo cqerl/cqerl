@@ -49,7 +49,7 @@ init([Inet, Opts]) ->
     {ok, Socket, Transport} ->
       {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
       {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
-      send(State = #client_state{ socket=Socket, authmod=AuthHandler, trans=Transport, inet=Inet }, OptionsFrame),
+      send(State = #client_state{ socket=Socket, authmod=AuthHandler, trans=Transport, inet=Inet, authargs=AuthArgs }, OptionsFrame),
       activate_socket(State),
       {ok, starting, State};
     
@@ -71,7 +71,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport }) ->
   << _:3/binary, OpCode:8/big-integer, _/binary >> = BinaryMsg,
-  io:format("Got message with op code : ~w, <~w>~n", [OpCode, BinaryMsg]),
+  io:format("[starting] Got message with op code : ~w, <~w>~n", [OpCode, BinaryMsg]),
   
   case cqerl_protocol:response_frame(#cqerl_frame{}, BinaryMsg) of
     
@@ -85,7 +85,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       activate_socket(State),
       {next_state, starting, State#client_state{compression_type=Compression}};
     
-    %% Server tells us all is clear, we can start to throw it queries
+    %% Server tells us all is clear, we can start to throw queries at it
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_READY}, _, _} ->
       io:format("Ready!", []),
       activate_socket(State),
@@ -96,7 +96,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       #client_state{ authmod=AuthMod, authargs=AuthArgs, inet=Inet } = State,
       case AuthMod:auth_init(AuthArgs, Body, Inet) of
         {close, Reason} ->
-          close_socket(Socket),
+          close_socket(State),
           {stop, {auth_client_closed, Reason}, State};
         
         {reply, Reply, AuthState} ->
@@ -111,7 +111,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       #client_state{ authmod=AuthMod, authstate=AuthState } = State,
       case AuthMod:auth_handle_challenge(Body, AuthState) of
         {close, Reason} ->
-          close_socket(Socket),
+          close_socket(State),
           {stop, {auth_client_closed, Reason}, State};
         
         {reply, Reply, AuthState} ->
@@ -125,7 +125,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_ERROR}, {16#0100, AuthErrorDescription, _}, _} ->
       #client_state{ authmod=AuthMod, authstate=AuthState } = State,
       AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
-      close_socket(Socket),
+      close_socket(State),
       {stop, {auth_server_refused, AuthErrorDescription}, State};
     
     %% Server tells us the authentication went well, we can start shooting queries
@@ -133,7 +133,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       #client_state{ authmod=AuthMod, authstate=AuthState } = State,
       case AuthMod:auth_handle_success(Body, AuthState) of
         {close, Reason} ->
-          close_socket(Socket),
+          close_socket(State),
           {stop, {auth_client_closed, Reason}, State};
         
         ok ->
@@ -142,6 +142,13 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
           {next_state, live, State#client_state{ authstate=undefined }}
       end
       
+  end;
+
+handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socket=Socket, trans=Transport }) ->
+  << _:3/binary, OpCode:8/big-integer, _/binary >> = BinaryMsg,
+  io:format("[live] Got message with op code : ~w, <~w>~n", [OpCode, BinaryMsg]),
+  case cqerl_protocol:response_frame(base_frame(State), BinaryMsg) of
+    _ -> ok
   end;
 
 handle_info(Info, StateName, State) ->

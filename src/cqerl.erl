@@ -5,7 +5,8 @@
 -behaviour(gen_server).
 
 -export([
-  new_client/0, new_client/1, close_client/1,
+  new_client/0, new_client/1, new_client/2, 
+  close_client/1,
   run_query/2, send_query/2,
   fetch_more/1, fetch_more_async/1,
   
