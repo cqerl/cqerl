@@ -23,6 +23,7 @@
   authmod :: atom(),
   authstate :: any(),
   authargs :: list(any()),
+  delayed = <<>> :: binary(),
   inet :: any(),
   socket :: gen_tcp:socket() | ssl:sslsocket(),
   compression_type = undefined :: undefined | snappy | lz4,
@@ -69,11 +70,13 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event(_Event, _From, StateName, State) ->
   {reply, ok, StateName, State}.
 
-handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport }) ->
-  << _:3/binary, OpCode:8/big-integer, _/binary >> = BinaryMsg,
-  io:format("[starting] Got message with op code : ~w, <~w>~n", [OpCode, BinaryMsg]),
+handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
+  io:format("[starting] Got message <~w>~n", [BinaryMsg]),
   
-  case cqerl_protocol:response_frame(#cqerl_frame{}, BinaryMsg) of
+  case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
+    {delay, Delayed} ->
+      activate_socket(State),
+      {next_state, starting, State#client_state{delayed=Delayed}};
     
     %% Server tells us what version and compression algorithm it supports
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Payload, _} ->
@@ -83,13 +86,13 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
                                                                                                cql_version=SelectedVersion}),
       send(State, StartupFrame),
       activate_socket(State),
-      {next_state, starting, State#client_state{compression_type=Compression}};
+      {next_state, starting, State#client_state{compression_type=Compression, delayed = <<>>}};
     
     %% Server tells us all is clear, we can start to throw queries at it
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_READY}, _, _} ->
       io:format("Ready!", []),
       activate_socket(State),
-      {next_state, live, State};
+      {next_state, live, State#client_state{delayed = <<>>}};
     
     %% Server tells us we need to authenticate
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body, _} ->
@@ -97,13 +100,13 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       case AuthMod:auth_init(AuthArgs, Body, Inet) of
         {close, Reason} ->
           close_socket(State),
-          {stop, {auth_client_closed, Reason}, State};
+          {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>}};
         
         {reply, Reply, AuthState} ->
           {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
           send(State, AuthFrame),
           activate_socket(State),
-          {next_state, starting, State#client_state{ authstate=AuthState }}
+          {next_state, starting, State#client_state{ authstate=AuthState, delayed = <<>> }}
       end;
     
     %% Server tells us we need to give another piece of data
@@ -112,13 +115,13 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       case AuthMod:auth_handle_challenge(Body, AuthState) of
         {close, Reason} ->
           close_socket(State),
-          {stop, {auth_client_closed, Reason}, State};
+          {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>}};
         
         {reply, Reply, AuthState} ->
           {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
           send(State, AuthFrame),
           activate_socket(State),
-          {next_state, starting, State#client_state{ authstate=AuthState }}
+          {next_state, starting, State#client_state{ authstate=AuthState, delayed = <<>> }}
       end;
     
     %% Server tells us something screwed up while authenticating
@@ -126,20 +129,20 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
       #client_state{ authmod=AuthMod, authstate=AuthState } = State,
       AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
       close_socket(State),
-      {stop, {auth_server_refused, AuthErrorDescription}, State};
+      {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{delayed = <<>>}};
     
     %% Server tells us the authentication went well, we can start shooting queries
     {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, _} ->
-      #client_state{ authmod=AuthMod, authstate=AuthState } = State,
+      #client_state{ authmod=AuthMod, authstate=AuthState} = State,
       case AuthMod:auth_handle_success(Body, AuthState) of
         {close, Reason} ->
           close_socket(State),
-          {stop, {auth_client_closed, Reason}, State};
+          {stop, {auth_client_closed, Reason}, State#client_state{ delayed = <<>> }};
         
         ok ->
           io:format("Ready!", []),
           activate_socket(State),
-          {next_state, live, State#client_state{ authstate=undefined }}
+          {next_state, live, State#client_state{ authstate=undefined, delayed = <<>> }}
       end
       
   end;
@@ -156,7 +159,7 @@ handle_info(Info, StateName, State) ->
   {next_state, StateName, State}.
 
 terminate(_Reason, _StateName, _State) ->
-  ok.
+  timer:sleep(500).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
   {ok, StateName, State}.
@@ -180,7 +183,7 @@ send(#client_state{trans=ssl, socket=Socket}, Data) ->
 
 
 create_socket({Addr, Port}, Opts) ->
-  BaseOpts = [{active, false}, {nodelay, true}, binary],
+  BaseOpts = [{active, false}, {mode, binary}],
   Result = case proplists:lookup(ssl, Opts) of
     {ssl, false} ->
       Transport = tcp,
@@ -207,7 +210,7 @@ close_socket(#client_state{trans=tcp, socket=Socket}) ->
 
 
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
-  ssl:setopts(Socket, [{active, once}]);
+  ssl:setopts(Socket, [{active, once}, {mode, binary}]);
 activate_socket(#client_state{trans=tcp, socket=Socket}) ->
   inet:setopts(Socket, [{active, once}]).
 

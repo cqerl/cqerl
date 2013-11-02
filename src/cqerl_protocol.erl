@@ -427,6 +427,12 @@ batch_frame(Frame=#cqerl_frame{}, #cqerl_query_batch_parameters{consistency=Cons
 -spec response_frame(ResponseFrame :: #cqerl_frame{}, Response :: bitstring()) -> 
   {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}.
 
+response_frame(Response, Binary) when size(Binary) < 8 ->
+  {delay, Binary};
+
+response_frame(Response, << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
+  {delay, Body};
+
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
                << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
                    when is_binary(Body0),
