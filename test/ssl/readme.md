@@ -14,7 +14,7 @@ found [here][1]). The present directory includes an example of such keypair with
 password. To do so, go to Cassandra's working directory and do the following (assuming a
 UNIX host):
 
-```shell
+```bash
 # Generate the keystore
 keytool \
     -genkeypair 
@@ -48,11 +48,13 @@ client_encryption_options:
     keystore_password: MyPassword
 ```
 
-Now restart Cassandra and let the magic begin.
+You should also change the permissions over the `keystore.jks` file so it can only be read by the user running
+the cassandra daemon. Now restart Cassandra and let the magic begin.
 
 #### Making CQErl trust Cassandra
 
-The `cassandra.pem` file you made earlier need to be moved  You can configure CQErl to use SSL in different ways.
+The `cassandra.pem` certificate file you made earlier need to be moved where it can be found by cqerl. 
+Then, you can configure CQErl to use SSL in different ways.
 
 1. When starting a new client:
 
@@ -76,5 +78,12 @@ The `cassandra.pem` file you made earlier need to be moved  You can configure CQ
         ...
       ]
       ```
+      
+If cqerl can connect to different hosts with different keys, you can combine all of their certificates
+and have that combined file used by cqerl:
+
+```bash
+cat cert1.pem cert2.pem cert3.pem > trustedcerts.pem
+```
 
 [1]: http://www.datastax.com/documentation/cassandra/2.0/webhelp/index.html#cassandra/security/secureSSLNodeToNode_t.html
