@@ -32,6 +32,7 @@
   checked_env = false :: boolean(),
   clients             :: ets:tab(),
   nodes               :: list(tuple()),
+  globalopts          :: list(any()),
   retrying = false    :: boolean()
 }).
 -record(cql_client, {
@@ -185,10 +186,9 @@ handle_call(get_any_client, From = {UserPid, _Tag}, State = #cqerl_state{nodes=N
       {reply, Client, State}
   end;
 
-handle_call({get_client, Node, Opts}, From = {UserPid, _Tag}, State = #cqerl_state{clients=Clients, nodes=Nodes, retrying=Retrying}) ->
+handle_call({get_client, Node, Opts}, From = {UserPid, _Tag}, State = #cqerl_state{clients=Clients, nodes=Nodes, retrying=Retrying, globalopts=GlobalOpts}) ->
   case lists:member(Node, Nodes) of
     false ->
-      GlobalOpts = application:get_env(cqerl, default_options, []),
       new_pool(Node, Opts, GlobalOpts),
       case pooler:take_member(pool_from_node(Node)) of
         error_no_members -> 
@@ -218,11 +218,10 @@ handle_call(_Msg, _From, State) ->
 
 
 
-handle_cast({prepare_client, Node, Opts}, State=#cqerl_state{nodes=Nodes}) ->
+handle_cast({prepare_client, Node, Opts}, State=#cqerl_state{nodes=Nodes, globalopts=GlobalOpts}) ->
   case lists:member(Node, Nodes) of
     true -> ok;
     false -> 
-      GlobalOpts = application:get_env(cqerl, default_options, []),
       new_pool(Node, Opts, GlobalOpts),
       {noreply, State#cqerl_state{nodes=[Node|Nodes]}}
   end;
@@ -252,13 +251,16 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
-  GlobalOpts = application:get_env(cqerl, default_options, []),
+  GlobalOpts = lists:map(
+    fun (Key) ->  application:get_env(cqerl, Key, undefined) end, 
+    [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age]
+  ),
   Nodes = application:get_env(cqerl, cassandra_nodes, []),
   lists:foreach(fun
     ({Inet, Opts}) -> new_pool(Inet, Opts, GlobalOpts);
     (Inet) ->         new_pool(Inet, [], GlobalOpts)
   end, Nodes),
-  {noreply, State#cqerl_state{checked_env=true}};
+  {noreply, State#cqerl_state{ checked_env=true, globalopts=GlobalOpts }};
 
 handle_info({retry, Msg, From, Delay}, State=#cqerl_state{clients=Clients}) ->
   case handle_call(Msg, From, State#cqerl_state{retrying=true}) of
@@ -306,10 +308,10 @@ new_pool(Node, LocalOpts, GlobalOpts) ->
 
 option_getter(Local, Global) ->
   fun (Key) ->
-    case proplists:lookup(Key, Local) of
-      none ->
-        case proplists:lookup(Key, Global) of
-          none ->
+    case proplists:get_value(Key, Local) of
+      undefined ->
+        case proplists:get_value(Key, Global) of
+          undefined ->
             case Key of
               pool_max_size -> 5;
               pool_min_size -> 2;
@@ -318,9 +320,9 @@ option_getter(Local, Global) ->
               auth -> {cqerl_auth_plain_handler, []};
               ssl -> false
             end;
-          {Key, GlobalVal} -> GlobalVal
+          GlobalVal -> GlobalVal
         end;
-      {Key, LocalVal} -> LocalVal
+      LocalVal -> LocalVal
     end
   end.
 
