@@ -8,8 +8,11 @@ deps:
 compile:
 	${REBAR} compile
 
+recompile:
+	${REBAR} skip_deps=true compile
+
 test:
-	${REBAR} skip_deps=true eunit
+	${REBAR} skip_deps=true ct
 
 clean:
 	${REBAR} clean
