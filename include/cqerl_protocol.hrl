@@ -20,59 +20,53 @@
 -define(CQERL_OP_AUTH_RESPONSE,   16#0F).
 -define(CQERL_OP_AUTH_SUCCESS,    16#10).
 
--define(CQERL_EVENT_TOPOLOGY_CHANGE,  'TOPOLOGY_CHANGE').
--define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
--define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
-
--define(CQERL_BATCH_LOGGED,   0).
--define(CQERL_BATCH_UNLOGGED, 1).
--define(CQERL_BATCH_COUNTER,  2).
-
 -include("cqerl.hrl").
 
 -record(cqerl_frame, {
-  compression = false           :: boolean(), 
-  compression_type = undefined  :: lz4 | snappy | undefined, 
-  tracing = false               :: boolean(), 
-  opcode                        :: integer(), 
-  stream_id = 0                 :: integer() 
+    compression = false           :: boolean(), 
+    compression_type = undefined  :: lz4 | snappy | undefined, 
+    tracing = false               :: boolean(), 
+    opcode                        :: integer(), 
+    stream_id = 0                 :: integer() 
 }).
 
 -record(cqerl_startup_options, { 
-  cql_version = <<"3.0.0">> :: binary(), 
-  compression = <<>>        :: binary() 
+    cql_version = <<"3.0.0">> :: binary(), 
+    compression = <<>>        :: binary() 
 }).
 
 -record(cqerl_query_parameters, {
-  consistency         = ?CQERL_CONSISTENCY_ANY :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL,
-  skip_metadata       = false :: boolean(),
-  page_state          = undefined :: binary() | undefined,
-  page_size           = undefined :: integer() | undefined,
-  serial_consistency  = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined
+    consistency         = ?CQERL_CONSISTENCY_ANY :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL,
+    skip_metadata       = false :: boolean(),
+    page_state          = undefined :: binary() | undefined,
+    page_size           = undefined :: integer() | undefined,
+    serial_consistency  = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined
 }).
 
 -record(cqerl_query, {
-  kind                = normal :: normal | prepared,
-  query               = <<>> :: binary(),
-  values              = [] :: list(binary())
-}).
-
--record(cqerl_query_batch_parameters, {
-  consistency         = ?CQERL_CONSISTENCY_ANY :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL,
-  mode                = ?CQERL_BATCH_LOGGED :: ?CQERL_BATCH_LOGGED .. ?CQERL_BATCH_COUNTER,
-  queries             = [] :: list(#cqerl_query{})
+    kind                = normal :: normal | prepared,
+    query               = <<>> :: binary(),
+    values              = [] :: list(binary())
 }).
 
 -record(cqerl_result_column_spec, {
-  keyspace = <<>>        :: binary(),
-  table_name = <<>>      :: binary(),
-  name = <<>>            :: binary(),
-  type = undefined       :: column_type()
+    keyspace = <<>>        :: binary(),
+    table_name = <<>>      :: binary(),
+    name = <<>>            :: binary(),
+    type = undefined       :: column_type()
 }).
 
 -record(cqerl_result_metadata, {
-  page_state = undefined :: undefined | binary(),
-  columns_count = 0       :: integer(),
-  rows_count = 0         :: integer(),
-  columns = []           :: list(#cqerl_result_column_spec{})
+    page_state = undefined :: undefined | binary(),
+    columns_count = 0      :: integer(),
+    rows_count = 0         :: integer(),
+    columns = []           :: list(#cqerl_result_column_spec{})
+}).
+
+-record(cqerl_cached_query, {
+    key :: term(),
+    inet :: term(),
+    query_ref = <<>> :: binary(),
+    result_metadata :: #cqerl_result_metadata{},
+    params_metadata :: #cqerl_result_metadata{}
 }).

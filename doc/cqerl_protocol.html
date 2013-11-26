@@ -15,18 +15,21 @@
 
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#auth_frame-2">auth_frame/2</a></td><td>Given frame options and authentication data, produce a 'AUTH_RESPONSE' request
-       frame encoded in the protocol format.</td></tr>
+             frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#batch_frame-2">batch_frame/2</a></td><td>Given frame options and batch record (containing a set of queries), produce a
-       'BATCH' request frame encoded in the protocol format.</td></tr>
+             'BATCH' request frame encoded in the protocol format.</td></tr>
+<tr><td valign="top"><a href="#decode_row-2">decode_row/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_query_values-1">encode_query_values/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_query_values-2">encode_query_values/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#execute_frame-3">execute_frame/3</a></td><td>Given frame options, query parameters and a query, produce a 'EXECUTE' request
-       frame encoded in the protocol format.</td></tr>
+             frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#options_frame-1">options_frame/1</a></td><td>Given frame options, produce a 'OPTIONS' request frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#prepare_frame-2">prepare_frame/2</a></td><td>Given frame options and a CQL query, produce a 'PREPARE' request
-       frame encoded in the protocol format.</td></tr>
+             frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#query_frame-3">query_frame/3</a></td><td>Given frame options, query parameters and a query, produce a 'QUERY' request
-       frame encoded in the protocol format.</td></tr>
+             frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#register_frame-2">register_frame/2</a></td><td>Given frame options and the list of events, produce a 'REGISTER' request
-       frame encoded in the protocol format.</td></tr>
+             frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#response_frame-2">response_frame/2</a></td><td>Decode a response frame coming from the server, expanding the response options and response term.</td></tr>
 <tr><td valign="top"><a href="#startup_frame-2">startup_frame/2</a></td><td>Given frame and startup options, produce a 'STARTUP' request frame encoded in the protocol format.</td></tr>
 </table>
@@ -37,19 +40,34 @@
 <div class="spec">
 <p><tt>auth_frame(RequestFrame::#cqerl_frame{}, AuthData::binary()) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options and authentication data, produce a 'AUTH_RESPONSE' request
-       frame encoded in the protocol format.</p>
+             frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="batch_frame-2">batch_frame/2</a></h3>
 <div class="spec">
-<p><tt>batch_frame(RequestFrame::#cqerl_frame{}, BatchParameters::#cqerl_query_batch_parameters{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p><tt>batch_frame(RequestFrame::#cqerl_frame{}, BatchParameters::#cql_query_batch{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options and batch record (containing a set of queries), produce a
-       'BATCH' request frame encoded in the protocol format.</p>
+             'BATCH' request frame encoded in the protocol format.</p>
+
+<h3 class="function"><a name="decode_row-2">decode_row/2</a></h3>
+<div class="spec">
+<p><tt>decode_row(Row, ColumnSpecs) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="encode_query_values-1">encode_query_values/1</a></h3>
+<div class="spec">
+<p><tt>encode_query_values(Values) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="encode_query_values-2">encode_query_values/2</a></h3>
+<div class="spec">
+<p><tt>encode_query_values(Values, ColumnSpecs) -&gt; any()</tt></p>
+</div>
 
 <h3 class="function"><a name="execute_frame-3">execute_frame/3</a></h3>
 <div class="spec">
 <p><tt>execute_frame(RequestFrame::#cqerl_frame{}, QueryParameters::#cqerl_query_parameters{}, Query::#cqerl_query{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options, query parameters and a query, produce a 'EXECUTE' request
-       frame encoded in the protocol format.</p>
+             frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="options_frame-1">options_frame/1</a></h3>
 <div class="spec">
@@ -60,19 +78,19 @@
 <div class="spec">
 <p><tt>prepare_frame(RequestFrame::#cqerl_frame{}, CQLStatement::binary()) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options and a CQL query, produce a 'PREPARE' request
-       frame encoded in the protocol format.</p>
+             frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="query_frame-3">query_frame/3</a></h3>
 <div class="spec">
 <p><tt>query_frame(RequestFrame::#cqerl_frame{}, QueryParameters::#cqerl_query_parameters{}, Query::#cqerl_query{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options, query parameters and a query, produce a 'QUERY' request
-       frame encoded in the protocol format.</p>
+             frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="register_frame-2">register_frame/2</a></h3>
 <div class="spec">
 <p><tt>register_frame(RequestFrame::#cqerl_frame{}, EventList::[atom() | {atom(), boolean()}]) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
 </div><p>Given frame options and the list of events, produce a 'REGISTER' request
-       frame encoded in the protocol format.</p>
+             frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="response_frame-2">response_frame/2</a></h3>
 <div class="spec">
@@ -86,6 +104,6 @@
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Nov 1 2013, 14:27:01.</i></p>
+<p><i>Generated by EDoc, Nov 26 2013, 09:49:06.</i></p>
 </body>
 </html>

@@ -26,14 +26,6 @@
 <p><tt>inet() = {<a href="inet.html#type-ip_address">inet:ip_address()</a> | string(), Port::integer()}</tt></p>
 
 
-<h3 class="typedecl"><a name="type-query_tag">query_tag()</a></h3>
-<p><b>abstract datatype</b>: <tt>query_tag()</tt></p>
-
-
-<h3 class="typedecl"><a name="type-result_continuation">result_continuation()</a></h3>
-<p><b>abstract datatype</b>: <tt>result_continuation()</tt></p>
-
-
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#close_client-1">close_client/1</a></td><td>Close a client that was previously allocated with <a href="#new_client-0"><code>new_client/0</code></a> or <a href="#new_client-1"><code>new_client/1</code></a>.</td></tr>
 <tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
@@ -42,13 +34,20 @@
 <tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#has_more_pages-1">has_more_pages/1</a></td><td>Check to see if there are more result available.</td></tr>
+<tr><td valign="top"><a href="#head-1">head/1</a></td><td>Returns the first row of result, as a property list.</td></tr>
 <tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#new_client-0">new_client/0</a></td><td></td></tr>
 <tr><td valign="top"><a href="#new_client-1">new_client/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#new_client-2">new_client/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#next-1">next/1</a></td><td>Returns a tuple of <code>{HeadRow, ResultTail}</code>.</td></tr>
+<tr><td valign="top"><a href="#prepare_client-1">prepare_client/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#prepare_client-2">prepare_client/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#run_query-2">run_query/2</a></td><td>Fetch the next page of result from Cassandra for a given continuation.</td></tr>
 <tr><td valign="top"><a href="#send_query-2">send_query/2</a></td><td>Send a query to be executed asynchronously.</td></tr>
+<tr><td valign="top"><a href="#size-1">size/1</a></td><td>The number of rows in a result set.</td></tr>
 <tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#tail-1">tail/1</a></td><td>Returns all rows of result, except the first one.</td></tr>
 <tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
 </table>
 
@@ -68,13 +67,13 @@
 
 <h3 class="function"><a name="fetch_more-1">fetch_more/1</a></h3>
 <div class="spec">
-<p><tt>fetch_more(Continuation::<a href="#type-result_continuation">result_continuation()</a>) -&gt; #cql_result{}</tt><br></p>
+<p><tt>fetch_more(Continuation::#cql_result{}) -&gt; no_more_result | #cql_result{}</tt><br></p>
 </div><p>Fetch the next page of result from Cassandra for a given continuation. The function will
-       return with the result from Cassandra (synchronously).</p>
+             return with the result from Cassandra (synchronously).</p>
 
 <h3 class="function"><a name="fetch_more_async-1">fetch_more_async/1</a></h3>
 <div class="spec">
-<p><tt>fetch_more_async(Continuation::<a href="#type-result_continuation">result_continuation()</a>) -&gt; <a href="#type-query_tag">query_tag()</a></tt><br></p>
+<p><tt>fetch_more_async(Continuation::#cql_result{}) -&gt; reference() | no_more_result</tt><br></p>
 </div><p><p>Asynchronously fetch the next page of result from cassandra for a given continuation.</p>
  
   A success or error message will be sent in response some time later (see <a href="#send_query-2"><code>send_query/2</code></a> for details) unless the
@@ -94,6 +93,16 @@
 <div class="spec">
 <p><tt>handle_info(Msg, State) -&gt; any()</tt></p>
 </div>
+
+<h3 class="function"><a name="has_more_pages-1">has_more_pages/1</a></h3>
+<div class="spec">
+<p><tt>has_more_pages(Continuation::#cql_result{}) -&gt; true | false</tt><br></p>
+</div><p>Check to see if there are more result available</p>
+
+<h3 class="function"><a name="head-1">head/1</a></h3>
+<div class="spec">
+<p><tt>head(Cql_result) -&gt; any()</tt></p>
+</div><p>Returns the first row of result, as a property list</p>
 
 <h3 class="function"><a name="init-1">init/1</a></h3>
 <div class="spec">
@@ -115,19 +124,38 @@
 <p><tt>new_client(Inet::<a href="#type-inet">inet()</a>, Opts::[tuple() | atom()]) -&gt; <a href="#type-client">client()</a> | {error, no_client_available}</tt><br></p>
 </div>
 
+<h3 class="function"><a name="next-1">next/1</a></h3>
+<div class="spec">
+<p><tt>next(Cql_result) -&gt; any()</tt></p>
+</div><p><p>Returns a tuple of <code>{HeadRow, ResultTail}</code>.</p>
+ 
+  This can be used to iterate over a result set efficiently. Successively
+  call this function over the result set to go through all rows, until it
+  returns the <code>empty_dataset</code> atom.</p>
+
+<h3 class="function"><a name="prepare_client-1">prepare_client/1</a></h3>
+<div class="spec">
+<p><tt>prepare_client(Inet::<a href="#type-inet">inet()</a>) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="prepare_client-2">prepare_client/2</a></h3>
+<div class="spec">
+<p><tt>prepare_client(Inet::<a href="#type-inet">inet()</a>, Opts::[tuple() | atom()]) -&gt; ok</tt><br></p>
+</div>
+
 <h3 class="function"><a name="run_query-2">run_query/2</a></h3>
 <div class="spec">
 <p><tt>run_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; #cql_result{}</tt><br></p>
 </div><p><p>Fetch the next page of result from Cassandra for a given continuation. The function will
-       return with the result from Cassandra (synchronously).
+             return with the result from Cassandra (synchronously).
   The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record</p>
  
   <pre>#cql_query{
-    query :: binary(),
-    reusable :: boolean(),
-    consistency :: consistency_level(),
-    named :: boolean(),
-    bindings :: list(number() | boolean() | binary() | list() | inet() | ) | list(tuple())
+      query :: binary(),
+      reusable :: boolean(),
+      consistency :: consistency_level(),
+      named :: boolean(),
+      bindings :: list(number() | boolean() | binary() | list() | inet() | ) | list(tuple())
   }</pre>
  
   <p><em>Reusable</em> is a boolean indicating whether the query should be reused. <em>Reusing a query</em> means sending it to Cassandra to be prepared, which allows
@@ -144,7 +172,7 @@
 
 <h3 class="function"><a name="send_query-2">send_query/2</a></h3>
 <div class="spec">
-<p><tt>send_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; <a href="#type-query_tag">query_tag()</a></tt><br></p>
+<p><tt>send_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; reference()</tt><br></p>
 </div><p><p>Send a query to be executed asynchronously. This method returns immediately with a unique tag.</p>
  
   <p>When a successful response is received from cassandra, a <code>{result, Tag, Result :: #cql_result{}}</code>  
@@ -152,13 +180,23 @@ message is sent to the calling process.</p>
  
   <p>If there is an error with the query, a <code>{error, Tag, Error :: #cql_error{}}</code> will be sent to the calling process.</p>
  
-  Neither of these messages will be called if the connection is dropped before receiving a response (see <a href="#new_client-0"><code>new_client/0</code></a> for
+  Neither of these messages will be sent if the connection is dropped before receiving a response (see <a href="#new_client-0"><code>new_client/0</code></a> for
   how to handle this case).</p>
+
+<h3 class="function"><a name="size-1">size/1</a></h3>
+<div class="spec">
+<p><tt>size(Cql_result) -&gt; any()</tt></p>
+</div><p>The number of rows in a result set</p>
 
 <h3 class="function"><a name="start_link-0">start_link/0</a></h3>
 <div class="spec">
 <p><tt>start_link() -&gt; any()</tt></p>
 </div>
+
+<h3 class="function"><a name="tail-1">tail/1</a></h3>
+<div class="spec">
+<p><tt>tail(Cql_result) -&gt; any()</tt></p>
+</div><p>Returns all rows of result, except the first one</p>
 
 <h3 class="function"><a name="terminate-2">terminate/2</a></h3>
 <div class="spec">
@@ -167,6 +205,6 @@ message is sent to the calling process.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Nov 1 2013, 14:27:01.</i></p>
+<p><i>Generated by EDoc, Nov 26 2013, 09:49:06.</i></p>
 </body>
 </html>

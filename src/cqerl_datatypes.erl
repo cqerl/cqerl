@@ -15,6 +15,9 @@
          encode_proplist_to_map/1,
          encode_proplist_to_multimap/1,
          
+         encode_data/1,
+         decode_data/1,
+         
          decode_string/1,
          decode_long_string/1,
          decode_bytes/1,
@@ -29,98 +32,98 @@
 -spec encode_string(String :: string() | binary()) -> {ok, bitstring()} | {error, badarg}.
 
 encode_string(String) when is_list(String) ->
-  Binary = list_to_binary(String),
-  encode_string(Binary);
-  
+    Binary = list_to_binary(String),
+    encode_string(Binary);
+    
 encode_string(Binary) when is_binary(Binary), size(Binary) =< ?MAX_SHORT ->
-  Size = size(Binary),
-  {ok, << Size:?SHORT, Binary/binary >>}.
-  
-  
-  
+    Size = size(Binary),
+    {ok, << Size:?SHORT, Binary/binary >>}.
+    
+    
+    
 
 %% @doc Encode a long UTF8 binary or string (max length 2^32) into the wire format required by the protocol
 
 -spec encode_long_string(String :: string() | binary()) -> {ok, bitstring()} | {error, badarg}.
 
 encode_long_string(String) when is_list(String) ->
-  Binary = list_to_binary(String),
-  encode_long_string(Binary);
-  
+    Binary = list_to_binary(String),
+    encode_long_string(Binary);
+    
 encode_long_string(Binary) when is_binary(Binary) ->
-  Size = size(Binary),
-  {ok, << Size:?INT, Binary/binary >>}.
-  
-  
-  
-  
+    Size = size(Binary),
+    {ok, << Size:?INT, Binary/binary >>}.
+    
+    
+    
+    
 %% @doc Encode a binary (max length 2^32) into the wire format required by the protocol
 
 -spec encode_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
 
 encode_bytes(Bytes) when is_binary(Bytes) ->
-  Size = size(Bytes),
-  {ok, << Size:?INT, Bytes/binary >>}.
-  
-  
-  
+    Size = size(Bytes),
+    {ok, << Size:?INT, Bytes/binary >>}.
+    
+    
+    
 
 %% @doc Encode a binary (max length 2^16) into the wire format required by the protocol
 
 -spec encode_short_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
 
 encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) =< ?MAX_SHORT ->
-  Size = size(Bytes),
-  {ok, << Size:?SHORT, Bytes/binary >>}.
-  
-  
-  
+    Size = size(Bytes),
+    {ok, << Size:?SHORT, Bytes/binary >>}.
+    
+    
+    
 
 %% @doc Encode a string list into the wire format required by the protocol.
 
 -spec encode_string_list(StringList :: [binary() | string()]) -> {ok, bitstring()} | {error, badarg}. 
 
 encode_string_list(StringList) when is_list(StringList) ->
-  {ok, EncodedStringList} = encode_string_list(StringList, []),
-  Length = length(StringList),
-  Binary = iolist_to_binary(EncodedStringList),
-  {ok, << Length:?SHORT, Binary/binary >>}.
+    {ok, EncodedStringList} = encode_string_list(StringList, []),
+    Length = length(StringList),
+    Binary = iolist_to_binary(EncodedStringList),
+    {ok, << Length:?SHORT, Binary/binary >>}.
 
 encode_string_list([], Acc) ->
-  {ok, lists:reverse(Acc)};
+    {ok, lists:reverse(Acc)};
 encode_string_list([String | Rest], Acc) when is_list(String); is_binary(String) ->
-  {ok, EncodedString} = encode_string(String),
-  encode_string_list(Rest, [ EncodedString | Acc ]).
-  
-  
-  
-  
+    {ok, EncodedString} = encode_string(String),
+    encode_string_list(Rest, [ EncodedString | Acc ]).
+    
+    
+    
+    
 %% @doc Encode a proplist into a string map (<code>[string] -> [string]</code>), in the wire format required by the protocol.
 
 -spec encode_proplist_to_map(PropList :: [{atom() | binary(), binary()}]) -> {ok, bitstring()} | {error, badarg}.
 
 encode_proplist_to_map(PropList) -> 
-  {ok, IOList} = encode_proplist_to_map(PropList, []),
-  Binary = iolist_to_binary(IOList),
-  Length = length(IOList),
-  {ok, << Length:?SHORT, Binary/binary >>}.
+    {ok, IOList} = encode_proplist_to_map(PropList, []),
+    Binary = iolist_to_binary(IOList),
+    Length = length(IOList),
+    {ok, << Length:?SHORT, Binary/binary >>}.
 
 
 encode_proplist_to_map([{Key, Value}|Rest], Acc) when is_binary(Value) ->
-  KeyBin0 = case Key of
-    Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
-    String when is_list(String) -> list_to_binary(String);
-    String when is_binary(String) -> String
-  end,
-  {ok, KeyBin1} = encode_string(KeyBin0),
-  {ok, ValueBin} = encode_string(Value),
-  encode_proplist_to_map(Rest, [[KeyBin1, ValueBin] | Acc]);
-  
+    KeyBin0 = case Key of
+        Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
+        String when is_list(String) -> list_to_binary(String);
+        String when is_binary(String) -> String
+    end,
+    {ok, KeyBin1} = encode_string(KeyBin0),
+    {ok, ValueBin} = encode_string(Value),
+    encode_proplist_to_map(Rest, [[KeyBin1, ValueBin] | Acc]);
+    
 encode_proplist_to_map([_|Rest], Acc) ->
-  encode_proplist_to_map(Rest, Acc);
-  
+    encode_proplist_to_map(Rest, Acc);
+    
 encode_proplist_to_map([], Acc) ->
-  {ok, lists:reverse(Acc)}.
+    {ok, lists:reverse(Acc)}.
 
 
 
@@ -130,113 +133,283 @@ encode_proplist_to_map([], Acc) ->
 -spec encode_proplist_to_multimap(PropList :: [{atom() | binary(), [binary()]}]) -> {ok, bitstring()} | {error, badarg}.
 
 encode_proplist_to_multimap(PropList) ->
-  {ok, IOList} = encode_proplist_to_multimap(PropList, []),
-  Binary = iolist_to_binary(IOList),
-  Length = length(IOList),
-  {ok, << Length:?SHORT, Binary/binary >>}.
-  
+    {ok, IOList} = encode_proplist_to_multimap(PropList, []),
+    Binary = iolist_to_binary(IOList),
+    Length = length(IOList),
+    {ok, << Length:?SHORT, Binary/binary >>}.
+    
 
 encode_proplist_to_multimap([], Acc) ->
-  {ok, lists:reverse(Acc)};
-  
+    {ok, lists:reverse(Acc)};
+    
 encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_list(Value) ->
-  KeyBin0 = case Key of
-    Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
-    String when is_list(String) -> list_to_binary(String);
-    String when is_binary(String) -> String
-  end,
-  {ok, KeyBin1} = encode_string(KeyBin0),
-  {ok, ValueBin} = encode_string_list(Value),
-  encode_proplist_to_multimap(Rest, [[KeyBin1, ValueBin] | Acc]);
-  
+    KeyBin0 = case Key of
+        Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
+        String when is_list(String) -> list_to_binary(String);
+        String when is_binary(String) -> String
+    end,
+    {ok, KeyBin1} = encode_string(KeyBin0),
+    {ok, ValueBin} = encode_string_list(Value),
+    encode_proplist_to_multimap(Rest, [[KeyBin1, ValueBin] | Acc]);
+    
 encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_binary(Value) ->
-  encode_proplist_to_multimap([{Key, [Value]}|Rest], Acc);
-  
+    encode_proplist_to_multimap([{Key, [Value]}|Rest], Acc);
+    
 encode_proplist_to_multimap([_|Rest], Acc) ->
-  encode_proplist_to_multimap(Rest, Acc).
-  
-  
+    encode_proplist_to_multimap(Rest, Acc).
+    
+    
 
 
 decode_string(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length ->
-  << String:Length/binary, Rest1/binary >> = Rest,
-  {ok, String, Rest1};
-  
+    << String:Length/binary, Rest1/binary >> = Rest,
+    {ok, String, Rest1};
+    
 decode_string(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary, Bin}.
+    {error, malformed_binary, Bin}.
 
 
 
 
 decode_long_string(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
-  << String:Length/binary, Rest1/binary >> = Rest,
-  {ok, String, Rest1};
-  
+    << String:Length/binary, Rest1/binary >> = Rest,
+    {ok, String, Rest1};
+    
 decode_long_string(Bin = << Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary, Bin}.
-  
+    {error, malformed_binary, Bin}.
+    
 
 
 decode_bytes(<< NegativeLength:?INT, _Rest/binary >>) when NegativeLength < 0 ->
-  {ok, undefined, <<>>};
+    {ok, undefined, <<>>};
 
 decode_bytes(<< Length:?INT, Rest/binary >>) when size(Rest) >= Length ->
-  << Bytes:Length/binary, Rest1/binary >> = Rest,
-  {ok, Bytes, Rest1};
-  
+    << Bytes:Length/binary, Rest1/binary >> = Rest,
+    {ok, Bytes, Rest1};
+    
 decode_bytes(Bin = << Length:?INT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary, Bin}.
-  
+    {error, malformed_binary, Bin}.
+    
 
 
 
 decode_short_bytes(<< Length:?SHORT, Rest/binary >>) when size(Rest) >= Length ->
-  << Bytes:Length/binary, Rest1/binary >> = Rest,
-  {ok, Bytes, Rest1};
-  
+    << Bytes:Length/binary, Rest1/binary >> = Rest,
+    {ok, Bytes, Rest1};
+    
 decode_short_bytes(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Length ->
-  {error, malformed_binary, Bin}.
-  
-  
-  
-  
+    {error, malformed_binary, Bin}.
+    
+    
+    
+    
 decode_string_list(<< ListLength:?SHORT, Rest/binary >>) ->
-  decode_string_list(Rest, ListLength, []).
+    decode_string_list(Rest, ListLength, []).
 
 decode_string_list(Binary, 0, Acc) when is_binary(Binary) ->
-  {ok, lists:reverse(Acc), Binary};
+    {ok, lists:reverse(Acc), Binary};
 
 decode_string_list(Binary, Num, Acc) when is_binary(Binary) ->
-  {ok, String, Rest} = decode_string(Binary),
-  decode_string_list(Rest, Num-1, [String|Acc]).
+    {ok, String, Rest} = decode_string(Binary),
+    decode_string_list(Rest, Num-1, [String|Acc]).
 
 
 
 
 decode_map_to_proplist(<< MapLength:?SHORT, Rest/binary >>) ->
-  decode_map_to_proplist(Rest, MapLength, []).
+    decode_map_to_proplist(Rest, MapLength, []).
 
 decode_map_to_proplist(Binary, 0, Acc) when is_binary(Binary) ->
-  {ok, lists:reverse(Acc), Binary};
+    {ok, lists:reverse(Acc), Binary};
 
 decode_map_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
-  {ok, KeyString, Rest0} = decode_string(Binary),
-  {ok, StringList, Rest1} = decode_string(Rest0),
-  Key = binary_to_atom(KeyString, utf8),
-  decode_map_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
+    {ok, KeyString, Rest0} = decode_string(Binary),
+    {ok, StringList, Rest1} = decode_string(Rest0),
+    Key = binary_to_atom(KeyString, utf8),
+    decode_map_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
 
 
 
 
 decode_multimap_to_proplist(<< MapLength:?SHORT, Rest/binary >>) ->
-  decode_multimap_to_proplist(Rest, MapLength, []).
+    decode_multimap_to_proplist(Rest, MapLength, []).
 
 decode_multimap_to_proplist(Binary, 0, Acc) when is_binary(Binary) ->
-  {ok, lists:reverse(Acc), Binary};
+    {ok, lists:reverse(Acc), Binary};
 
 decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
-  {ok, KeyString, Rest0} = decode_string(Binary),
-  {ok, StringList, Rest1} = decode_string_list(Rest0),
-  Key = binary_to_atom(KeyString, utf8),
-  decode_multimap_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
-  
+    {ok, KeyString, Rest0} = decode_string(Binary),
+    {ok, StringList, Rest1} = decode_string_list(Rest0),
+    Key = binary_to_atom(KeyString, utf8),
+    decode_multimap_to_proplist(Rest1, Num-1, [{Key, StringList} | Acc]).
+    
+    
+
+-spec encode_data({Type :: datatype(), Value :: term()}) -> binary().
+
+encode_data({timeuuid, now}) ->
+    case get(uuidstate) of
+        undefined -> throw(uninitialized_uuidv1_state);
+        State -> uuid:get_v1(State)
+    end;
+
+encode_data({uuid, new}) ->
+    uuid:get_v4(strong);
+encode_data({uuid, strong}) ->
+    uuid:get_v4(strong);
+encode_data({uuid, weak}) ->
+    uuid:get_v4(weak);
+
+encode_data({UuidType, Uuid}) when UuidType == uuid orelse UuidType == timeuuid ->
+    case Uuid of
+        << _:128 >> -> Uuid
+    end;
+
+encode_data({ascii, Data}) when is_list(Data) ->
+    case lists:all(fun
+        (Int) when is_integer(Int) -> Int >= 0 andalso Int < 128;
+        (_) -> false
+    end, Data) of
+        false -> throw(invalid_ascii);
+        true -> Data
+    end;
+
+encode_data({ascii, Data}) when is_binary(Data) ->
+    Data;
+
+encode_data({BigIntType, Number}) when is_integer(Number), 
+                                       BigIntType == bigint orelse 
+                                       BigIntType == counter orelse 
+                                       BigIntType == timestamp ->
+    <<Number:64/big-signed-integer>>;
+
+encode_data({blob, Data}) when is_binary(Data) ->
+    Data;
+
+encode_data({boolean, true}) ->
+    <<1>>;
+
+encode_data({boolean, false}) ->
+    <<0>>;
+
+%% Arbitrary precision decimal value, given as {UnscaledValue, Scale} tuple where
+%% DecimalValue = UnscaledValue * 10^(-Scale)
+%% - UnscaledValue being an integer or arbitrary-precision
+%% - Scale being a 32-bit signed integer
+%% e.g. 1.234e-3 == 1234e-6 is equivalent to {1234, -6} in the expected notation
+encode_data({decimal, {UnscaledVal, Scale}}) ->
+    EncodedUnscaledVal = encode_data({varint, UnscaledVal}),
+    << Scale:?INT, EncodedUnscaledVal/binary >>;
+
+encode_data({float, Val}) ->
+    << Val:32/big-float >>;
+
+encode_data({double, Val}) ->
+    << Val:64/big-float >>;
+
+encode_data({int, Val}) ->
+    << Val:32/big-signed-integer >>;
+
+encode_data({TextType, Val}) when TextType == text orelse TextType == varchar ->
+    if  is_binary(Val) -> Val;
+        is_list(Val) -> list_to_binary(Val)
+    end;
+
+encode_data({timestamp, now}) ->
+    {MS, S, McS} = os:timestamp(),
+    MlS = MS * 1000000 + S * 1000 + trunc(McS/1000),
+    encode_data({timestamp, MlS});
+
+encode_data({varint, Val}) when is_integer(Val) ->
+    ByteCountF = math:log(Val) / math:log(2) / 8,
+    ByteCount0 = trunc(ByteCountF),
+    ByteCount = if  ByteCount0 == ByteCountF -> ByteCount0;
+                    true -> ByteCount0 + 1
+                end,
+    << Val:ByteCount/big-signed-integer-unit:8 >>;
+
+encode_data({inet, Addr}) when is_tuple(Addr) ->
+    if
+        tuple_size(Addr) == 4 -> %% IPv4
+            {A, B, C, D} = Addr,
+            << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR >>;
+            
+        tuple_size(Addr) == 8 -> %% IPv6 (erlang way)
+            {A, B, C, D, E, F, G, H} = Addr,
+            << A:?SHORT, B:?SHORT, C:?SHORT, D:?SHORT,
+               E:?SHORT, F:?SHORT, G:?SHORT, H:?SHORT >>;
+               
+        tuple_size(Addr) == 16 -> %% IPv6 (16 bytes)
+            {A, B, C, D, E, F, G, H,
+             I, J, K, L, M, N, O, P} = Addr,
+            << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR,
+               E:?CHAR, F:?CHAR, G:?CHAR, H:?CHAR,
+               I:?CHAR, J:?CHAR, K:?CHAR, L:?CHAR,
+               M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>
+    end;
+
+encode_data({inet, Addr}) when is_list(Addr) ->
+    {ok, AddrTuple} = inet:parse_address(Addr),
+    encode_data({inet, AddrTuple});
+
+encode_data({Type, _}) -> throw({bad_param_type, Type}).
+
+-spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
+
+decode_data({UuidType, Bin}) when UuidType == uuid orelse UuidType == timeuuid ->
+    << 16:?INT, Uuid:16/binary, Rest/binary >> = Bin,
+    {Uuid, Rest};
+
+decode_data({BigIntType, Bin}) when BigIntType == bigint orelse 
+                                    BigIntType == counter orelse 
+                                    BigIntType == timestamp ->
+    << 8:?INT, Number:64/big-signed-integer, Rest/binary >> = Bin,
+    {Number, Rest};
+
+decode_data({int, Bin}) ->
+    << 4:?INT, Number:32/big-signed-integer, Rest/binary >> = Bin,
+    {Number, Rest};
+
+decode_data({double, Bin}) ->
+    << 8:?INT, Val:64/big-float, Rest/binary >> = Bin,
+    {Val, Rest};
+
+decode_data({float, Bin}) ->
+    << 4:?INT, Val:32/big-float, Rest/binary >> = Bin,
+    {Val, Rest};
+
+decode_data({TextType, Bin}) when TextType == ascii orelse
+                                  TextType == varchar ->
+    << Size:?INT, Text:Size/binary, Rest/binary >> = Bin,
+    {Text, Rest};
+
+decode_data({blob, Bin}) ->
+    << Size:?INT, Text:Size/binary, Rest/binary >> = Bin,
+    {Text, Rest};
+
+decode_data({boolean, Bin}) ->
+    << 1:?INT, Bool:8, Rest/binary >> = Bin,
+    {Bool /= <<0>>, Rest};
+
+decode_data({varint, Bin}) ->
+    << Size:?INT, Number:Size/big-signed-integer-unit:8, Rest/binary >> = Bin,
+    {Number, Rest};
+
+decode_data({decimal, Bin}) ->
+    << Size:?INT, Scale:?INT, Bin1/binary >> = Bin,
+    IntSize = Size - 4,
+    << Unscaled:IntSize/big-signed-integer-unit:8, Rest/binary >> = Bin1,
+    {{Unscaled, Scale}, Rest};
+
+decode_data({inet, << 4:?INT, Addr:4/binary, Rest/binary >>}) ->
+    << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR >> = Addr,
+    {{A, B, C, D}, Rest};
+
+decode_data({inet, << 16:?INT, Addr:16/binary, Rest/binary >>}) ->
+    << A:?SHORT, B:?SHORT, C:?SHORT, D:?SHORT,
+       E:?SHORT, F:?SHORT, G:?SHORT, H:?SHORT >> = Addr,
+    {{A, B, C, D, E, F, G, H}, Rest};
+
+decode_data({_, << Size:?INT, Data/binary >>}) -> 
+    << Data:Size/binary, Rest/binary >> = Data,
+    {{unknown_type, Data}, Rest}.

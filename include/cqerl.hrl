@@ -10,20 +10,62 @@
 -define(CQERL_CONSISTENCY_LOCAL_SERIAL, 9).
 -define(CQERL_CONSISTENCY_LOCAL_ONE,    10).
 
--type consistency_level() :: 0 .. 10.
--type column_type() :: {custom, binary()} | {map, column_type(), column_type()} | {set | list, column_type()} |
-  ascii | bigint | blob | boolean | counter | decimal | double | 
-  float | int | timestamp | uuid | varchat | varint | timeuuid | inet.
+-define(CQERL_BATCH_LOGGED,   0).
+-define(CQERL_BATCH_UNLOGGED, 1).
+-define(CQERL_BATCH_COUNTER,  2).
+
+-define(CQERL_EVENT_TOPOLOGY_CHANGE,  'TOPOLOGY_CHANGE').
+-define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
+-define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
+
+-type consistency_level() :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_ONE.
+-type column_type() :: 
+  {custom, binary()} | 
+  {map, column_type(), column_type()} | 
+  {set | list, column_type()} | datatype().
+
+-type datatype() :: ascii | bigint | blob | boolean | counter | decimal | double | 
+                    float | int | timestamp | uuid | varchat | varint | timeuuid | inet.
+  
+-type parameter_val() :: number() | binary() | list() | atom().
+-type parameter() :: { datatype(), parameter_val() }.
+-type named_parameter() :: { atom(), parameter_val() }.
 
 -record(cql_query, {
-  query       = <<>> :: binary(),   
-  reusable    = undefined :: undefined | boolean(),
-  page_size   = undefined :: undefined | integer(),
-  consistency = ?CQERL_CONSISTENCY_ANY :: consistency_level(),
-  named       = false :: boolean(),
-  bindings    = [] :: list(any())
+    query       = <<>>      :: binary(),
+    values      = []        :: [ parameter() | named_parameter() ],
+    
+    reusable    = false     :: undefined | boolean(),
+    named       = false     :: boolean(),
+    
+    page_size   = 100       :: integer(),
+    page_state              :: binary() | undefined,
+    
+    consistency = ?CQERL_CONSISTENCY_ONE :: consistency_level(),
+    serial_consistency = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined
+}).
+
+-record(cql_call, {
+    type :: sync | async,
+    caller :: {pid(), reference()},
+    client :: reference()
+}).
+
+-record(cql_query_batch, {
+    consistency         = ?CQERL_CONSISTENCY_ONE :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL,
+    mode                = ?CQERL_BATCH_LOGGED :: ?CQERL_BATCH_LOGGED .. ?CQERL_BATCH_COUNTER,
+    queries             = [] :: list(tuple())
 }).
 
 -record(cql_result, {
-  
+    columns         = []        :: list(tuple()),
+    dataset         = []        :: list(list(term())),
+    query                       :: #cql_query{},
+    client                      :: {pid(), reference()}
+}).
+
+-record(cql_schema_changed, {
+    change_type :: created | updated | dropped,
+    keyspace    :: binary(),
+    table       :: binary()
 }).
