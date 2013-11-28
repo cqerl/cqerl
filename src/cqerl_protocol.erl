@@ -563,11 +563,13 @@ decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQER
 encode_query_values(Values) ->
     lists:map(fun cqerl_datatypes:encode_data/1, Values).
 
+encode_query_values(Values, []) ->
+    encode_query_values(Values);
 encode_query_values(Values, ColumnSpecs) ->
     lists:map(fun
         (#cqerl_result_column_spec{name=ColumnName, type=Type}) ->
             case proplists:get_value(ColumnName, Values) of
-                undefined -> throw(missing_param);
+                undefined -> throw({missing_parameter, {parameter, ColumnName}, {in, Values}, {specs, ColumnSpecs}});
                 Value -> cqerl_datatypes:encode_data({Type, Value})
             end
     end, ColumnSpecs).

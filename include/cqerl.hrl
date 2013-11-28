@@ -35,7 +35,7 @@
     query       = <<>>      :: binary(),
     values      = []        :: [ parameter() | named_parameter() ],
     
-    reusable    = false     :: undefined | boolean(),
+    reusable    = undefined :: undefined | boolean(),
     named       = false     :: boolean(),
     
     page_size   = 100       :: integer(),

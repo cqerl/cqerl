@@ -271,7 +271,7 @@ encode_data({ascii, Data}) when is_list(Data) ->
         (_) -> false
     end, Data) of
         false -> throw(invalid_ascii);
-        true -> Data
+        true -> list_to_binary(Data)
     end;
 
 encode_data({ascii, Data}) when is_binary(Data) ->
@@ -288,7 +288,6 @@ encode_data({blob, Data}) when is_binary(Data) ->
 
 encode_data({boolean, true}) ->
     <<1>>;
-
 encode_data({boolean, false}) ->
     <<0>>;
 
@@ -389,7 +388,7 @@ decode_data({blob, Bin}) ->
 
 decode_data({boolean, Bin}) ->
     << 1:?INT, Bool:8, Rest/binary >> = Bin,
-    {Bool /= <<0>>, Rest};
+    {Bool /= 0, Rest};
 
 decode_data({varint, Bin}) ->
     << Size:?INT, Number:Size/big-signed-integer-unit:8, Rest/binary >> = Bin,

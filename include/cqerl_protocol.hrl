@@ -67,6 +67,6 @@
     key :: term(),
     inet :: term(),
     query_ref = <<>> :: binary(),
-    result_metadata :: #cqerl_result_metadata{},
-    params_metadata :: #cqerl_result_metadata{}
+    params_metadata :: #cqerl_result_metadata{},
+    result_metadata :: #cqerl_result_metadata{}
 }).

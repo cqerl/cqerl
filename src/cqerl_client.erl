@@ -231,19 +231,6 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event(_Event, _From, StateName, State) ->
     {reply, ok, StateName, State}.
 
-handle_info({prepared, #cqerl_cached_query{key={_Inet, Statement}}}, live, 
-            State=#client_state{available_slots=[], queued=Queue0, waiting_preparation=Waiting}) ->
-    case orddict:find(Statement, Waiting) of
-        {ok, Waiters} ->
-            NewQueue = lists:foldl(fun
-                (Item, QueueAcc) -> queue:in(Item, QueueAcc)
-            end, Queue0, Waiters),
-            Waiting2 = orddict:erase(Statement, Waiting),
-            {next_state, live, State#client_state{waiting_preparation=Waiting2, queued=NewQueue}};
-        error ->
-            {next_state, live, State}
-    end;
-
 handle_info({prepared, CachedQuery=#cqerl_cached_query{key={_Inet, Statement}}}, live, 
             State=#client_state{waiting_preparation=Waiting}) ->
     case orddict:find(Statement, Waiting) of
@@ -261,8 +248,6 @@ handle_info({prepared, CachedQuery=#cqerl_cached_query{key={_Inet, Statement}}},
     end;
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
-    io:format("[starting] Got message <~w>~n", [BinaryMsg]),
-    
     Resp = case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
         %% The frame is incomplete, so we take the accumulated data so far and store it for the next incoming
         %% fragment
@@ -280,7 +265,6 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         
         %% Server tells us all is clear, we can start to throw queries at it
         {ok, R=#cqerl_frame{opcode=?CQERL_OP_READY}, _, _} ->
-            io:format("Ready!", []),
             {next_state, live, switch_to_live_state(State) };
         
         %% Server tells us we need to authenticate
@@ -327,7 +311,6 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
                     {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>, socket=undefined}};
                 
                 ok ->
-                    io:format("Ready!", []),
                     {next_state, live, switch_to_live_state(State) }
             end
     end,
@@ -337,7 +320,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
 handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(base_frame(State), TotalBin = << Delayed0/binary, BinaryMsg/binary >>) of
         {delay, Delayed} ->
-            {next_state, sleep, State#client_state{delayed=Delayed}};
+            {next_state, live, State#client_state{delayed=Delayed}};
         
         {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {void, _}, _} ->
             case orddict:find(StreamID, State#client_state.queries) of
@@ -355,6 +338,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
                         query  = Query#cql_query{page_state = ResultMetadata#cqerl_result_metadata.page_state},
                         columns = case ColumnSpecs of
                             undefined   -> ResultMetadata#cqerl_result_metadata.columns;
+                            []          -> ResultMetadata#cqerl_result_metadata.columns;
                             _           -> ColumnSpecs
                         end,
                         dataset = ResultSet
@@ -373,7 +357,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         
         {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, ResponseTerm}, _} ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {I, {preparing, Query}}} ->
+                {ok, {preparing, Query}} ->
                     cqerl_cache:query_was_prepared({State#client_state.inet, Query}, ResponseTerm);
                 {ok, undefined} -> ok
             end,
@@ -520,7 +504,7 @@ process_outgoing_query(prepare, Query, State=#client_state{queries=Queries0}) ->
     {ok, PrepareFrame} = cqerl_protocol:prepare_frame(BaseFrame, Query),
     send_to_db(State1, PrepareFrame),
     maybe_signal_busy(State1),
-    Queries1 = orddict:store(PrepareFrame#cqerl_frame.stream_id, {preparing, Query}, Queries0),
+    Queries1 = orddict:store(BaseFrame#cqerl_frame.stream_id, {preparing, Query}, Queries0),
     State1#client_state{queries=Queries1};
 
 process_outgoing_query(Call=#cql_call{}, Batch=#cql_query_batch{}, State=#client_state{queries=Queries0}) ->
@@ -528,14 +512,14 @@ process_outgoing_query(Call=#cql_call{}, Batch=#cql_query_batch{}, State=#client
     {ok, BatchFrame} = cqerl_protocol:batch_frame(BaseFrame, Batch),
     send_to_db(State1, BatchFrame),
     maybe_signal_busy(State1),
-    Queries1 = orddict:store(BatchFrame#cqerl_frame.stream_id, {Call, void}, Queries0),
+    Queries1 = orddict:store(BaseFrame#cqerl_frame.stream_id, {Call, void}, Queries0),
     State1#client_state{queries=Queries1};
 
 process_outgoing_query(Call,
                        {queued, Continuation=#cql_result{query=#cql_query{query=Statement}}},
                        State=#client_state{waiting_preparation=Waiting}) ->
     Waiting2 = case orddict:find(Statement, Waiting) of
-        error -> orddict:store([{Call, Continuation}]);
+        error -> orddict:store(Statement, [{Call, Continuation}], Waiting);
         _     -> orddict:append(Statement, {Call, Continuation}, Waiting)
     end,
     State#client_state{waiting_preparation=Waiting2};
@@ -544,7 +528,7 @@ process_outgoing_query(Call,
                        {queued, Query=#cql_query{query=Statement}},
                        State=#client_state{waiting_preparation=Waiting}) ->
     Waiting2 = case orddict:find(Statement, Waiting) of
-        error -> orddict:store([{Call, Query}]);
+        error -> orddict:store(Statement, [{Call, Query}], Waiting);
         _     -> orddict:append(Statement, {Call, Query}, Waiting)
     end,
     State#client_state{waiting_preparation=Waiting2};
@@ -581,11 +565,11 @@ process_outgoing_query(Call,
                 }
             );
         
-        #cqerl_cached_query{query_ref=Ref, result_metadata=Metadata, params_metadata=PMetadata} ->
-            Queries1 = orddict:store(I, {Call, {Query, Metadata#cqerl_result_metadata.columns}}, Queries0),
+        #cqerl_cached_query{query_ref=Ref, result_metadata=Metadata=#cqerl_result_metadata{columns=CachedColumnSpecs}, params_metadata=PMetadata} ->
+            Queries1 = orddict:store(I, {Call, {Query, CachedColumnSpecs}}, Queries0),
             cqerl_protocol:execute_frame(BaseFrame,
                 #cqerl_query_parameters{
-                    skip_metadata       = true,
+                    skip_metadata       = length(CachedColumnSpecs) > 0,
                     consistency         = Query#cql_query.consistency,
                     page_state          = Query#cql_query.page_state,
                     page_size           = Query#cql_query.page_size,
@@ -594,7 +578,7 @@ process_outgoing_query(Call,
                 #cqerl_query{
                     kind    = prepared,
                     query   = Ref,
-                    values  = cqerl_protocol:encode_query_values(Values, PMetadata)
+                    values  = cqerl_protocol:encode_query_values(Values, PMetadata#cqerl_result_metadata.columns)
                 }
             )
     end,
@@ -658,7 +642,7 @@ remove_user(Ref, State=#client_state{users=Users, queued=Queue0, queries=Queries
 switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace}) ->
     UsersTab = ets:new(users, [set, private, {keypos, #client_user.ref}]),
     lists:foreach(fun(From) -> add_user(From, UsersTab) end, Users),
-    Queries = create_queryset(),
+    Queries = create_queries_dict(),
     State1 = State#client_state{ 
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(), 
@@ -668,10 +652,12 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace}) ->
     },
     case Keyspace of
         undefined -> 
+            io:format("Keyspace is undefined~n"),
             State2 = State1;
-            
+        
         %% If a keyspace has been set, send a USE <KEYSPACE>; statement
         Keyspace ->
+            io:format("Keyspace is ~w~n", [Keyspace]),
             KeyspaceName = atom_to_binary(Keyspace, latin1),
             {BaseFrame, State2} = seq_frame(State1),
             {ok, Frame} = cqerl_protocol:query_frame(BaseFrame, 
@@ -802,13 +788,13 @@ module_exists(Module) ->
     end.
 
 
-create_queryset() ->
-    create_queryset(?QUERIES_MAX-1, []).
+create_queries_dict() ->
+    create_queries_dict(?QUERIES_MAX-1, []).
 
-create_queryset(0, Acc) ->
+create_queries_dict(0, Acc) ->
     [{0, undefined} | Acc];
-create_queryset(N, Acc) ->
-    create_queryset(N-1, [{N, undefined} | Acc]).
+create_queries_dict(N, Acc) ->
+    create_queries_dict(N-1, [{N, undefined} | Acc]).
 
 
 

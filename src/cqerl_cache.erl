@@ -106,6 +106,7 @@ handle_cast({query_prepared, Key={Inet, Query}, {QueryID, QueryMetadata, ResultM
     CachedQuery = #cqerl_cached_query{key=Key, inet=Inet, query_ref=QueryID, 
                                       params_metadata=QueryMetadata, 
                                       result_metadata=ResultMetadata},
+                                      
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
@@ -114,7 +115,7 @@ handle_cast({query_prepared, Key={Inet, Query}, {QueryID, QueryMetadata, ResultM
         error ->
             {noreply, State}
     end;
-    
+
 handle_cast({lookup, Inet, Query, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
     Key = {Inet, Query},
     case orddict:find(Key, Queue) of
