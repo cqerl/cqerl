@@ -17,13 +17,18 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 * SSL support
 * Pluggable authentication (as long as it's [SASL][2]-based)
 
+### Usage
+
+
+
 ### Installation
 
 Just include this repository in your project's `rebar.config` file and run `./rebar get-deps`. See [rebar][3] for more details on how to use rebar for Erlang project management.
 
-### Testing
+### Tests
 
 CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project. 
 
 1. Clone this repo on your machine
 2. Edit `test/test.config` and put your own cassandra's configurations
+3. At the project's top directory, run `make test`
