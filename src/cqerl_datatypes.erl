@@ -351,64 +351,99 @@ encode_data({inet, Addr}) when is_list(Addr) ->
     {ok, AddrTuple} = inet:parse_address(Addr),
     encode_data({inet, AddrTuple});
 
+encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
+    Length = length(List),
+    GetValueBinary = fun(Value) -> 
+        Bin = encode_data({Type, Value}),
+        {ok, ShortBytes} = encode_short_bytes(Bin),
+        ShortBytes
+    end,
+    Entries = << << (GetValueBinary(Value))/binary >> || Value <- List >>,
+    << Length:?SHORT, Entries/binary >>;
+    
+encode_data({{map, KeyType, ValType}, List}) ->
+    Length = length(List),
+    GetElementBinary = fun(Type, Value) -> 
+        Bin = encode_data({Type, Value}),
+        {ok, ShortBytes} = encode_short_bytes(Bin),
+        ShortBytes
+    end,
+    Entries = << << (GetElementBinary(KeyType, Key))/binary, 
+                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
+    << Length:?SHORT, Entries/binary >>;
+
 encode_data({Type, _}) -> throw({bad_param_type, Type}).
 
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
-decode_data({UuidType, Bin}) when UuidType == uuid orelse UuidType == timeuuid ->
-    << 16:?INT, Uuid:16/binary, Rest/binary >> = Bin,
+decode_data({UuidType, 16, Bin}) when UuidType == uuid orelse UuidType == timeuuid ->
+    << Uuid:16/binary, Rest/binary >> = Bin,
     {Uuid, Rest};
 
-decode_data({BigIntType, Bin}) when BigIntType == bigint orelse 
+decode_data({BigIntType, 8, Bin}) when BigIntType == bigint orelse 
                                     BigIntType == counter orelse 
                                     BigIntType == timestamp ->
-    << 8:?INT, Number:64/big-signed-integer, Rest/binary >> = Bin,
+    << Number:64/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({int, Bin}) ->
-    << 4:?INT, Number:32/big-signed-integer, Rest/binary >> = Bin,
+decode_data({int, 4, Bin}) ->
+    << Number:32/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({double, Bin}) ->
-    << 8:?INT, Val:64/big-float, Rest/binary >> = Bin,
+decode_data({double, 8, Bin}) ->
+    << Val:64/big-float, Rest/binary >> = Bin,
     {Val, Rest};
 
-decode_data({float, Bin}) ->
-    << 4:?INT, Val:32/big-float, Rest/binary >> = Bin,
+decode_data({float, 4, Bin}) ->
+    << Val:32/big-float, Rest/binary >> = Bin,
     {Val, Rest};
 
-decode_data({TextType, Bin}) when TextType == ascii orelse
+decode_data({TextType, Size, Bin}) when TextType == ascii orelse
                                   TextType == varchar ->
-    << Size:?INT, Text:Size/binary, Rest/binary >> = Bin,
+    << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
 
-decode_data({blob, Bin}) ->
-    << Size:?INT, Text:Size/binary, Rest/binary >> = Bin,
+decode_data({blob, Size, Bin}) ->
+    << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
 
-decode_data({boolean, Bin}) ->
-    << 1:?INT, Bool:8, Rest/binary >> = Bin,
+decode_data({boolean, 1, Bin}) ->
+    << Bool:8, Rest/binary >> = Bin,
     {Bool /= 0, Rest};
 
-decode_data({varint, Bin}) ->
-    << Size:?INT, Number:Size/big-signed-integer-unit:8, Rest/binary >> = Bin,
+decode_data({varint, Size, Bin}) ->
+    << Number:Size/big-signed-integer-unit:8, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({decimal, Bin}) ->
-    << Size:?INT, Scale:?INT, Bin1/binary >> = Bin,
+decode_data({decimal, Size, Bin}) ->
+    << Scale:?INT, Bin1/binary >> = Bin,
     IntSize = Size - 4,
     << Unscaled:IntSize/big-signed-integer-unit:8, Rest/binary >> = Bin1,
     {{Unscaled, Scale}, Rest};
 
-decode_data({inet, << 4:?INT, Addr:4/binary, Rest/binary >>}) ->
+decode_data({inet, 4, << Addr:4/binary, Rest/binary >>}) ->
     << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR >> = Addr,
     {{A, B, C, D}, Rest};
 
-decode_data({inet, << 16:?INT, Addr:16/binary, Rest/binary >>}) ->
+decode_data({inet, 16, << Addr:16/binary, Rest/binary >>}) ->
     << A:?SHORT, B:?SHORT, C:?SHORT, D:?SHORT,
        E:?SHORT, F:?SHORT, G:?SHORT, H:?SHORT >> = Addr,
     {{A, B, C, D, E, F, G, H}, Rest};
 
-decode_data({_, << Size:?INT, Data/binary >>}) -> 
+decode_data({{ColType, ValueType}, Size, Bin}) when ColType == set; ColType == list ->
+    << CollectionBin:Size/binary, Rest/binary>> = Bin,
+    << _N:?SHORT, EntriesBin/binary >> = CollectionBin,
+    List = [ element(1, decode_data({ValueType, ShortSize, ValueBin})) || << ShortSize:?SHORT, ValueBin:ShortSize/binary >> <= EntriesBin ],
+    {List, Rest};
+
+decode_data({{map, KeyType, ValueType}, Size, Bin}) ->
+    << CollectionBin:Size/binary, Rest/binary>> = Bin,
+    << _N:?SHORT, EntriesBin/binary >> = CollectionBin,
+    List = [ { element(1, decode_data({KeyType, KShortSize, KeyBin})), 
+               element(1, decode_data({ValueType, VShortSize, ValueBin})) } || 
+        << KShortSize:?SHORT, KeyBin:KShortSize/binary, VShortSize:?SHORT, ValueBin:VShortSize/binary >> <= EntriesBin ],
+    {List, Rest};
+
+decode_data({_, Size, << Size:?INT, Data/binary >>}) -> 
     << Data:Size/binary, Rest/binary >> = Data,
     {{unknown_type, Data}, Rest}.

@@ -51,7 +51,7 @@ groups() -> [
     {database, [sequence], [ 
         connect, create_keyspace, create_table, 
         simple_insertion_roundtrip, async_insertion_roundtrip,
-        all_datatypes
+        {types, [parallel], [all_datatypes, collection_types]}
     ]}
 ].
 
@@ -202,7 +202,7 @@ create_table(Config) ->
 simple_insertion_roundtrip(Config) ->
     Client = get_client(Config),
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    {ok, ok} = cqerl:run_query(Client, #cql_query{query=Q, values=[
+    {ok, void} = cqerl:run_query(Client, #cql_query{query=Q, values=[
         {id, "hello"},
         {age, 18},
         {email, <<"mathieu@damours.org">>}
@@ -226,7 +226,7 @@ async_insertion_roundtrip(Config) ->
     Ref2 = cqerl:send_query(Client, #cql_query{query = <<"SELECT * FROM entries1;">>}),
     Flush  = fun (CB, Res) ->
         receive
-            {result, Ref, ok} -> 
+            {result, Ref, void} -> 
                 CB(CB, Res);
             {result, Ref2, Result=#cql_result{}} ->
                 {_Row, Result2} = cqerl:next(Result),
@@ -237,6 +237,7 @@ async_insertion_roundtrip(Config) ->
                 cqerl:close_client(Client),
                 Row;
             Other2 ->
+                ct:log("Unexpected ~w~n", [Other2]),
                 throw({unexpected_msg, Other2})
         end
     end,
@@ -262,7 +263,7 @@ all_datatypes(Config) ->
         cqerl:run_query(Client, CreationQ),
     
     InsQ = #cql_query{query = <<"INSERT INTO entries2(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
-    {ok, ok} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
         {col1, "hello"},
         {col2, 9223372036854775807},
         {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -278,7 +279,7 @@ all_datatypes(Config) ->
         {col13, now},
         {col14, {127, 0, 0, 1}}
     ]}),
-    {ok, ok} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
         {col1, <<"foobar">>},
         {col2, -9223372036854775806},
         {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -307,7 +308,7 @@ all_datatypes(Config) ->
             lists:foreach(fun
                 ({col13, _}) -> true = uuid:is_v1(proplists:get_value(col13, Row));
                 ({col10, _}) -> true = uuid:is_v4(proplists:get_value(col10, Row));
-                ({col9, _}) -> ok;
+                ({col9, _}) -> ok; %% Yeah, I know...
                 ({col1, Key}) when is_list(Key) ->
                     Val = list_to_binary(Key),
                     Val = proplists:get_value(col1, Row);
@@ -318,7 +319,43 @@ all_datatypes(Config) ->
                     Val = proplists:get_value(Key, Row)
             end, ReferenceRow)
     end, [Row1, Row2]),
-    cqerl:close_client(Client).
+    cqerl:close_client(Client),
+    [Row1, Row2].
+
+collection_types(Config) ->
+    Client = get_client(Config),
+    
+    CreationQ = <<"CREATE TABLE entries3(key varchar, numbers list<int>, names set<varchar>, phones map<varchar, varchar>, PRIMARY KEY(key));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries3">>}} =
+        cqerl:run_query(Client, CreationQ),
+        
+    {ok, void} = cqerl:run_query(Client, #cql_query{
+        query = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
+        values = [
+            {key, "First collection"},
+            {numbers, [1,2,3,4,5]},
+            {names, ["matt", "matt", "yvon"]},
+            {phones, [{<<"home">>, <<"418-123-4545">>}, {"work", "555-555-5555"}]}
+        ]
+    }),
+    
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = "SELECT * FROM entries3;"}),
+    Row = cqerl:head(Result),
+    <<"First collection">> = proplists:get_value(key, Row),
+    [1,2,3,4,5] = proplists:get_value(numbers, Row),
+    Names = proplists:get_value(names, Row),
+    2 = length(Names),
+    true = lists:member(<<"matt">>, Names),
+    true = lists:member(<<"yvon">>, Names),
+    lists:foreach(fun
+        ({<<"home">>, <<"418-123-4545">>}) -> ok;
+        ({<<"work">>, <<"555-555-5555">>}) -> ok;
+        (_) -> throw(unexpected_value)
+    end, proplists:get_value(phones, Row)),
+    cqerl:close_client(Client),
+    Row.
+
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),

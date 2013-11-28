@@ -576,7 +576,7 @@ encode_query_values(Values, ColumnSpecs) ->
 
 decode_row(Row, ColumnSpecs) ->
     lists:map(fun
-        ({ValueBin, #cqerl_result_column_spec{name=Name, type=Type}}) ->
-            {Data, _Rest} = cqerl_datatypes:decode_data({Type, ValueBin}),
+        ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
+            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}),
             {Name, Data}
     end, lists:zip(Row, ColumnSpecs)).
