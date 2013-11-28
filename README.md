@@ -1,15 +1,29 @@
 # CQErl
 
-*Native Erlang CQL driver*
+Native Erlang driver for CQL3 over Cassandra's binary protocol v2 (a.k.a. what you want as a driver for Cassandra).
 
-We needed a good erlang CQL3 client for Cassandra. We saw that [one of the option][1] only talks Thrift, 
-and [the other][2] talks a dated CQL over Thrift and has been stalled for 2 years. And so we decided to build one that talks modern CQL3 over 
-the cassandra's [native binary protocol (v2)][3], can be used raw or with managed connection pools using [pooler][4], and takes advantage of
-cassandra's optimization, like muxing and query preparation/reuse.
+### At a glance
 
-*It currently is a work in progress though. Stay tuned*
+CQErl offers a simple Erlang interface to Cassandra using the latest CQL version (v3). The main features include:
 
-[1]: https://github.com/lpgauth/cassanderl
-[2]: https://github.com/ostinelli/erlcassa
-[3]: https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol_v2.spec;hb=eb96db6c19515e6d1215230f29d25b46fcd005ef
-[4]: https://github.com/seth/pooler
+* Automatic (and configurable) connection pools using [pooler][1]
+* Batched queries
+* Variable bindings in CQL queries (named or not)
+* Automatic query reuse when including variable bindings
+* Collection types support
+* Tunable consistency level
+* Synchronous or asynchronous queries
+* Automatic compression (using lz4 or snappy)
+* SSL support
+* Pluggable authentication (as long as it's [SASL][2]-based)
+
+### Installation
+
+Just include this repository in your project's `rebar.config` file and run `./rebar get-deps`. See [rebar][3] for more details on how to use rebar for Erlang project management.
+
+### Testing
+
+CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project. 
+
+1. Clone this repo on your machine
+2. Edit `test/test.config` and put your own cassandra's configurations
