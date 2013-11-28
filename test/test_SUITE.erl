@@ -54,7 +54,7 @@ groups() -> [
         simple_insertion_roundtrip, async_insertion_roundtrip,
         {transactions, [parallel], [
             {types, [parallel], [all_datatypes, collection_types, counter_type]},
-            batches
+            batches_and_pages
         ]}
     ]}
 ].
@@ -413,31 +413,37 @@ inserted_rows(N, Q, Acc) ->
         {email, list_to_binary(["test", ID, "@gmail.com"])}
     ]} | Acc ]).
 
-batches(Config) ->
+batches_and_pages(Config) ->
     Client = get_client(Config),
     {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
     Q = #cql_query{query = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
     Batch = #cql_query_batch{queries=inserted_rows(500, Q, [])},
     ct:log("Batch : ~w~n", [Batch]),
     {ok, void} = cqerl:run_query(Client, Batch),
-    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=125, query="SELECT * FROM entries1;"}),
     AddIDs = fun (Result, IDs0) ->
-        lists:foldr(fun (Row, IDs) -> 
-                        gb_sets:add(proplists:get_value(id, Row), IDs) 
+        lists:foldr(fun (Row, IDs) ->
+                        ID = proplists:get_value(id, Row),
+                        {IDint, _} = string:to_integer(binary_to_list(ID)),
+                        IDint = proplists:get_value(age, Row) - 10,
+                        IDsize = size(ID),
+                        << _:4/binary, ID:IDsize/binary, _Rest/binary >> = proplists:get_value(email, Row),
+                        gb_sets:add(ID, IDs) 
                     end, 
                     IDs0, cqerl:all_rows(Result))
     end,
+    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=125, query="SELECT * FROM entries1;"}),
     IDs1 = AddIDs(Result, gb_sets:new()),
     
     {ok, Result2} = cqerl:fetch_more(Result),
+    Ref1 = cqerl:fetch_more_async(Result2),
     IDs2 = AddIDs(Result2, IDs1),
-    
-    {ok, Result3} = cqerl:fetch_more(Result2),
-    IDs3 = AddIDs(Result3, IDs2),
-    
-    Ref = cqerl:fetch_more_async(Result3),
     receive
-        {result, Ref, Result4} ->
+        {result, Ref1, Result3} ->
+            Ref2 = cqerl:fetch_more_async(Result3),
+            IDs3 = AddIDs(Result3, IDs2)
+    end,
+    receive
+        {result, Ref2, Result4} ->
             IDs4 = AddIDs(Result4, IDs3),
             500 = gb_sets:size(IDs4)
     end.
