@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/2, query_was_prepared/2, query_was_prepared/2]).
+-export([start_link/0, lookup/2, query_was_prepared/2, query_preparation_failed/2]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -94,7 +94,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
-            lists:foreach(fun (Client) -> Client ! {preparation_failed, Reason} end, Waiting),
+            lists:foreach(fun (Client) -> Client ! {preparation_failed, Key, Reason} end, Waiting),
             {noreply, State#state{queued=orddict:erase(Key, Queue)}};
         error ->
             {noreply, State}

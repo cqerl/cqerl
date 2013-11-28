@@ -26,5 +26,6 @@ start_link() ->
 init([]) ->
     {ok, { {one_for_one, 5, 10}, [
       ?CHILD(cqerl, worker),
-      ?CHILD(cqerl_cache, worker)
+      ?CHILD(cqerl_cache, worker),
+      ?CHILD(cqerl_batch_sup, supervisor)
     ]}}.

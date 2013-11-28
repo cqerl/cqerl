@@ -25,6 +25,7 @@
     head/1,
     tail/1,
     next/1,
+    all_rows/1,
     
     start_link/0
 ]).
@@ -213,7 +214,11 @@ tail(Result=#cql_result{dataset=[_Row|Rest]}) ->
 next(#cql_result{dataset=[]}) -> empty_dataset;
 next(Result) -> {head(Result), tail(Result)}.
 
+%% @doc Returns a list of rows as property lists
 
+all_rows(#cql_result{dataset=[]}) -> [];
+all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}) ->
+    [ cqerl_protocol:decode_row(Row, ColumnSpecs) || Row <- Rows ].
 
 
 %% ====================

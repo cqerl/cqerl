@@ -49,9 +49,13 @@ suite() ->
 %%--------------------------------------------------------------------
 groups() -> [
     {database, [sequence], [ 
-        connect, create_keyspace, create_table, 
+        {initial, [sequence], [connect, create_keyspace]}, 
+        create_table,
         simple_insertion_roundtrip, async_insertion_roundtrip,
-        {types, [parallel], [all_datatypes, collection_types]}
+        {transactions, [parallel], [
+            {types, [parallel], [all_datatypes, collection_types, counter_type]},
+            batches
+        ]}
     ]}
 ].
 
@@ -88,6 +92,7 @@ all() ->
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
     application:ensure_all_started(cqerl),
+    application:start(sasl),
     [ {auth, ct:get_config(auth)}, 
       {ssl, ct:get_config(ssl)}, 
       {keyspace, ct:get_config(keyspace)},
@@ -101,8 +106,11 @@ init_per_suite(Config) ->
 %%
 %% Description: Cleanup after the suite.
 %%--------------------------------------------------------------------
-end_per_suite(_Config) ->
-    ok.
+end_per_suite(Config) ->
+    Client = get_client([{keyspace, undefined}|Config]),
+    {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = 
+        cqerl:run_query(Client, #cql_query{query = <<"DROP KEYSPACE test_keyspace;">>}),
+    cqerl:close_client(Client).
 
 %%--------------------------------------------------------------------
 %% Function: init_per_group(GroupName, Config0) ->
@@ -118,6 +126,10 @@ end_per_suite(_Config) ->
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
 
+init_per_group(initial, Config) ->
+    %% Here we remove the keyspace configuration, since we're going to drop it
+    %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
+    [{keyspace, undefined}|Config];
 init_per_group(_group, Config) ->
     Config.
 
@@ -340,14 +352,20 @@ collection_types(Config) ->
         ]
     }),
     
+    {ok, void} = cqerl:run_query(Client, #cql_query{
+        query = "UPDATE entries3 SET names = names + {'martin'} WHERE key = ?",
+        values = [{key, "First collection"}]
+    }),
+    
     {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = "SELECT * FROM entries3;"}),
     Row = cqerl:head(Result),
     <<"First collection">> = proplists:get_value(key, Row),
     [1,2,3,4,5] = proplists:get_value(numbers, Row),
     Names = proplists:get_value(names, Row),
-    2 = length(Names),
+    3 = length(Names),
     true = lists:member(<<"matt">>, Names),
     true = lists:member(<<"yvon">>, Names),
+    true = lists:member(<<"martin">>, Names),
     lists:foreach(fun
         ({<<"home">>, <<"418-123-4545">>}) -> ok;
         ({<<"work">>, <<"555-555-5555">>}) -> ok;
@@ -356,6 +374,73 @@ collection_types(Config) ->
     cqerl:close_client(Client),
     Row.
 
+counter_type(Config) ->
+    Client = get_client(Config),
+    
+    CreationQ = <<"CREATE TABLE entries4(key varchar, count counter, PRIMARY KEY(key));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries4">>}} =
+        cqerl:run_query(Client, CreationQ),
+    
+    {ok, void} = cqerl:run_query(Client, #cql_query{
+        query = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
+        values = [
+            {key, "First counter"},
+            {count, 18}
+        ]
+    }),
+    
+    {ok, void} = cqerl:run_query(Client, #cql_query{
+        query = "UPDATE entries4 SET count = count + 10 WHERE key = ?;",
+        values = [{key, "First counter"}]
+    }),
+    
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = "SELECT * FROM entries4;"}),
+    Row = cqerl:head(Result),
+    <<"First counter">> = proplists:get_value(key, Row),
+    28 = proplists:get_value(count, Row),
+    cqerl:close_client(Client),
+    Row.
+
+
+inserted_rows(0, Q, Acc) ->
+    lists:reverse(Acc);
+inserted_rows(N, Q, Acc) ->
+    ID = list_to_binary(io_lib:format("~B", [N])),
+    inserted_rows(N-1, Q, [ Q#cql_query{values=[
+        {id, ID}, 
+        {age, 10+N}, 
+        {email, list_to_binary(["test", ID, "@gmail.com"])}
+    ]} | Acc ]).
+
+batches(Config) ->
+    Client = get_client(Config),
+    {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
+    Q = #cql_query{query = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
+    Batch = #cql_query_batch{queries=inserted_rows(500, Q, [])},
+    ct:log("Batch : ~w~n", [Batch]),
+    {ok, void} = cqerl:run_query(Client, Batch),
+    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=125, query="SELECT * FROM entries1;"}),
+    AddIDs = fun (Result, IDs0) ->
+        lists:foldr(fun (Row, IDs) -> 
+                        gb_sets:add(proplists:get_value(id, Row), IDs) 
+                    end, 
+                    IDs0, cqerl:all_rows(Result))
+    end,
+    IDs1 = AddIDs(Result, gb_sets:new()),
+    
+    {ok, Result2} = cqerl:fetch_more(Result),
+    IDs2 = AddIDs(Result2, IDs1),
+    
+    {ok, Result3} = cqerl:fetch_more(Result2),
+    IDs3 = AddIDs(Result3, IDs2),
+    
+    Ref = cqerl:fetch_more_async(Result3),
+    receive
+        {result, Ref, Result4} ->
+            IDs4 = AddIDs(Result4, IDs3),
+            500 = gb_sets:size(IDs4)
+    end.
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),

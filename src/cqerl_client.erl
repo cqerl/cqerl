@@ -75,6 +75,8 @@ query({ClientPid, ClientRef}, Query) when is_binary(Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{query=Query}});
 query({ClientPid, ClientRef}, Query) when is_list(Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{query=list_to_binary(Query)}});
+query({ClientPid, ClientRef}, Query=#cql_query{query=Statement}) when is_list(Statement) ->
+    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query#cql_query{query=list_to_binary(Statement)}});
 query({ClientPid, ClientRef}, Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query}).
 
@@ -82,6 +84,8 @@ query_async(Client, Query) when is_binary(Query) ->
     query_async(Client, #cql_query{query=Query});
 query_async(Client, Query) when is_list(Query) ->
     query_async(Client, #cql_query{query=list_to_binary(Query)});
+query_async(Client, Query=#cql_query{query=Statement}) when is_list(Statement) ->
+    query_async(Client, Query#cql_query{query=list_to_binary(Statement)});
 query_async({ClientPid, ClientRef}, Query) ->
     QueryRef = make_ref(),
     gen_fsm:send_event(ClientPid, {send_query, {self(), QueryRef}, ClientRef, Query}),
@@ -98,8 +102,8 @@ fetch_more_async(Continuation=#cql_result{client={ClientPid, ClientRef}}) ->
 prepare_query(ClientPid, Query) ->
     gen_fsm:send_event(ClientPid, {prepare_query, Query}).
 
-batch_ready(ClientPid, QueryBatch) ->
-    gen_fsm:send_event(ClientPid, {batch_ready, QueryBatch}).
+batch_ready({ClientPid, Call}, QueryBatch) ->
+    gen_fsm:send_event(ClientPid, {batch_ready, Call, QueryBatch}).
 
 %% ------------------------------------------------------------------
 %% gen_fsm Function Definitions
@@ -247,90 +251,103 @@ handle_info({prepared, CachedQuery=#cqerl_cached_query{key={_Inet, Statement}}},
             {next_state, live, State}
     end;
 
+handle_info({preparation_failed, {_Inet, Statement}, Reason}, live,
+            State=#client_state{waiting_preparation=Waiting}) ->
+    case orddict:find(Statement, Waiting) of
+        {ok, Waiters} ->
+            Waiting2 = orddict:erase(Statement, Waiting),
+            lists:foreach(fun
+                ({Call, Item}) ->
+                    respond_to_user(Call, {error, Reason})
+            end, Waiters),
+            {next_state, live, State#client_state{waiting_preparation=Waiting2}};
+        error ->
+            {next_state, live, State}
+    end;
+
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
         %% The frame is incomplete, so we take the accumulated data so far and store it for the next incoming
         %% fragment
         {delay, Delayed} ->
-            {next_state, starting, State#client_state{delayed=Delayed}};
+            {next_state, starting, State};
         
         %% Server tells us what version and compression algorithm it supports
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Payload, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Payload, Delayed} ->
             Compression = choose_compression_type(proplists:lookup('COMPRESSION', Payload)),
             SelectedVersion = choose_cql_version(proplists:lookup('CQL_VERSION', Payload)),
             {ok, StartupFrame} = cqerl_protocol:startup_frame(#cqerl_frame{}, #cqerl_startup_options{compression=Compression, 
                                                                                                      cql_version=SelectedVersion}),
             send_to_db(State, StartupFrame),
-            {next_state, starting, State#client_state{compression_type=Compression, delayed = <<>>}};
+            {next_state, starting, State#client_state{compression_type=Compression}};
         
         %% Server tells us all is clear, we can start to throw queries at it
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_READY}, _, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_READY}, _, Delayed} ->
             {next_state, live, switch_to_live_state(State) };
         
         %% Server tells us we need to authenticate
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body, Delayed} ->
             #client_state{ authmod=AuthMod, authargs=AuthArgs, inet=Inet } = State,
             case AuthMod:auth_init(AuthArgs, Body, Inet) of
                 {close, Reason} ->
                     close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>, socket=undefined}};
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
                 
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
                     send_to_db(State, AuthFrame),
-                    {next_state, starting, State#client_state{ authstate=AuthState, delayed = <<>> }}
+                    {next_state, starting, State#client_state{ authstate=AuthState }}
             end;
         
         %% Server tells us we need to give another piece of data
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTH_CHALLENGE}, Body, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTH_CHALLENGE}, Body, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             case AuthMod:auth_handle_challenge(Body, AuthState) of
                 {close, Reason} ->
                     close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>, socket=undefined}};
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
                 
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
                     send_to_db(State, AuthFrame),
-                    {next_state, starting, State#client_state{ authstate=AuthState, delayed = <<>> }}
+                    {next_state, starting, State#client_state{ authstate=AuthState }}
             end;
         
         %% Server tells us something screwed up while authenticating
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_ERROR}, {16#0100, AuthErrorDescription, _}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_ERROR}, {16#0100, AuthErrorDescription, _}, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
             close_socket(State),
-            {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{delayed = <<>>, socket=undefined}};
+            {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{socket=undefined}};
         
         %% Server tells us the authentication went well, we can start shooting queries
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState} = State,
             case AuthMod:auth_handle_success(Body, AuthState) of
                 {close, Reason} ->
                     close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{delayed = <<>>, socket=undefined}};
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
                 
                 ok ->
                     {next_state, live, switch_to_live_state(State) }
             end
     end,
     activate_socket(?STATE_FROM_RETURN(Resp)),
-    Resp;
+    append_delayed_segment(Resp, Delayed);
 
 handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
-    Resp = case cqerl_protocol:response_frame(base_frame(State), TotalBin = << Delayed0/binary, BinaryMsg/binary >>) of
+    Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
         {delay, Delayed} ->
-            {next_state, live, State#client_state{delayed=Delayed}};
+            {next_state, live, State};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {void, _}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {void, _}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {Call, _}} ->
-                    respond_to_user(Call, ok);
+                {ok, {Call, _}} -> respond_to_user(Call, void);
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {rows, {ResultMetadata, ResultSet}}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {rows, {ResultMetadata, ResultSet}}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {Call=#cql_call{client=ClientRef}, {Query, ColumnSpecs}}} ->
                     respond_to_user(Call, #cql_result{
@@ -347,15 +364,14 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, ResponseTerm={set_keyspace, KeySpaceName}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, ResponseTerm={set_keyspace, KeySpaceName}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {Call, _}} ->
-                    respond_to_user(Call, ResponseTerm);
+                {ok, {Call, _}} -> respond_to_user(Call, ResponseTerm);
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, ResponseTerm}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, ResponseTerm}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
                     cqerl_cache:query_was_prepared({State#client_state.inet, Query}, ResponseTerm);
@@ -363,30 +379,31 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {schema_change, ResponseTerm}, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {schema_change, ResponseTerm}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {Call, _}} ->
-                    respond_to_user(Call, ResponseTerm);
+                {ok, {Call, _}} -> respond_to_user(Call, ResponseTerm);
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, ErrorTerm, _} when StreamID >= 0 ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, ErrorTerm, Delayed} when StreamID >= 0 ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {Call, _}} ->
-                    respond_to_user(Call, {error, ErrorTerm});
+                {ok, {preparing, Query}} ->
+                    cqerl_cache:query_preparation_failed({State#client_state.inet, Query}, ErrorTerm);
+                {ok, {Call, _}} -> respond_to_user(Call, {error, ErrorTerm});
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
         
-        {ok, R=#cqerl_frame{opcode=?CQERL_OP_EVENT}, EventTerm, _} ->
+        {ok, R=#cqerl_frame{opcode=?CQERL_OP_EVENT}, EventTerm, Delayed} ->
             ok;%% TODO Manage incoming server-driven events
         
         _ ->
+            Delayed = <<>>,
             {next_state, live, State}
     end,
     activate_socket(?STATE_FROM_RETURN(Resp)),
-    Resp;
+    append_delayed_segment(Resp, Delayed);
 
 handle_info({ Transport, Socket, BinaryMsg }, sleep, State = #client_state{ socket=Socket, trans=Transport, sleep=Duration, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
@@ -482,6 +499,13 @@ maybe_signal_busy(State) ->
     
     
     
+
+append_delayed_segment({X, Y, State}, Delayed) ->
+    {X, Y, State#client_state{delayed=Delayed}};
+append_delayed_segment({X, Y, Z, State}, Delayed) ->
+    {X, Y, Z, State#client_state{delayed=Delayed}}.
+
+
     
     
 release_stream_id(StreamID, State=#client_state{available_slots=Slots, queries=Queries}) ->
@@ -709,9 +733,9 @@ close_socket(#client_state{trans=tcp, socket=Socket}) ->
 activate_socket(#client_state{socket=undefined}) ->
     ok;
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
-    ssl:setopts(Socket, [{active, once}, {mode, binary}]);
+    ssl:setopts(Socket, [{active, once}, {mode, binary}, {packet, raw}]);
 activate_socket(#client_state{trans=tcp, socket=Socket}) ->
-    inet:setopts(Socket, [{active, once}]).
+    inet:setopts(Socket, [{active, once}, {packet, raw}]).
 
 
 

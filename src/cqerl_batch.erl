@@ -6,7 +6,12 @@
 start_link(Call, Inet, Batch=#cql_query_batch{}) ->
     spawn_link(fun () -> init(Call, Inet, Batch) end).
 
-init(Call, Inet, Batch=#cql_query_batch{queries=Queries}) ->
+init(Call, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
+    Queries = lists:map(fun
+        (Query=#cql_query{query=Statement}) when is_list(Statement) ->
+            Query#cql_query{query=list_to_binary(Statement)};
+        (Query) -> Query
+    end, Queries0),
     QueryStates = lists:zip(
         Queries,
         lists:map(fun (Query) -> cqerl_cache:lookup(Inet, Query) end, Queries)
@@ -41,7 +46,7 @@ terminate(Call, Batch) ->
         ({Query=#cql_query{values=Values}, 
           Cached=#cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
             #cqerl_query{query=Ref, kind=prepared,
-                         values=cqerl_protocol:encode_query_values(Values, Metadata)}
+                         values=cqerl_protocol:encode_query_values(Values, Metadata#cqerl_result_metadata.columns)}
                          
     end, Batch#cql_query_batch.queries),
     cqerl_client:batch_ready(Call, Batch#cql_query_batch{queries=Queries}).

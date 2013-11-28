@@ -3,9 +3,9 @@
 -include("cqerl_protocol.hrl").
 
 -define(DATA, cqerl_datatypes).
--define(CHAR,    8/big-integer).
--define(SHORT, 16/big-integer).
--define(INT,     32/big-integer).
+-define(CHAR,  8/big-integer).
+-define(SHORT, 16/big-unsigned-integer).
+-define(INT,   32/big-integer).
 
 -export([startup_frame/2, options_frame/1, auth_frame/2, prepare_frame/2, register_frame/2, 
          query_frame/3, execute_frame/3, batch_frame/2,
@@ -32,7 +32,7 @@ encode_query_valuelist([]) ->
     {ok, << 0:?SHORT >>};
 
 encode_query_valuelist(Values) when is_list(Values) ->
-    BytesSequence = << <<Bytes/binary>> || {ok, Bytes} <- [ ?DATA:encode_bytes(Value) || Value <- Values ] >>,
+    BytesSequence = << <<(element(2, ?DATA:encode_bytes(Value)))/binary>> || Value <- Values >>,
     ValuesLength = length(Values),
     {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
 
@@ -92,17 +92,17 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 
 
 
-encode_batch_queries([Query=#cqerl_query{kind=Kind, query=Query, values=Values} | Rest], Acc) ->
+encode_batch_queries([Query=#cqerl_query{kind=Kind, query=Statement, values=Values} | Rest], Acc) ->
     case Kind of 
         prepared -> 
-            {ok, QueryBin} = ?DATA:encode_short_bytes(Query),
+            {ok, QueryBin} = ?DATA:encode_short_bytes(Statement),
             KindNum = 1; 
         _ -> 
-            {ok, QueryBin} = ?DATA:encode_long_string(Query),
+            {ok, QueryBin} = ?DATA:encode_long_string(Statement),
             KindNum = 0 
     end,
     {ok, ValueBin} = encode_query_valuelist(Values),
-    encode_batch_queries(Rest, [[ KindNum, QueryBin, ValueBin ] | Acc]);
+    encode_batch_queries(Rest, [[ << KindNum:?CHAR >>, QueryBin, ValueBin ] | Acc]);
 
 encode_batch_queries([], Acc) ->
     Length = length(Acc),
@@ -412,7 +412,7 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
                                                    queries=Queries}) ->
     {ok, QueriesBin} = encode_batch_queries(Queries, []),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_BATCH},
-                  << Mode:?SHORT, QueriesBin/binary, Consistency:?SHORT >>).
+                  << Mode:?CHAR, QueriesBin/binary, Consistency:?SHORT >>).
 
 
 
@@ -431,8 +431,8 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
 response_frame(Response, Binary) when size(Binary) < 8 ->
     {delay, Binary};
 
-response_frame(Response, << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
-    {delay, Body};
+response_frame(Response, Binary = << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
+    {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
                              << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
@@ -444,7 +444,10 @@ response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
     << Body1:Size/binary, Rest/binary >> = Body0,
     {ok, UncompressedBody} = maybe_decompress_body(Compression, CompressionType, Body1),
     {ok, ResponseTerm} = decode_response_term(Response, UncompressedBody),
-    {ok, Response, ResponseTerm, Rest}.
+    {ok, Response, ResponseTerm, Rest};
+
+response_frame(_, Binary) ->
+    {delay, Binary}.
 
 
 -spec decode_response_term(#cqerl_frame{}, binary()) -> {ok, any()} | {error, badarg}.
