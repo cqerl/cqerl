@@ -2,7 +2,7 @@
 
 Native Erlang driver for CQL3 over Cassandra's binary protocol v2 (a.k.a. what you want as a driver for Cassandra).
 
-[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries)
+[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Data types](#data-types)
 
 [**Installation**](#installation) &middot; [**Tests**](#tests) &middot; [**License**](#license)
 
@@ -198,7 +198,29 @@ InsertQ = #cql_query{query = "INSERT INTO users(id, name, password) VALUES(?, ?,
   ]
 }).
 ```
-  
+
+##### Data types
+
+Here is a correspondance of cassandra column types with their equivalent Erlang types (bold denotes what will used in result sets, the rest is what is accepted).
+
+Cassandra Column Type | Erlang types
+----------------------|-----------------
+ascii                 | **binary**, string (only US-ASCII)
+bigint                | **integer** (signed 64-bit)
+blob                  | **binary**
+boolean               | `true`, `false`
+counter               | **integer** (signed 64-bit)
+decimal               | `{Unscaled :: integer(), Scale :: integer()}`
+double                | **float** (signed 64-bit)
+float                 | **float** (signed 32-bit)
+int                   | **integer** (signed 32-bit)
+timestamp             | **integer** (signed 64-bit), `now`, [binary or string][6]
+uuid                  | **binary**, `new`
+varchar               | **binary**, string
+varint                | **integer** (arbitrary precision)
+timeuuid              | **binary**, `now`
+inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
+
 ### Installation
 
 Just include this repository in your project's `rebar.config` file and run `./rebar get-deps`. See [rebar][3] for more details on how to use rebar for Erlang project management.
@@ -210,12 +232,6 @@ CQErl includes a test suite that you can run yourself, especially if you plan to
 1. Clone this repo on your machine
 2. Edit `test/test.config` and put your own cassandra's configurations
 3. At the project's top directory, run `make test`
-
-[1]: https://github.com/seth/pooler
-[2]: http://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer
-[3]: https://github.com/rebar/rebar
-[4]: http://www.datastax.com/documentation/cassandra/2.0/webhelp/index.html#cassandra/dml/dml_about_transactions_c.html
-[5]: http://en.wikipedia.org/wiki/Data_manipulation_language
 
 ### License
 
@@ -239,3 +255,10 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+[1]: https://github.com/seth/pooler
+[2]: http://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer
+[3]: https://github.com/rebar/rebar
+[4]: http://www.datastax.com/documentation/cassandra/2.0/webhelp/index.html#cassandra/dml/dml_about_transactions_c.html
+[5]: http://en.wikipedia.org/wiki/Data_manipulation_language
+[6]: http://www.datastax.com/documentation/cql/3.0/webhelp/index.html#cql/cql_reference/cql_data_types_c.html#reference_ds_dsf_555_yj
