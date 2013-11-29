@@ -2,7 +2,7 @@
 
 Native Erlang driver for CQL3 over Cassandra's binary protocol v2 (a.k.a. what you want as a driver for Cassandra).
 
-[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Data types](#data-types)
+[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)
 
 [**Installation**](#installation) &middot; [**Tests**](#tests) &middot; [**License**](#license)
 
@@ -201,6 +201,18 @@ InsertQ = #cql_query{query = "INSERT INTO users(id, name, password) VALUES(?, ?,
 }).
 ```
 
+##### Reusable queries
+
+If any of the following is true:
+
+* you set `#cql_query{}`'s `reusable` field to `true`
+* the query contains positional variable bindings (`?`) and you did not explicitely `reusable` to false
+* the query contains named variable bindings (`:name`) (ignores the value of `reusable`)
+
+the query is considered *reusable*. This means that the first time this query will be performed, CQErl will ask the connected Cassandra node to prepare the query, after which, internally, a query ID will be used instead of the query statement when executing it. That particular cassandra node will hold on to the prepared query on its side and subsequent queries *that use exactly the same statement* [will be performed faster and with less network traffic][7].
+
+CQErl can tell which query has been previously prepared on which node by keeping a local cache, so all of this happens correctly and transparently.
+
 ##### Data types
 
 Here is a correspondance of cassandra column types with their equivalent Erlang types (bold denotes what will used in result sets, the rest is what is accepted).
@@ -264,3 +276,4 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 [4]: http://www.datastax.com/documentation/cassandra/2.0/webhelp/index.html#cassandra/dml/dml_about_transactions_c.html
 [5]: http://en.wikipedia.org/wiki/Data_manipulation_language
 [6]: http://www.datastax.com/documentation/cql/3.0/webhelp/index.html#cql/cql_reference/cql_data_types_c.html#reference_ds_dsf_555_yj
+[7]: http://www.datastax.com/dev/blog/client-side-improvements-in-cassandra-2-0
