@@ -823,9 +823,9 @@ create_queries_dict(N, Acc) ->
 
 
 get_sleep_duration(Opts) ->
-    case proplists:get_value(sleep_duration, Opts) of
+    round(case proplists:get_value(sleep_duration, Opts) of
         {Amount, sec} -> Amount * 1000;
         {Amount, min} -> Amount * 1000 * 60;
         {Amount, hour} -> Amount * 1000 * 60 * 60;
         Amount when is_integer(Amount) -> Amount
-    end.
+    end).
