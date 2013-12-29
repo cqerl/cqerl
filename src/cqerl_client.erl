@@ -663,7 +663,8 @@ remove_user(Ref, State=#client_state{users=Users, queued=Queue0, queries=Queries
 
 
 
-switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace}) ->
+switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=Inet}) ->
+    signal_alive(Inet, Keyspace),
     UsersTab = ets:new(users, [set, private, {keypos, #client_user.ref}]),
     lists:foreach(fun(From) -> add_user(From, UsersTab) end, Users),
     Queries = create_queries_dict(),
@@ -749,6 +750,8 @@ signal_busy() ->
 signal_avail() ->
     gen_server:cast(cqerl, {client_avail, self()}).
 
+signal_alive(Inet, Keyspace) ->
+    gen_server:cast(cqerl, {client_alive, self(), Inet, Keyspace}).
 
 
 

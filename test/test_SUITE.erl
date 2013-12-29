@@ -48,6 +48,9 @@ suite() ->
 %% Description: Returns a list of test case group definitions.
 %%--------------------------------------------------------------------
 groups() -> [
+    {connection, [sequence], [
+        random_selection
+    ]},
     {database, [sequence], [ 
         {initial, [sequence], [connect, create_keyspace]}, 
         create_table,
@@ -74,7 +77,10 @@ groups() -> [
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [datatypes_test, {group, database}].
+    [datatypes_test, 
+     {group, connection}, 
+     {group, database}
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
@@ -206,6 +212,21 @@ end_per_testcase(TestCase, Config) ->
 
 datatypes_test(_Config) ->
     ok = eunit:test(cqerl_datatypes).
+    
+get_multiple_clients(Config, 0, Acc) -> Acc;
+get_multiple_clients(Config, N, Acc) ->
+    get_multiple_clients(Config, N-1, [get_client(Config) | Acc]).
+
+random_selection(Config) ->
+    Clients = get_multiple_clients(Config, 50, []),
+    DistinctPids = lists:foldl(fun({Pid, _Ref}, Pids) ->
+        case lists:member(Pid, Pids) of
+            true -> Pids;
+            false -> [Pid | Pids]
+        end
+    end, [], Clients),
+    5 = length(DistinctPids),
+    lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
 
 connect(Config) ->
     {Pid, Ref} = get_client(Config),
