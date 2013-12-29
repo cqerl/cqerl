@@ -110,7 +110,6 @@ batch_ready({ClientPid, Call}, QueryBatch) ->
 %% ------------------------------------------------------------------
 
 init([Inet, Opts]) ->
-    io:format("Initiating a connection with cassandra with data ~w~n", [Inet]),
     case create_socket(Inet, Opts) of
         {ok, Socket, Transport} ->
             {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
@@ -283,7 +282,8 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         
         %% Server tells us all is clear, we can start to throw queries at it
         {ok, #cqerl_frame{opcode=?CQERL_OP_READY}, _, Delayed} ->
-            {next_state, live, switch_to_live_state(State) };
+            {StateName, FinalState} = maybe_set_keyspace(State),
+            {next_state, StateName, FinalState};
         
         %% Server tells us we need to authenticate
         {ok, #cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body, Delayed} ->
@@ -329,8 +329,12 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
                     {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
                 
                 ok ->
-                    {next_state, live, switch_to_live_state(State) }
-            end
+                    {StateName, FinalState} = maybe_set_keyspace(State),
+                    {next_state, StateName, FinalState }
+            end;
+            
+        {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT}, {set_keyspace, _KeySpaceName}, Delayed} ->
+            {next_state, live, switch_to_live_state(State) }
     end,
     activate_socket(?STATE_FROM_RETURN(Resp)),
     append_delayed_segment(Resp, Delayed);
@@ -662,6 +666,17 @@ remove_user(Ref, State=#client_state{users=Users, queued=Queue0, queries=Queries
 
 
 
+maybe_set_keyspace(State=#client_state{keyspace=undefined}) ->
+    {live, switch_to_live_state(State)};
+maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
+    KeyspaceName = atom_to_binary(Keyspace, latin1),
+    BaseFrame = base_frame(State),
+    {ok, Frame} = cqerl_protocol:query_frame(BaseFrame,
+        #cqerl_query_parameters{},
+        #cqerl_query{query = <<"USE ", KeyspaceName/binary>>}
+    ),
+    send_to_db(State, Frame),
+    {starting, State}.
 
 switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=Inet}) ->
     signal_alive(Inet, Keyspace),
@@ -675,23 +690,7 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=In
         available_slots = orddict:fetch_keys(Queries),
         users=UsersTab 
     },
-    case Keyspace of
-        undefined -> 
-            io:format("Keyspace is undefined~n"),
-            State2 = State1;
-        
-        %% If a keyspace has been set, send a USE <KEYSPACE>; statement
-        Keyspace ->
-            io:format("Keyspace is ~w~n", [Keyspace]),
-            KeyspaceName = atom_to_binary(Keyspace, latin1),
-            {BaseFrame, State2} = seq_frame(State1),
-            {ok, Frame} = cqerl_protocol:query_frame(BaseFrame, 
-                #cqerl_query_parameters{}, 
-                #cqerl_query{query = <<"USE ", KeyspaceName/binary>>}
-            ),
-            send_to_db(State1, Frame)
-    end,
-    State2.
+    State1.
 
 
 
