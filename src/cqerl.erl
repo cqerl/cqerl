@@ -90,6 +90,8 @@ new_client(Inet) ->
     new_client(Inet, []).
 
 -spec new_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> client() | {error, no_client_available}.
+new_client({}, Opts) ->
+    new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, Opts);
 new_client(Inet, Opts) ->
     gen_server:call(?MODULE, {get_client, prepare_node_info(Inet), Opts}).
 
