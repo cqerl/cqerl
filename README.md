@@ -32,7 +32,7 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 If you installed cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
 
 ```erlang
-Client = cqerl:new_client({}).
+{ok, Client} = cqerl:new_client({}).
 ```
     
 And close the connection like this
@@ -48,7 +48,7 @@ cqerl:close_client(Client).
 If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
 ```erlang
-Client = cqerl:new_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
+{ok, Client} = cqerl:new_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
 ```
     
 Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.

@@ -631,7 +631,7 @@ add_user(From={Pid, Tag}, Users) ->
     Ref = make_ref(),
     Monitor = monitor(process, Pid),
     ets:insert(Users, #client_user{ref=Ref, pid=Pid, monitor=Monitor}),
-    gen_server:reply(From, {self(), Ref}).
+    gen_server:reply(From, {ok, {self(), Ref}}).
     
     
     

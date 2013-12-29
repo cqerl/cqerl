@@ -93,8 +93,30 @@ all() ->
 init_per_suite(Config) ->
     application:ensure_all_started(cqerl),
     application:start(sasl),
+    RawSSL = ct:get_config(ssl),
+    DataDir = proplists:get_value(data_dir, Config),
+    SSL = case RawSSL of
+        undefined -> false;
+        false -> false;
+        _ ->
+            %% To relative file paths for SSL, prepend the path of
+            %% the test data directory. To bypass this behavior, provide
+            %% an absolute path.
+            lists:map(fun
+                ({FileOpt, Path}) when FileOpt == cacertfile;
+                                       FileOpt == certfile;
+                                       FileOpt == keyfile ->
+                    case Path of
+                        [$/ | _Rest] -> {FileOpt, Path};
+                        _ -> {FileOpt, filename:join([DataDir, Path])}
+                    end;
+
+                (Opt) -> Opt
+            end, RawSSL)
+    end,
     [ {auth, ct:get_config(auth)}, 
-      {ssl, ct:get_config(ssl)}, 
+      {ssl, RawSSL},
+      {prepared_ssl, SSL},
       {keyspace, ct:get_config(keyspace)},
       {host, ct:get_config(host)} ] ++ Config.
 
@@ -450,29 +472,16 @@ batches_and_pages(Config) ->
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),
-    DataDir = proplists:get_value(data_dir, Config),
-
-    %% To relative file paths for SSL, prepend the path of
-    %% the test data directory. To bypass this behavior, provide
-    %% an absolute path.
-
-    SSL = case proplists:get_value(ssl, Config, undefined) of
-        undefined -> false;
-        false -> false;
-        Options ->
-            io:format("Options : ~w~n", [Options]),
-            lists:map(fun
-                ({FileOpt, Path}) when FileOpt == cacertfile;
-                                       FileOpt == certfile;
-                                       FileOpt == keyfile ->
-                    case Path of
-                        [$/ | _Rest] -> {FileOpt, Path};
-                        _ -> {FileOpt, filename:join([DataDir, Path])}
-                    end;
-    
-                (Opt) -> Opt
-            end, Options)
-    end,
+    SSL = proplists:get_value(prepared_ssl, Config),
     Auth = proplists:get_value(auth, Config, undefined),
     Keyspace = proplists:get_value(keyspace, Config),
-    cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}]).
+    
+    io:format("Options : ~w~n", [[
+        {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
+        {pool_min_size, 5}, {pool_max_size, 5}
+        ]]),
+        
+    {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
+                                           {pool_min_size, 5}, {pool_max_size, 5}
+                                           ]),
+    Client.
