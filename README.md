@@ -25,6 +25,8 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 * SSL support
 * Pluggable authentication (as long as it's [SASL][2]-based)
 
+CQErl was designed to be as simple as possible on your side. You just provide the configuration you want as environment variables, and ask for a new client everytime you need to perform a transient piece of work (e.g. handle a web request). You do not need to (and should not) keep a client in state for a long time. Under the hood, CQErl maintains a pool of persistent connections with Cassandra and this pattern is the best way to ensure proper load balancing of requests across the pool.
+
 ### Usage
 
 ##### Connecting
