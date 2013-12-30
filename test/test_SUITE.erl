@@ -154,10 +154,11 @@ end_per_suite(Config) ->
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
 
-init_per_group(initial, Config) ->
+init_per_group(NoKeyspace, Config) when NoKeyspace == connection;
+                                        NoKeyspace == initial ->
     %% Here we remove the keyspace configuration, since we're going to drop it
     %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
-    [{keyspace, undefined}|Config];
+    [{keyspace, undefined} | Config];
 init_per_group(_group, Config) ->
     Config.
 
