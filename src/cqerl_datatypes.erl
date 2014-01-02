@@ -376,6 +376,9 @@ encode_data({Type, _}) -> throw({bad_param_type, Type}).
 
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
+decode_data({_Type, NullSize, Bin}) when NullSize < 0 ->
+    {null, Bin};
+
 decode_data({UuidType, 16, Bin}) when UuidType == uuid orelse UuidType == timeuuid ->
     << Uuid:16/binary, Rest/binary >> = Bin,
     {Uuid, Rest};
@@ -402,6 +405,9 @@ decode_data({TextType, Size, Bin}) when TextType == ascii orelse
                                   TextType == varchar ->
     << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
+
+decode_data({blob, Size, Bin}) when Size < 0 ->
+    {<<>>, Bin};
 
 decode_data({blob, Size, Bin}) ->
     << Text:Size/binary, Rest/binary >> = Bin,
