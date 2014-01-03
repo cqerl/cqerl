@@ -474,9 +474,12 @@ inserted_rows(N, Q, Acc) ->
 
 batches_and_pages(Config) ->
     Client = get_client(Config),
+    T1 = now(),
+    N = 100,
+    Bsz = 25,
     {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
     Q = #cql_query{query = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
-    Batch = #cql_query_batch{queries=inserted_rows(500, Q, [])},
+    Batch = #cql_query_batch{queries=inserted_rows(N, Q, [])},
     ct:log("Batch : ~w~n", [Batch]),
     {ok, void} = cqerl:run_query(Client, Batch),
     AddIDs = fun (Result, IDs0) ->
@@ -490,7 +493,7 @@ batches_and_pages(Config) ->
                     end, 
                     IDs0, cqerl:all_rows(Result))
     end,
-    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=125, query="SELECT * FROM entries1;"}),
+    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=Bsz, query="SELECT * FROM entries1;"}),
     IDs1 = AddIDs(Result, gb_sets:new()),
     
     {ok, Result2} = cqerl:fetch_more(Result),
@@ -504,8 +507,10 @@ batches_and_pages(Config) ->
     receive
         {result, Ref2, Result4} ->
             IDs4 = AddIDs(Result4, IDs3),
-            500 = gb_sets:size(IDs4)
-    end.
+            N = gb_sets:size(IDs4)
+    end,
+    ct:log("Time elpased inserting ~B entries and fetching in batches of ~B: ~B ms", [N, Bsz, round(timer:now_diff(now(), T1)/1000)]),
+    cqerl:close_client(Client).
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),
