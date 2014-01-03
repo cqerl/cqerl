@@ -54,7 +54,8 @@ groups() -> [
     {database, [sequence], [ 
         {initial, [sequence], [connect, create_keyspace]}, 
         create_table,
-        simple_insertion_roundtrip, async_insertion_roundtrip,
+        simple_insertion_roundtrip, async_insertion_roundtrip, 
+        emptiness,
         {transactions, [parallel], [
             {types, [parallel], [all_datatypes, collection_types, counter_type]},
             batches_and_pages
@@ -270,6 +271,20 @@ simple_insertion_roundtrip(Config) ->
     <<"mathieu@damours.org">> = proplists:get_value(email, Row),
     cqerl:close_client(Client),
     Result.
+
+emptiness(Config) ->
+    Client = get_client(Config),
+    {ok, void} = cqerl:run_query(Client, "update entries1 set email = null where id = 'hello';"),
+    {ok, Result} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
+    Row = cqerl:head(Result),
+    null = proplists:get_value(email, Row),
+    {ok, void} = cqerl:run_query(Client, #cql_query{query="update entries1 set age = ? where id = 'hello';",
+                                                    values=[{age, null}]}),
+    {ok, Result2} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
+    Row2 = cqerl:head(Result2),
+    null = proplists:get_value(age, Row2),
+    cqerl:close_client(Client).
+    
 
 async_insertion_roundtrip(Config) ->
     Client = get_client(Config),

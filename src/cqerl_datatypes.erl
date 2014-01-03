@@ -61,10 +61,12 @@ encode_long_string(Binary) when is_binary(Binary) ->
 
 -spec encode_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
 
+encode_bytes(null) -> 
+    {ok, << 255, 255, 255, 255 >>};
 encode_bytes(Bytes) when is_binary(Bytes) ->
     Size = size(Bytes),
     {ok, << Size:?INT, Bytes/binary >>}.
-    
+
     
     
 
@@ -246,6 +248,9 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
     
 
 -spec encode_data({Type :: datatype(), Value :: term()}) -> binary().
+
+encode_data({_Type, null}) ->
+    null;
 
 encode_data({timeuuid, now}) ->
     case get(uuidstate) of
