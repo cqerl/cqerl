@@ -321,7 +321,7 @@ encode_data({TextType, Val}) when TextType == text orelse TextType == varchar ->
 
 encode_data({timestamp, now}) ->
     {MS, S, McS} = os:timestamp(),
-    MlS = MS * 1000000 + S * 1000 + trunc(McS/1000),
+    MlS = MS * 1000000000 + S * 1000 + trunc(McS/1000),
     encode_data({timestamp, MlS});
 
 encode_data({varint, Val}) when is_integer(Val) ->
@@ -389,8 +389,8 @@ decode_data({UuidType, 16, Bin}) when UuidType == uuid orelse UuidType == timeuu
     {Uuid, Rest};
 
 decode_data({BigIntType, 8, Bin}) when BigIntType == bigint orelse 
-                                    BigIntType == counter orelse 
-                                    BigIntType == timestamp ->
+                                       BigIntType == counter orelse 
+                                       BigIntType == timestamp ->
     << Number:64/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
@@ -407,7 +407,7 @@ decode_data({float, 4, Bin}) ->
     {Val, Rest};
 
 decode_data({TextType, Size, Bin}) when TextType == ascii orelse
-                                  TextType == varchar ->
+                                        TextType == varchar ->
     << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
 
