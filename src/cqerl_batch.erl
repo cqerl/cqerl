@@ -24,9 +24,9 @@ loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
         true -> terminate(Call, Batch);
         false ->
             receive
-                {prepared, CachedQuery=#cqerl_cached_query{key={Inet, Statement}}} ->
+                {prepared, CachedQuery=#cqerl_cached_query{key={Inet, _Statement}}} ->
                     NewQueries = lists:map(fun
-                        ({Query=#cql_query{query=Statement}, queued}) ->
+                        ({Query=#cql_query{}, queued}) ->
                             {Query, CachedQuery};
                         (Other) -> Other
                     end, Batch#cql_query_batch.queries),
@@ -39,12 +39,12 @@ loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
 
 terminate(Call, Batch) ->
     Queries = lists:map(fun
-        ({Query=#cql_query{query=Statement, values=Values}, uncached}) ->
+        ({#cql_query{query=Statement, values=Values}, uncached}) ->
             #cqerl_query{query=Statement, kind=normal, 
                          values=cqerl_protocol:encode_query_values(Values)};
                          
-        ({Query=#cql_query{values=Values}, 
-          Cached=#cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
+        ({#cql_query{values=Values}, 
+          #cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
             #cqerl_query{query=Ref, kind=prepared,
                          values=cqerl_protocol:encode_query_values(Values, Metadata#cqerl_result_metadata.columns)}
                          

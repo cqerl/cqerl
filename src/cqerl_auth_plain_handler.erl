@@ -44,4 +44,4 @@ auth_init(Credentials, ?SASL_PASSWORD_AUTH, _Address) ->
 auth_init(_Creds, Method, _Address) -> {close, {wrong_method, Method}}.
 auth_handle_challenge(Msg, _State) -> {close, {unexpected_message, Msg}}.
 auth_handle_success(_Msg, _State) ->  ok.
-auth_handle_error(Msg, _State) -> ok.
+auth_handle_error(_Msg, _State) -> ok.

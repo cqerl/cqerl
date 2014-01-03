@@ -35,7 +35,7 @@ start_link() ->
     
 -spec lookup(Inet :: term(), Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
 
-lookup(Inet, Query = #cql_query{reusable=true, named=Named, values=ValueList, query=Statement}) ->
+lookup(Inet, #cql_query{reusable=true, query=Statement}) ->
     case ets:lookup(?QUERIES_TAB, {Inet, Statement}) of
         [] ->
             gen_server:cast(?SERVER, {lookup, Inet, Statement, self()}),
@@ -45,7 +45,7 @@ lookup(Inet, Query = #cql_query{reusable=true, named=Named, values=ValueList, qu
     end;
 lookup(Inet, Query = #cql_query{named=true}) ->
     lookup(Inet, Query#cql_query{reusable=true});
-lookup(Inet, Query = #cql_query{reusable=false}) ->
+lookup(_Inet, #cql_query{reusable=false}) ->
     uncached;
 lookup(Inet, Query = #cql_query{query=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
@@ -79,7 +79,7 @@ query_preparation_failed(Key, Reason) ->
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init(Args) ->
+init(_Args) ->
     {ok, #state{
         queued=[],
         cached_queries=ets:new(?QUERIES_TAB, [set, named_table, protected, 
@@ -100,7 +100,7 @@ handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
             {noreply, State}
     end;
 
-handle_cast({query_prepared, Key={Inet, Query}, {QueryID, QueryMetadata, ResultMetadata}}, 
+handle_cast({query_prepared, Key={Inet, _Query}, {QueryID, QueryMetadata, ResultMetadata}}, 
             State=#state{queued=Queue, cached_queries=Cache}) ->
                 
     CachedQuery = #cqerl_cached_query{key=Key, inet=Inet, query_ref=QueryID, 

@@ -92,7 +92,7 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 
 
 
-encode_batch_queries([Query=#cqerl_query{kind=Kind, query=Statement, values=Values} | Rest], Acc) ->
+encode_batch_queries([#cqerl_query{kind=Kind, query=Statement, values=Values} | Rest], Acc) ->
     case Kind of 
         prepared -> 
             {ok, QueryBin} = ?DATA:encode_short_bytes(Statement),
@@ -431,10 +431,10 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
 -spec response_frame(ResponseFrame :: #cqerl_frame{}, Response :: bitstring()) -> 
     {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}.
 
-response_frame(Response, Binary) when size(Binary) < 8 ->
+response_frame(_Response, Binary) when size(Binary) < 8 ->
     {delay, Binary};
 
-response_frame(Response, Binary = << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
+response_frame(_Response, Binary = << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
     {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},

@@ -321,7 +321,7 @@ handle_cast({prepare_client, Node, Opts}, State=#cqerl_state{client_stats=Stats,
     
 handle_cast({client_alive, Pid, Inet, Keyspace}, State=#cqerl_state{clients=Clients, client_stats=Stats}) ->
     case ets:lookup(Clients, Pid) of
-        [Client] -> 
+        [_Client] -> 
             {noreply, State};
         _ ->
             NodeKey = node_key(Inet, Keyspace),
@@ -342,7 +342,7 @@ handle_cast({client_alive, Pid, Inet, Keyspace}, State=#cqerl_state{clients=Clie
                         end
                     end,
                     {State1, ToBeReturned} = FindMember(FindMember, []),
-                    lists:foreach(fun(Pid) -> pooler:return_member(PoolKey, Pid, ok) end, ToBeReturned),
+                    lists:foreach(fun(PPid) -> pooler:return_member(PoolKey, PPid, ok) end, ToBeReturned),
                     {noreply, State1};
                 _ ->
                     {noreply, State}
