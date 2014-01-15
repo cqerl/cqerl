@@ -95,6 +95,18 @@ receive
 end.
 ```
 
+In situations where you do not need to wait for the response at all, it's perfectly fine to produce this sort of pattern:
+
+```erlang
+{ok, Client} = cqerl:new_client(),
+cqerl:send_query(Client, #cql_query{query="UPDATE secrets SET value = null WHERE id = ?;",
+                                    values=[{id, <<"42">>}]}),
+cqerl:close_client(Client).
+```
+
+That is, you can grab a client only the send a query, then you can get rid of it. CQErl will still perform it,
+the difference being that no response will be sent back to you.
+
 Here's a rundown of the possible return values
 
 * `SELECT` queries will yield result of type `#cql_result{}` (more details below). 

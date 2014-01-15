@@ -648,12 +648,6 @@ remove_user(Ref, State=#client_state{users=Users, queued=Queue0, queries=Queries
             demonitor(Monitor, [flush]),
             ets:delete(Users, Ref),
             
-            %% Remove queued queries from this user
-            Queue1 = queue:filter(fun
-                ({{_, _, CRef}, _}) when Ref == CRef -> false;
-                (_) -> true
-            end, Queue0),
-            
             %% Remove in-flight queries from this user
             %% we leave slots as though they're being used, since they can't yet be reused
             Queries1 = lists:map(fun
