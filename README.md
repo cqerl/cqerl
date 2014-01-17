@@ -1,6 +1,6 @@
 # CQErl
 
-Native Erlang driver for CQL3 over Cassandra's binary protocol v2 (a.k.a. what you want as a driver for Cassandra).
+Native Erlang client for CQL3 over Cassandra's binary protocol v2 (a.k.a. what you want as a client for Cassandra).
 
 [**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)
 
