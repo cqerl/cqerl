@@ -145,10 +145,10 @@ empty_dataset = cqerl:next(Tail),
 `#cql_result{}` can also be used to fetch more result, synchronously or asynchronously
 
 ```erlang
-if
-    cqerl:has_more_pages(Result) ->
-        {ok, Result2} = cqerl:fetch_more(Result);
-    true -> ok
+
+case cqerl:has_more_pages(Result) of
+    true -> {ok, Result2} = cqerl:fetch_more(Result);
+    false -> ok
 end,
 
 Tag2 = cqerl:fetch_more_async(Result),
