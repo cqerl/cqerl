@@ -257,7 +257,10 @@ handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients
             erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, get_any_client, From, ?RETRY_INITIAL_DELAY}),
             {noreply, State};
         
-        {_Pid, NodeKey} ->
+        {existing, _, _} ->
+            {noreply, State};
+        
+        {new, _Pid, NodeKey} ->
             {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
             {noreply, State#cqerl_state{client_stats=orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}}
     end;
