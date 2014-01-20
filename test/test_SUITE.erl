@@ -251,6 +251,7 @@ create_keyspace(Config) ->
         
 create_table(Config) ->
     Client = get_client(Config),
+    ct:log("Got client ~w~n", [Client]),
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries1">>}} =
         cqerl:run_query(Client, Q),

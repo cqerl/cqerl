@@ -408,10 +408,10 @@ handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     Stats = lists:foldl(fun
         (Arg, Stats) -> 
             case Arg of
-                {Inet, Opts} -> ok;
+                {Inet, Opts} when is_list(Opts) -> ok;
                 Inet -> Opts = []
             end,
-            Key = node_key(Inet, {Opts, GlobalOpts}),
+            Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
             new_pool(Key, Opts, GlobalOpts),
             OptGetter = make_option_getter(Opts, GlobalOpts),
             orddict:store(Key, #cql_client_stats{count=0, min_count=OptGetter(pool_min_size), max_count=OptGetter(pool_max_size)}, Stats)
