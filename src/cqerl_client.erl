@@ -654,7 +654,7 @@ remove_user(Ref, State=#client_state{users=Users, queued=Queue0, queries=Queries
                 ({I, {{_, _, CRef}, _, _}}) when Ref == CRef -> {I, undefined};
                 (Entry) -> Entry
             end, Queries0),
-            State#client_state{queued=Queue1, queries=Queries1}
+            State#client_state{queued=Queue0, queries=Queries1}
     end.
 
 
