@@ -405,11 +405,14 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
 handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     GlobalOpts = lists:map(
         fun (Key) -> 
-            {Key, application:get_env(cqerl, Key, undefined)} 
+            {Key, application:get_env(cqerl, Key)} 
         end, 
         [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace]
     ),
-    Nodes = application:get_env(cqerl, cassandra_nodes, []),
+    Nodes = case application:get_env(cqerl, cassandra_nodes) of
+      undefined -> [];
+      N -> N
+    end,
     Stats = lists:foldl(fun
         (Arg, Stats) -> 
             case Arg of
@@ -544,13 +547,14 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User) ->
             end
     end.
 
+
 -spec prepare_node_info(NodeInfo :: any()) -> Node :: inet().
 
 prepare_node_info({Localhost, Port}) when Localhost == localhost;
                                           Localhost == "localhost" ->
     {{127, 0, 0, 1}, Port};
 prepare_node_info({Addr, Port}) when is_list(Addr) ->
-    {ok, IpAddr} = inet:parse_address(Addr),
+    {ok, IpAddr} = ?CQERL_PARSE_ADDR(Addr),
     {IpAddr, Port};
 prepare_node_info(Inet) ->    
     Inet.

@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    application:ensure_started(pooler),
+    application:start(pooler),
     cqerl_sup:start_link().
 
 stop(_State) ->

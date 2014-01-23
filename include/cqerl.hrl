@@ -18,6 +18,11 @@
 -define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
 -define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
 
+-define(CQERL_PARSE_ADDR (Addr), case erlang:function_exported(inet, parse_address, 1) of
+    true -> inet:parse_address(Addr);
+    false -> inet_parse:address(Addr)
+  end).
+
 -type consistency_level() :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_ONE.
 -type column_type() :: 
   {custom, binary()} | 

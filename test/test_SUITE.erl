@@ -98,7 +98,16 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    application:ensure_all_started(cqerl),
+    case erlang:function_exported(application, ensure_all_started, 1) of
+      true -> application:ensure_all_started(cqerl);
+      false ->
+        application:start(crypto),
+        application:start(public_key),
+        application:start(ssl),
+        application:start(pooler),
+        application:start(cqerl)
+    end,
+    
     application:start(sasl),
     RawSSL = ct:get_config(ssl),
     DataDir = proplists:get_value(data_dir, Config),

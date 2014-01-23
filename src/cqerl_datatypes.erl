@@ -353,7 +353,7 @@ encode_data({inet, Addr}) when is_tuple(Addr) ->
     end;
 
 encode_data({inet, Addr}) when is_list(Addr) ->
-    {ok, AddrTuple} = inet:parse_address(Addr),
+    {ok, AddrTuple} = ?CQERL_PARSE_ADDR(Addr),
     encode_data({inet, AddrTuple});
 
 encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
