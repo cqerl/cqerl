@@ -9,7 +9,7 @@
 %% ------------------------------------------------------------------
 
 -export([start_link/2, new_user/2, remove_user/1,
-         query/2, query_async/2, fetch_more/1, fetch_more_async/1,
+         run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
          prepare_query/2,
          batch_ready/2]). 
 
@@ -71,21 +71,21 @@ new_user(Pid, From) ->
 remove_user({ClientPid, ClientRef}) ->
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
 
-query({ClientPid, ClientRef}, Query) when is_binary(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{query=Query}});
-query({ClientPid, ClientRef}, Query) when is_list(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{query=list_to_binary(Query)}});
-query({ClientPid, ClientRef}, Query=#cql_query{query=Statement}) when is_list(Statement) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query#cql_query{query=list_to_binary(Statement)}});
-query({ClientPid, ClientRef}, Query) ->
+run_query({ClientPid, ClientRef}, Query) when is_binary(Query) ->
+    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=Query}});
+run_query({ClientPid, ClientRef}, Query) when is_list(Query) ->
+    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=list_to_binary(Query)}});
+run_query({ClientPid, ClientRef}, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
+    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query#cql_query{statement=list_to_binary(Statement)}});
+run_query({ClientPid, ClientRef}, Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query}).
 
 query_async(Client, Query) when is_binary(Query) ->
-    query_async(Client, #cql_query{query=Query});
+    query_async(Client, #cql_query{statement=Query});
 query_async(Client, Query) when is_list(Query) ->
-    query_async(Client, #cql_query{query=list_to_binary(Query)});
-query_async(Client, Query=#cql_query{query=Statement}) when is_list(Statement) ->
-    query_async(Client, Query#cql_query{query=list_to_binary(Statement)});
+    query_async(Client, #cql_query{statement=list_to_binary(Query)});
+query_async(Client, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
+    query_async(Client, Query#cql_query{statement=list_to_binary(Statement)});
 query_async({ClientPid, ClientRef}, Query) ->
     QueryRef = make_ref(),
     gen_fsm:send_event(ClientPid, {send_query, {self(), QueryRef}, ClientRef, Query}),
@@ -176,7 +176,7 @@ live({Msg, Tag, Ref, Item}, State) when Msg == send_query orelse
                                         Msg == fetch_more ->
     case Item of
         Query=#cql_query{} -> ok;
-        #cql_result{query=Query=#cql_query{}} -> ok
+        #cql_result{cql_query=Query=#cql_query{}} -> ok
     end,
     CacheResult = cqerl_cache:lookup(State#client_state.inet, Query),
     {next_state, live, process_outgoing_query(#cql_call{type=async, caller=Tag, client=Ref}, {CacheResult, Item}, State)};
@@ -199,7 +199,7 @@ live({Msg, Ref, Item}, From, State) when Msg == send_query orelse
                                          Msg == fetch_more ->
     case Item of
         Query=#cql_query{} -> ok;
-        #cql_result{query=Query=#cql_query{}} -> ok
+        #cql_result{cql_query=Query=#cql_query{}} -> ok
     end,
     CacheResult = cqerl_cache:lookup(State#client_state.inet, Query),
     {next_state, live, process_outgoing_query(#cql_call{type=sync, caller=From, client=Ref}, {CacheResult, Item}, State)};
@@ -356,7 +356,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
                 {ok, {Call=#cql_call{client=ClientRef}, {Query, ColumnSpecs}}} ->
                     respond_to_user(Call, #cql_result{
                         client = {self(), ClientRef},
-                        query  = Query#cql_query{page_state = ResultMetadata#cqerl_result_metadata.page_state},
+                        cql_query = Query#cql_query{page_state = ResultMetadata#cqerl_result_metadata.page_state},
                         columns = case ColumnSpecs of
                             undefined   -> ResultMetadata#cqerl_result_metadata.columns;
                             []          -> ResultMetadata#cqerl_result_metadata.columns;
@@ -544,7 +544,7 @@ process_outgoing_query(Call=#cql_call{}, Batch=#cql_query_batch{}, State=#client
     State1#client_state{queries=Queries1};
 
 process_outgoing_query(Call,
-                       {queued, Continuation=#cql_result{query=#cql_query{query=Statement}}},
+                       {queued, Continuation=#cql_result{cql_query=#cql_query{statement=Statement}}},
                        State=#client_state{waiting_preparation=Waiting}) ->
     Waiting2 = case orddict:find(Statement, Waiting) of
         error -> orddict:store(Statement, [{Call, Continuation}], Waiting);
@@ -553,7 +553,7 @@ process_outgoing_query(Call,
     State#client_state{waiting_preparation=Waiting2};
 
 process_outgoing_query(Call,
-                       {queued, Query=#cql_query{query=Statement}},
+                       {queued, Query=#cql_query{statement=Statement}},
                        State=#client_state{waiting_preparation=Waiting}) ->
     Waiting2 = case orddict:find(Statement, Waiting) of
         error -> orddict:store(Statement, [{Call, Query}], Waiting);
@@ -571,7 +571,7 @@ process_outgoing_query(Call,
         Query = #cql_query{values=Values} ->
             ColumnSpecs = undefined,
             SkipMetadata = false;
-        #cql_result{query = Query=#cql_query{values=Values}, 
+        #cql_result{cql_query = Query=#cql_query{values=Values}, 
                     columns=ColumnSpecs} ->
             SkipMetadata = true
     end,
@@ -588,7 +588,7 @@ process_outgoing_query(Call,
                 },
                 #cqerl_query{
                     kind    = normal,
-                    query   = Query#cql_query.query,
+                    statement = Query#cql_query.statement,
                     values  = cqerl_protocol:encode_query_values(Values)
                 }
             );
@@ -605,7 +605,7 @@ process_outgoing_query(Call,
                 },
                 #cqerl_query{
                     kind    = prepared,
-                    query   = Ref,
+                    statement = Ref,
                     values  = cqerl_protocol:encode_query_values(Values, PMetadata#cqerl_result_metadata.columns)
                 }
             )
@@ -667,7 +667,7 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     BaseFrame = base_frame(State),
     {ok, Frame} = cqerl_protocol:query_frame(BaseFrame,
         #cqerl_query_parameters{},
-        #cqerl_query{query = <<"USE ", KeyspaceName/binary>>}
+        #cqerl_query{statement = <<"USE ", KeyspaceName/binary>>}
     ),
     send_to_db(State, Frame),
     {starting, State}.

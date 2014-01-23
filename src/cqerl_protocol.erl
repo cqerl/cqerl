@@ -92,7 +92,7 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 
 
 
-encode_batch_queries([#cqerl_query{kind=Kind, query=Statement, values=Values} | Rest], Acc) ->
+encode_batch_queries([#cqerl_query{kind=Kind, statement=Statement, values=Values} | Rest], Acc) ->
     case Kind of 
         prepared -> 
             {ok, QueryBin} = ?DATA:encode_short_bytes(Statement),
@@ -376,7 +376,7 @@ register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
 
 query_frame(Frame=#cqerl_frame{}, 
             QueryParameters=#cqerl_query_parameters{}, 
-            #cqerl_query{values=Values, query=Query, kind=normal}) ->
+            #cqerl_query{values=Values, statement=Query, kind=normal}) ->
                     
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
     {ok, QueryBin} = ?DATA:encode_long_string(Query),
@@ -394,7 +394,7 @@ query_frame(Frame=#cqerl_frame{},
 
 execute_frame(Frame=#cqerl_frame{}, 
               QueryParameters=#cqerl_query_parameters{}, 
-              #cqerl_query{values=Values, query=QueryID, kind=prepared}) ->
+              #cqerl_query{values=Values, statement=QueryID, kind=prepared}) ->
 
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
     {ok, QueryIDBin} = ?DATA:encode_short_bytes(QueryID),

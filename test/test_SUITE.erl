@@ -138,7 +138,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Client = get_client([{keyspace, undefined}|Config]),
     {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = 
-        cqerl:run_query(Client, #cql_query{query = <<"DROP KEYSPACE test_keyspace;">>}),
+        cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace;">>}),
     cqerl:close_client(Client).
 
 %%--------------------------------------------------------------------
@@ -241,7 +241,7 @@ create_keyspace(Config) ->
     Client = get_client(Config),
     Q = <<"CREATE KEYSPACE test_keyspace WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
     D = <<"DROP KEYSPACE test_keyspace;">>,
-    case cqerl:run_query(Client, #cql_query{query=Q}) of
+    case cqerl:run_query(Client, #cql_query{statement=Q}) of
         {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>}} -> ok;
         {error, {16#2400, _, {key_space, <<"test_keyspace">>}}} ->
             {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = cqerl:run_query(Client, D),
@@ -260,12 +260,12 @@ create_table(Config) ->
 simple_insertion_roundtrip(Config) ->
     Client = get_client(Config),
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    {ok, void} = cqerl:run_query(Client, #cql_query{query=Q, values=[
+    {ok, void} = cqerl:run_query(Client, #cql_query{statement=Q, values=[
         {id, "hello"},
         {age, 18},
         {email, <<"mathieu@damours.org">>}
     ]}),
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = <<"SELECT * FROM entries1;">>}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
     Row = cqerl:head(Result),
     <<"hello">> = proplists:get_value(id, Row),
     18 = proplists:get_value(age, Row),
@@ -279,7 +279,7 @@ emptiness(Config) ->
     {ok, Result} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
     Row = cqerl:head(Result),
     null = proplists:get_value(email, Row),
-    {ok, void} = cqerl:run_query(Client, #cql_query{query="update entries1 set age = ? where id = 'hello';",
+    {ok, void} = cqerl:run_query(Client, #cql_query{statement="update entries1 set age = ? where id = 'hello';",
                                                     values=[{age, null}]}),
     {ok, Result2} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
     Row2 = cqerl:head(Result2),
@@ -290,12 +290,12 @@ emptiness(Config) ->
 async_insertion_roundtrip(Config) ->
     Client = get_client(Config),
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    Ref = cqerl:send_query(Client, #cql_query{query=Q, values=[
+    Ref = cqerl:send_query(Client, #cql_query{statement=Q, values=[
         {id, "1234123"},
         {age, 45},
         {email, <<"yvon@damours.org">>}
     ]}),
-    Ref2 = cqerl:send_query(Client, #cql_query{query = <<"SELECT * FROM entries1;">>}),
+    Ref2 = cqerl:send_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
     Flush  = fun (CB, Res) ->
         receive
             {result, Ref, void} -> 
@@ -334,7 +334,7 @@ all_datatypes(Config) ->
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries2">>}} =
         cqerl:run_query(Client, CreationQ),
     
-    InsQ = #cql_query{query = <<"INSERT INTO entries2(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
     {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
         {col1, "hello"},
         {col2, 9223372036854775807},
@@ -368,7 +368,7 @@ all_datatypes(Config) ->
         {col14, {0,0,0,0,0,0,0,0}}
     ]}),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = <<"SELECT * FROM entries2;">>}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2;">>}),
     {Row1, Result1} = cqerl:next(Result),
     Row2 = cqerl:head(Result1),
     lists:foreach(fun
@@ -403,7 +403,7 @@ collection_types(Config) ->
         cqerl:run_query(Client, CreationQ),
         
     {ok, void} = cqerl:run_query(Client, #cql_query{
-        query = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
+        statement = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
         values = [
             {key, "First collection"},
             {numbers, [1,2,3,4,5]},
@@ -413,11 +413,11 @@ collection_types(Config) ->
     }),
     
     {ok, void} = cqerl:run_query(Client, #cql_query{
-        query = "UPDATE entries3 SET names = names + {'martin'} WHERE key = ?",
+        statement = "UPDATE entries3 SET names = names + {'martin'} WHERE key = ?",
         values = [{key, "First collection"}]
     }),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = "SELECT * FROM entries3;"}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = "SELECT * FROM entries3;"}),
     Row = cqerl:head(Result),
     <<"First collection">> = proplists:get_value(key, Row),
     [1,2,3,4,5] = proplists:get_value(numbers, Row),
@@ -443,7 +443,7 @@ counter_type(Config) ->
         cqerl:run_query(Client, CreationQ),
     
     {ok, void} = cqerl:run_query(Client, #cql_query{
-        query = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
+        statement = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
         values = [
             {key, "First counter"},
             {count, 18}
@@ -451,11 +451,11 @@ counter_type(Config) ->
     }),
     
     {ok, void} = cqerl:run_query(Client, #cql_query{
-        query = "UPDATE entries4 SET count = count + 10 WHERE key = ?;",
+        statement = "UPDATE entries4 SET count = count + 10 WHERE key = ?;",
         values = [{key, "First counter"}]
     }),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{query = "SELECT * FROM entries4;"}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = "SELECT * FROM entries4;"}),
     Row = cqerl:head(Result),
     <<"First counter">> = proplists:get_value(key, Row),
     28 = proplists:get_value(count, Row),
@@ -479,7 +479,7 @@ batches_and_pages(Config) ->
     N = 100,
     Bsz = 25,
     {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
-    Q = #cql_query{query = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
+    Q = #cql_query{statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
     Batch = #cql_query_batch{queries=inserted_rows(N, Q, [])},
     ct:log("Batch : ~w~n", [Batch]),
     {ok, void} = cqerl:run_query(Client, Batch),
@@ -494,7 +494,7 @@ batches_and_pages(Config) ->
                     end, 
                     IDs0, cqerl:all_rows(Result))
     end,
-    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=Bsz, query="SELECT * FROM entries1;"}),
+    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=Bsz, statement="SELECT * FROM entries1;"}),
     IDs1 = AddIDs(Result, gb_sets:new()),
     
     {ok, Result2} = cqerl:fetch_more(Result),

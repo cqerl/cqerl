@@ -8,8 +8,8 @@ start_link(Call, Inet, Batch=#cql_query_batch{}) ->
 
 init(Call, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
     Queries = lists:map(fun
-        (Query=#cql_query{query=Statement}) when is_list(Statement) ->
-            Query#cql_query{query=list_to_binary(Statement)};
+        (Query=#cql_query{statement=Statement}) when is_list(Statement) ->
+            Query#cql_query{statement=list_to_binary(Statement)};
         (Query) -> Query
     end, Queries0),
     QueryStates = lists:zip(
@@ -39,13 +39,13 @@ loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
 
 terminate(Call, Batch) ->
     Queries = lists:map(fun
-        ({#cql_query{query=Statement, values=Values}, uncached}) ->
-            #cqerl_query{query=Statement, kind=normal, 
+        ({#cql_query{statement=Statement, values=Values}, uncached}) ->
+            #cqerl_query{statement=Statement, kind=normal, 
                          values=cqerl_protocol:encode_query_values(Values)};
                          
         ({#cql_query{values=Values}, 
           #cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
-            #cqerl_query{query=Ref, kind=prepared,
+            #cqerl_query{statement=Ref, kind=prepared,
                          values=cqerl_protocol:encode_query_values(Values, Metadata#cqerl_result_metadata.columns)}
                          
     end, Batch#cql_query_batch.queries),

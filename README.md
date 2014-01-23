@@ -82,7 +82,7 @@ Performing a query can be as simple as this:
 {ok, Result} = cqerl:run_query(Client, <<"SELECT * FROM users;">>).
 
 % Also equivalent to
-{ok, Result} = cqerl:run_query(Client, #cql_query{query = <<"SELECT * FROM users;">>}).
+{ok, Result} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM users;">>}).
 ```
 
 It can also be performed asynchronously using
@@ -99,7 +99,7 @@ In situations where you do not need to wait for the response at all, it's perfec
 
 ```erlang
 {ok, Client} = cqerl:new_client(),
-cqerl:send_query(Client, #cql_query{query="UPDATE secrets SET value = null WHERE id = ?;",
+cqerl:send_query(Client, #cql_query{statement="UPDATE secrets SET value = null WHERE id = ?;",
                                     values=[{id, <<"42">>}]}),
 cqerl:close_client(Client).
 ```
@@ -121,7 +121,7 @@ The return value of `SELECT` queries will be a `#cql_result{}` record, which can
 ```erlang
 {ok, _SchemaChange} = cqerl:run_query(Client, "CREATE TABLE users(id uuid, name varchar, password varchar);"),
 {ok, void} = cqerl:run_query(Client, #cql_query{
-    query = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);",
+    statement = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);",
     values = [
         {id, new},
         {name, "matt"},
@@ -204,7 +204,7 @@ To perform batched queries (which can include any non-`SELECT` [DML][5] statemen
 3. Finally, you must specify the list of `queries`.
 
 ```erlang
-InsertQ = #cql_query{query = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);"},
+InsertQ = #cql_query{statement = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);"},
 {ok, void} = cqerl:run_query(Client, #cql_query_batch{
   mode=?CQERL_BATCH_UNLOGGED,
   queries=[

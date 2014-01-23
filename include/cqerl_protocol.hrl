@@ -45,7 +45,7 @@
 
 -record(cqerl_query, {
     kind                = normal :: normal | prepared,
-    query               = <<>> :: binary(),
+    statement           = <<>> :: binary(),
     values              = [] :: list(binary())
 }).
 

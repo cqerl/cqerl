@@ -120,7 +120,7 @@ close_client(ClientRef) ->
 %% The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record
 %%
 %% <pre>#cql_query{
-%%     query :: binary(),
+%%     statement :: binary(),
 %%     reusable :: boolean(),
 %%     consistency :: consistency_level(),
 %%     named :: boolean(),
@@ -141,7 +141,7 @@ close_client(ClientRef) ->
 
 -spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> #cql_result{}.
 run_query(ClientRef, Query) ->
-    cqerl_client:query(ClientRef, Query).
+    cqerl_client:run_query(ClientRef, Query).
 
 
 
@@ -149,7 +149,7 @@ run_query(ClientRef, Query) ->
 %% @doc Check to see if there are more result available
 
 -spec has_more_pages(Continuation :: #cql_result{}) -> true | false.
-has_more_pages(#cql_result{query=#cql_query{page_state=undefined}}) -> false;
+has_more_pages(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> false;
 has_more_pages(#cql_result{}) -> true.
 
 
@@ -158,7 +158,7 @@ has_more_pages(#cql_result{}) -> true.
 %%            return with the result from Cassandra (synchronously).
 
 -spec fetch_more(Continuation :: #cql_result{}) -> no_more_result | #cql_result{}.
-fetch_more(#cql_result{query=#cql_query{page_state=undefined}}) -> 
+fetch_more(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> 
     no_more_result;
 fetch_more(Continuation) ->
     cqerl_client:fetch_more(Continuation).
@@ -189,7 +189,7 @@ send_query(ClientRef, Query) ->
 %% connection is dropped.
 
 -spec fetch_more_async(Continuation :: #cql_result{}) -> reference() | no_more_result.
-fetch_more_async(#cql_result{query=#cql_query{page_state=undefined}}) -> 
+fetch_more_async(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> 
     no_more_result;
 fetch_more_async(Continuation) ->
     cqerl_client:fetch_more_async(Continuation).

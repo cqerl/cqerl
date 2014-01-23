@@ -32,7 +32,7 @@
 -type named_parameter() :: { atom(), parameter_val() }.
 
 -record(cql_query, {
-    query       = <<>>      :: binary(),
+    statement   = <<>>      :: binary(),
     values      = []        :: [ parameter() | named_parameter() ],
     
     reusable    = undefined :: undefined | boolean(),
@@ -60,7 +60,7 @@
 -record(cql_result, {
     columns         = []        :: list(tuple()),
     dataset         = []        :: list(list(term())),
-    query                       :: #cql_query{},
+    cql_query                   :: #cql_query{},
     client                      :: {pid(), reference()}
 }).
 
