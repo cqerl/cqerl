@@ -1,6 +1,6 @@
 %% common_test suite for test
 
--module(test_SUITE).
+-module(integrity_SUITE).
 -include_lib("common_test/include/ct.hrl").
 
 -include("cqerl.hrl").
@@ -77,11 +77,11 @@ groups() -> [
 %%
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
-all() ->
-    [datatypes_test, 
-     {group, connection}, 
-     {group, database}
-    ].
+all() -> [].
+    % [datatypes_test, 
+    %  {group, connection}, 
+    %  {group, database}
+    % ].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
@@ -519,7 +519,7 @@ batches_and_pages(Config) ->
             IDs4 = AddIDs(Result4, IDs3),
             N = gb_sets:size(IDs4)
     end,
-    ct:log("Time elpased inserting ~B entries and fetching in batches of ~B: ~B ms", [N, Bsz, round(timer:now_diff(now(), T1)/1000)]),
+    ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms", [N, Bsz, round(timer:now_diff(now(), T1)/1000)]),
     cqerl:close_client(Client).
 
 get_client(Config) ->
@@ -534,6 +534,5 @@ get_client(Config) ->
         ]]),
         
     {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                                           {pool_min_size, 5}, {pool_max_size, 5}
-                                           ]),
+                                           {pool_min_size, 5}, {pool_max_size, 5} ]),
     Client.
