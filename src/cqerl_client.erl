@@ -192,7 +192,7 @@ live({send_query, Ref, Batch=#cql_query_batch{}}, From, State=#client_state{inet
 
 
 live({Msg, Ref, Query}, From, State=#client_state{available_slots=[], queued=Queue0}) when Msg == send_query orelse 
-                                                                                           Msg == fetch_more ->
+                                                                                          Msg == fetch_more ->
     {next_state, live, State#client_state{queued=queue:in({#cql_call{type=sync, caller=From, client=Ref}, Query}, Queue0)}};
 
 live({Msg, Ref, Item}, From, State) when Msg == send_query orelse 
@@ -342,7 +342,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
 handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
         {delay, Delayed} ->
-            {next_state, live, State};
+            {stop, {next_state, live, State}};
         
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {void, _}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
@@ -406,8 +406,17 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             Delayed = <<>>,
             {next_state, live, State}
     end,
-    activate_socket(?STATE_FROM_RETURN(Resp)),
-    append_delayed_segment(Resp, Delayed);
+    
+    case Resp of
+      {stop, Resp1} ->
+        activate_socket(?STATE_FROM_RETURN(Resp1)),
+        append_delayed_segment(Resp1, Delayed);
+      {_, _, State1} ->
+        handle_info({Transport, Socket, Delayed}, live, State1);
+      {_, _, _, State1} ->
+        handle_info({Transport, Socket, Delayed}, live, State1)
+    end;
+    
 
 handle_info({ Transport, Socket, BinaryMsg }, sleep, State = #client_state{ socket=Socket, trans=Transport, sleep=Duration, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
