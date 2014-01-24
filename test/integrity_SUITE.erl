@@ -77,11 +77,11 @@ groups() -> [
 %%
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
-all() -> [].
-    % [datatypes_test, 
-    %  {group, connection}, 
-    %  {group, database}
-    % ].
+all() ->
+    [datatypes_test, 
+     {group, connection}, 
+     {group, database}
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->

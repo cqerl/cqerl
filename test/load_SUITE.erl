@@ -64,7 +64,7 @@ groups() -> [].
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [single_client, n_clients].
+    [single_client, n_clients, many_clients].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
@@ -192,8 +192,6 @@ end_per_group(_group, Config) ->
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
-init_per_testcase(single_client, Config) -> {skip, nana};
-
 init_per_testcase(TestCase, Config) ->
     Config.
 
@@ -263,7 +261,7 @@ n_clients(Config) ->
   NC = 10,
   Clients = get_n_clients(Config, NC, []),
   
-  N = 500,    % # of requests
+  N = 1500,    % # of requests
   Dt = 2,    % in ms, yielding (1000/Dt) req/s
   
   Iterator = fun
@@ -303,6 +301,47 @@ n_clients(Config) ->
   ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
     [N, (timer:now_diff(erlang:now(), T1))/1.0e6, Sum/N]).
 
+many_clients(Config) ->
+  N = 1500,    % # of requests
+  Dt = 2,    % in ms, yielding (1000/Dt) req/s
+  
+  Iterator = fun
+    (_F, 0, _M) -> ok;
+    (F, N, M) -> 
+      erlang:send_after(Dt*M, self(), send_request),
+      F(F, N-1, M+1)
+  end,
+  Iterator(Iterator, N, 0),
+  
+  Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
+  
+  T1 = erlang:now(),
+  DelayLooper = fun
+    (_F, 0, 0, Acc) -> Acc;
+    (F, N, M, Acc) ->
+      receive
+        Msg = {result, Tag, void} -> 
+          {ok, {T, Client}} = orddict:find(Tag, Acc),
+          cqerl:close_client(Client),
+          F(F, N, M-1, orddict:store(Tag, timer:now_diff(erlang:now(), T), Acc));
+          
+        send_request ->
+          Client = get_client(Config),
+          Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
+          F(F, N-1, M, orddict:store(Tag, {erlang:now(), Client}, Acc));
+          
+        OtherMsg ->
+          ct:fail("Unexpected response ~p", [OtherMsg])
+        
+      after 1000 -> 
+        ct:fail("All delayed messages did not arrive in time")
+      end
+  end,
+  Deltas = DelayLooper(DelayLooper, N, N, []),
+  
+  Sum = lists:foldr(fun ({Tag, T}, Acc) -> Acc + T end, 0, Deltas),
+  ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
+    [N, (timer:now_diff(erlang:now(), T1))/1.0e6, Sum/N]).
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),
@@ -310,10 +349,10 @@ get_client(Config) ->
     Auth = proplists:get_value(auth, Config, undefined),
     Keyspace = proplists:get_value(keyspace, Config),
     
-    io:format("Options : ~w~n", [[
-        {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-        {pool_min_size, 5}, {pool_max_size, 5}
-        ]]),
+    % io:format("Options : ~w~n", [[
+    %     {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
+    %     {pool_min_size, 5}, {pool_max_size, 5}
+    %     ]]),
         
     {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
                                            {pool_min_size, 5}, {pool_max_size, 5} ]),
