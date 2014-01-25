@@ -397,7 +397,11 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
 handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     GlobalOpts = lists:map(
         fun (Key) -> 
-            {Key, application:get_env(cqerl, Key)} 
+            Val = case application:get_env(cqerl, Key) of
+                undefined -> undefined;
+                {ok, V} -> V
+            end,
+            {Key, Val}
         end, 
         [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace]
     ),
