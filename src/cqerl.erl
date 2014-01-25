@@ -403,7 +403,7 @@ handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     ),
     Nodes = case application:get_env(cqerl, cassandra_nodes) of
         undefined -> [];
-        N -> N
+        {ok, N} -> N
     end,
     State2 = lists:foldl(fun
         (Arg, State0) -> 
