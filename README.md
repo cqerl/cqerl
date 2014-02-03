@@ -255,7 +255,7 @@ decimal               | `{Unscaled :: integer(), Scale :: integer()}`
 double                | **float** (signed 64-bit)
 float                 | **float** (signed 32-bit)
 int                   | **integer** (signed 32-bit)
-timestamp             | **integer** (signed 64-bit), `now`, [binary or string][6]
+timestamp             | **integer** (milliseconds, signed 64-bit), `now`, [binary or string][6]
 uuid                  | **binary**, `new`
 varchar               | **binary**, string
 varint                | **integer** (arbitrary precision)
