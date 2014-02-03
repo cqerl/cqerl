@@ -251,10 +251,10 @@ handle_call(get_any_client, _From, State=#cqerl_state{client_stats=[]}) ->
 
 handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients=Clients, retrying=Retrying}) ->
     case select_client(Clients, #cql_client{busy=false, _='_'}, From) of
-        no_available_client when Retrying ->
+        no_available_clients when Retrying ->
             retry;
         
-        no_available_client ->
+        no_available_clients ->
             erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, get_any_client, From, ?RETRY_INITIAL_DELAY}),
             {noreply, State};
         
@@ -280,10 +280,10 @@ handle_call({get_client, Node, Opts}, From, State=#cqerl_state{clients=Clients, 
         
         _ ->
             case select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From) of
-                no_available_client when Retrying ->
+                no_available_clients when Retrying ->
                     retry;
                 
-                no_available_client ->
+                no_available_clients ->
                     erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, {get_client, NodeKey, Opts}, From, ?RETRY_INITIAL_DELAY}),
                     {noreply, State};
                 
