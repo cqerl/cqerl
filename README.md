@@ -169,12 +169,8 @@ end.
 
 When performing queries, you can provide more information than just the query statement using the `#cql_query{}` record, which includes the following fields:
 
-1. The `query` statement, as a string or binary
-2. `values` for binding variables from the query statement. This is a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**. Special cases include providing `TTL` and `TIMESTAMP` option in statements, in which case the proplist key would be `[ttl]` and `[timestamp]` respectively.
-
-    Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
-    
-    Finally, when providing the value for a `timeuuid` or `timestamp` column, you can give the value `now`, in which case CQErl will generate a normal timestamp, or a UUID (v1) matching the current date and time.
+1. The query `statement`, as a string or binary
+2. `values` for binding variables from the query statement (see next section).
     
 3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`. 
 4. You can specify how many rows you want in every result page using the `page_size` (integer) field. The devs at Cassandra recommend a value of 100 (which is the default).
@@ -195,6 +191,23 @@ When performing queries, you can provide more information than just the query st
     * `?CQERL_CONSISTENCY_SERIAL`
     * `?CQERL_CONSISTENCY_LOCAL_SERIAL`
     
+##### Variable bindings
+
+In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**. 
+
+Special cases include: 
+
+- providing `TTL` and `TIMESTAMP` option in statements, in which case the proplist key would be `[ttl]` and `[timestamp]` respectively. Note that, while values for a column of type `timestamp` are provided in **milliseconds**, a value for the `TIMESTAMP` option is expected in **microseconds**.
+- `UPDATE keyspace SET set = set + ? WHERE id = 1;`. The name for this variable binding is `set`, the name of the column, and it's expected to be an erlang **list** of values.
+- `UPDATE keyspace SET list = list + ? WHERE id = 1;`. The name for this variable binding is `list`, the name of the column, and it's expected to be an erlang **list** of values.
+- `UPDATE keyspace SET map[?] = 1 WHERE id = 1;`. The name for this variable binding is `key(map)`, where `map` is the name of the column.
+- `UPDATE keyspace SET map['key'] = ? WHERE id = 1;`. The name for this variable binding is `value(map)`, where `map` is the name of the column.
+- `UPDATE keyspace SET list[?] = 1 WHERE id = 1;`. The name for this variable binding is `idx(list)`, where `list` is the name of the column.
+
+    Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
+    
+    Finally, when providing the value for a `timeuuid` or `timestamp` column, you can give the value `now`, in which case CQErl will generate a normal timestamp, or a UUID (v1) matching the current date and time.
+
 ##### Batched queries
 
 To perform batched queries (which can include any non-`SELECT` [DML][5] statements), simply put one or more `#cql_query{}` records in a `#cql_query_batch{}` record, and run it in place of a normal `#cql_query{}`. `#cql_query_batch{}` include the following fields:
