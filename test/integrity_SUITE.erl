@@ -23,7 +23,7 @@ suite() ->
   [{timetrap, {seconds, 20}},
    {require, ssl, cqerl_test_ssl},
    {require, auth, cqerl_test_auth},
-   {require, keyspace, cqerl_test_keyspace},
+   % {require, keyspace, cqerl_test_keyspace},
    {require, host, cqerl_host}].
 
 %%--------------------------------------------------------------------
@@ -133,7 +133,7 @@ init_per_suite(Config) ->
     [ {auth, ct:get_config(auth)}, 
       {ssl, RawSSL},
       {prepared_ssl, SSL},
-      {keyspace, ct:get_config(keyspace)},
+      {keyspace, "test_keyspace_2"},
       {host, ct:get_config(host)} ] ++ Config.
 
 %%--------------------------------------------------------------------
@@ -146,8 +146,8 @@ init_per_suite(Config) ->
 %%--------------------------------------------------------------------
 end_per_suite(Config) ->
     Client = get_client([{keyspace, undefined}|Config]),
-    {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = 
-        cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace;">>}),
+    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
+    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
     cqerl:close_client(Client).
 
 %%--------------------------------------------------------------------
@@ -248,13 +248,13 @@ connect(Config) ->
 
 create_keyspace(Config) ->
     Client = get_client(Config),
-    Q = <<"CREATE KEYSPACE test_keyspace WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace;">>,
+    Q = <<"CREATE KEYSPACE test_keyspace_2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
+    D = <<"DROP KEYSPACE test_keyspace_2;">>,
     case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>}} = cqerl:run_query(Client, Q)
+        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} -> ok;
+        {error, {16#2400, _, {key_space, <<"test_keyspace_2">>}}} ->
+            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, D),
+            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, Q)
     end,
     cqerl:close_client(Client).
         
@@ -262,7 +262,7 @@ create_table(Config) ->
     Client = get_client(Config),
     ct:log("Got client ~w~n", [Client]),
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries1">>}} =
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, table = <<"entries1">>}} =
         cqerl:run_query(Client, Q),
     cqerl:close_client(Client).
 
@@ -340,7 +340,7 @@ all_datatypes(Config) ->
     Cols = datatypes_columns([ascii, bigint, blob, boolean, decimal, double, float, int, timestamp, uuid, varchar, varint, timeuuid, inet]),
     CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries2">>}} =
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, table = <<"entries2">>}} =
         cqerl:run_query(Client, CreationQ),
     
     InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
@@ -376,39 +376,51 @@ all_datatypes(Config) ->
         {col13, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
         {col14, {0,0,0,0,0,0,0,0}}
     ]}),
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{
+        statement="INSERT INTO entries2(col1, col11) values (?, ?);",
+        values=RRow3=[ {col1, foobaz}, {col11, 'åäö'} ]
+    }),
     
     {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2;">>}),
     {Row1, Result1} = cqerl:next(Result),
-    Row2 = cqerl:head(Result1),
+    {Row2, Result2} = cqerl:next(Result1),
+    {Row3, Result3} = cqerl:next(Result2),
     lists:foreach(fun
         (Row) -> 
             ReferenceRow = case proplists:get_value(col1, Row) of
                 <<"hello">> -> RRow1;
-                <<"foobar">> -> RRow2
+                <<"foobar">> -> RRow2;
+                <<"foobaz">> -> RRow3
             end,
             lists:foreach(fun
                 ({col13, _}) -> true = uuid:is_v1(proplists:get_value(col13, Row));
                 ({col10, _}) -> true = uuid:is_v4(proplists:get_value(col10, Row));
                 ({col9, _}) -> ok; %% Yeah, I know...
+                
                 ({col1, Key}) when is_list(Key) ->
                     Val = list_to_binary(Key),
                     Val = proplists:get_value(col1, Row);
+
+                ({Col, Key}) when is_atom(Key), Col == col1 orelse Col == col11 ->
+                    Val = atom_to_binary(Key, latin1),
+                    Val = proplists:get_value(Col, Row);
+                    
                 ({col7, Val0}) ->
                     Val = round(Val0 * 1.0e11),
                     Val = round(proplists:get_value(col7, Row) * 1.0e11);
-                ({Key, Val}) -> 
-                    Val = proplists:get_value(Key, Row)
+                ({Key, Val}) ->
+                    Val = proplists:get_value(Key, Row, null)
             end, ReferenceRow)
-    end, [Row1, Row2]),
+    end, [Row1, Row2, Row3]),
     cqerl:close_client(Client),
-    [Row1, Row2].
+    [Row1, Row2, Row3].
 
 collection_types(Config) ->
     Client = get_client(Config),
     
     CreationQ = <<"CREATE TABLE entries3(key varchar, numbers list<int>, names set<varchar>, phones map<varchar, varchar>, PRIMARY KEY(key));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries3">>}} =
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, table = <<"entries3">>}} =
         cqerl:run_query(Client, CreationQ),
         
     {ok, void} = cqerl:run_query(Client, #cql_query{
@@ -448,7 +460,7 @@ counter_type(Config) ->
     
     CreationQ = <<"CREATE TABLE entries4(key varchar, count counter, PRIMARY KEY(key));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries4">>}} =
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, table = <<"entries4">>}} =
         cqerl:run_query(Client, CreationQ),
     
     {ok, void} = cqerl:run_query(Client, #cql_query{

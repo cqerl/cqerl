@@ -23,7 +23,7 @@ suite() ->
   [{timetrap, {seconds, 20}},
    {require, ssl, cqerl_test_ssl},
    {require, auth, cqerl_test_auth},
-   {require, keyspace, cqerl_test_keyspace},
+   % {require, keyspace, cqerl_test_keyspace},
    {require, host, cqerl_host}].
 
 %%--------------------------------------------------------------------
@@ -116,20 +116,20 @@ init_per_suite(Config) ->
     Config1 = [ {auth, ct:get_config(auth)}, 
       {ssl, RawSSL},
       {prepared_ssl, SSL},
-      {keyspace, ct:get_config(keyspace)},
+      {keyspace, "test_keyspace_1"},
       {host, ct:get_config(host)} ] ++ Config,
     
     Client = get_client([{keyspace, undefined}|Config1]),
-    Q = <<"CREATE KEYSPACE test_keyspace WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace;">>,
+    Q = <<"CREATE KEYSPACE test_keyspace_1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
+    D = <<"DROP KEYSPACE test_keyspace_1;">>,
     case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>}} = cqerl:run_query(Client, Q)
+        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} -> ok;
+        {error, {16#2400, _, {key_space, <<"test_keyspace_1">>}}} ->
+            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, D),
+            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, Q)
     end,
-    cqerl:run_query(Client, "USE test_keyspace;"),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace">>, table = <<"entries1">>}} =
+    cqerl:run_query(Client, "USE test_keyspace_1;"),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>, table = <<"entries1">>}} =
       cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
     cqerl:close_client(Client),
     
