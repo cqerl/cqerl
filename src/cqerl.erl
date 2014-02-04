@@ -430,15 +430,16 @@ handle_info({retry, Msg, From, Delay}, State) ->
                     erlang:send_after(NewDelay, self(), {retry, Msg, From, NewDelay});
                 _ ->
                     gen_server:reply(From, {error, no_available_clients})
-            end;
+            end,
+            {noreply, State};
         
-        {noreply, State} -> 
-            ok;
+        {noreply, State1} -> 
+            {noreply, State1};
         
-        {reply, Reply, State} ->
-            gen_server:reply(From, Reply)
-    end,
-    {noreply, State};
+        {reply, Reply, State1} ->
+            gen_server:reply(From, Reply),
+            {noreply, State1}
+    end;
 
 handle_info(_Msg, State) ->
     {noreply, State}.
