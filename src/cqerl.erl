@@ -266,7 +266,7 @@ handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients
             {noreply, State#cqerl_state{retrying=false, client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}}
     end;
 
-handle_call({get_client, Node, Opts}, From, State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts}) ->
+handle_call(Req={get_client, Node, Opts}, From, State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts}) ->
     NodeKey = node_key(Node, {Opts, GlobalOpts}),
     case orddict:find(NodeKey, Stats) of
         error ->
@@ -285,7 +285,7 @@ handle_call({get_client, Node, Opts}, From, State=#cqerl_state{clients=Clients, 
                     retry;
                 
                 no_available_clients ->
-                    erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, {get_client, NodeKey, Opts}, From, ?RETRY_INITIAL_DELAY}),
+                    erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, Req, From, ?RETRY_INITIAL_DELAY}),
                     {noreply, State#cqerl_state{retrying=false}};
                 
                 {existing, _, _} ->
@@ -430,12 +430,15 @@ handle_info({retry, Msg, From, Delay}, State) ->
                     erlang:send_after(NewDelay, self(), {retry, Msg, From, NewDelay});
                 _ ->
                     gen_server:reply(From, {error, no_available_clients})
-            end,
-            {noreply, State};
-        {reply, Client, State} ->
-            gen_server:reply(From, Client),
-            {noreply, State}
-    end;
+            end;
+        
+        {noreply, State} -> 
+            ok;
+        
+        {reply, Reply, State} ->
+            gen_server:reply(From, Reply)
+    end,
+    {noreply, State};
 
 handle_info(_Msg, State) ->
     {noreply, State}.
