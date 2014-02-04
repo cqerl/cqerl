@@ -319,6 +319,11 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
             AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
             close_socket(State),
             {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{socket=undefined}};
+            
+        %% Server tells us something an error occured
+        {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR}, {ErrorCode, ErrorMessage, _}, Delayed} ->
+            close_socket(State),
+            {stop, {server_error, ErrorCode, ErrorMessage}, State#client_state{socket=undefined}};
         
         %% Server tells us the authentication went well, we can start shooting queries
         {ok, #cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, Delayed} ->
