@@ -8,7 +8,8 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/2, query_was_prepared/2, query_preparation_failed/2]).
+-export([start_link/0, lookup/2, lookup/3,
+         query_was_prepared/2, query_preparation_failed/2]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -35,19 +36,22 @@ start_link() ->
     
 -spec lookup(Inet :: term(), Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
 
-lookup(Inet, #cql_query{reusable=true, statement=Statement}) ->
+lookup(Inet, Query) ->
+    lookup(self(), Inet, Query).
+
+lookup(ClientPid, Inet, #cql_query{reusable=true, statement=Statement}) ->
     case ets:lookup(?QUERIES_TAB, {Inet, Statement}) of
         [] ->
-            gen_server:cast(?SERVER, {lookup, Inet, Statement, self()}),
+            gen_server:cast(?SERVER, {lookup, Inet, Statement, ClientPid, self()}),
             queued;
         [CachedQuery] ->
             CachedQuery
     end;
-lookup(Inet, Query = #cql_query{named=true}) ->
-    lookup(Inet, Query#cql_query{reusable=true});
-lookup(_Inet, #cql_query{reusable=false}) ->
+lookup(ClientPid, Inet, Query = #cql_query{named=true}) ->
+    lookup(ClientPid, Inet, Query#cql_query{reusable=true});
+lookup(ClientPid, _Inet, #cql_query{reusable=false}) ->
     uncached;
-lookup(Inet, Query = #cql_query{statement=Statement}) ->
+lookup(ClientPid, Inet, Query = #cql_query{statement=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
             {ok, RE} = re:compile(?NAMED_BINDINGS_RE),
@@ -56,17 +60,17 @@ lookup(Inet, Query = #cql_query{statement=Statement}) ->
     end,
     case re:run(Statement, RE) of
         nomatch ->
-            lookup(Inet, Query#cql_query{reusable=false, named=false});
+            lookup(ClientPid, Inet, Query#cql_query{reusable=false, named=false});
         
         %% In the case reusable is not set, and the query contains ? bindings,
         %% we make it reusable
         {match, [{_, 1}]} when Query#cql_query.reusable == undefined ->
-            lookup(Inet, Query#cql_query{reusable=true, named=false});
+            lookup(ClientPid, Inet, Query#cql_query{reusable=true, named=false});
             
         %% In the case the query contains :named bindings,
         %% we make it reusable no matter what
         {match, _} ->
-            lookup(Inet, Query#cql_query{reusable=true, named=true})
+            lookup(ClientPid, Inet, Query#cql_query{reusable=true, named=true})
     end.
 
 query_was_prepared(Key, Result) ->
@@ -116,7 +120,7 @@ handle_cast({query_prepared, Key={Inet, _Query}, {QueryID, QueryMetadata, Result
             {noreply, State}
     end;
 
-handle_cast({lookup, Inet, Query, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
+handle_cast({lookup, Inet, Query, ClientPid, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
     Key = {Inet, Query},
     case orddict:find(Key, Queue) of
         {ok, _} ->
@@ -128,7 +132,7 @@ handle_cast({lookup, Inet, Query, Sender}, State=#state{queued=Queue, cached_que
                     Sender ! {prepared, CachedQuery};
                 [] ->
                     Queue2 = orddict:store(Key, [Sender], Queue),
-                    cqerl_client:prepare_query(Sender, Query)
+                    cqerl_client:prepare_query(ClientPid, Query)
             end
     end,
     {noreply, State#state{queued=Queue2}};
