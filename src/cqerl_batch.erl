@@ -6,7 +6,7 @@
 start_link(Call, Inet, Batch=#cql_query_batch{}) ->
     spawn_link(fun () -> init(Call, Inet, Batch) end).
 
-init(Call, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
+init(Call={ClientPid, _}, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
     Queries = lists:map(fun
         (Query=#cql_query{statement=Statement}) when is_list(Statement) ->
             Query#cql_query{statement=list_to_binary(Statement)};
@@ -14,19 +14,20 @@ init(Call, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
     end, Queries0),
     QueryStates = lists:zip(
         Queries,
-        lists:map(fun (Query) -> cqerl_cache:lookup(Inet, Query) end, Queries)
+        lists:map(fun (Query) -> cqerl_cache:lookup(ClientPid, Inet, Query) end, Queries)
     ),
     loop(Call, Inet, Batch#cql_query_batch{queries=QueryStates}).
 
 loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
     case lists:all(fun ({_, queued}) -> false;
                        (_)           -> true end, QueryStates) of
-        true -> terminate(Call, Batch);
+        true -> 
+            terminate(Call, Batch);
         false ->
             receive
-                {prepared, CachedQuery=#cqerl_cached_query{key={Inet, _Statement}}} ->
+                {prepared, CachedQuery=#cqerl_cached_query{key={Inet, Statement}}} ->
                     NewQueries = lists:map(fun
-                        ({Query=#cql_query{}, queued}) ->
+                        ({Query=#cql_query{statement=Statement1}, queued}) when Statement1 == Statement ->
                             {Query, CachedQuery};
                         (Other) -> Other
                     end, Batch#cql_query_batch.queries),
