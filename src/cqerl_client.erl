@@ -516,7 +516,9 @@ dequeue_query(State0=#client_state{queued=Queue0}) ->
 
 
 maybe_signal_busy(State) ->
-    if  length(State#client_state.available_slots) == ?QUERIES_MAX - ?QUERIES_HW -> signal_busy();
+    if  
+        length(State#client_state.available_slots) == ?QUERIES_MAX - ?QUERIES_HW -> 
+            signal_busy();
         true -> ok
     end.
     
@@ -536,7 +538,7 @@ release_stream_id(StreamID, State=#client_state{available_slots=Slots, queries=Q
         available_slots=[StreamID | Slots], 
         queries=orddict:store(StreamID, undefined, Queries)
     },
-    if  length(Slots) + 5 == ?QUERIES_MAX - ?QUERIES_HW -> signal_avail();
+    if  length(Slots) - 5 == ?QUERIES_MAX - ?QUERIES_HW -> signal_avail();
         true -> ok
     end,
     {_Dequeued, State3} = dequeue_query(State2),
@@ -699,7 +701,7 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=In
     State1 = State#client_state{ 
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(), 
-        queries=Queries, 
+        queries=Queries,
         available_slots = orddict:fetch_keys(Queries),
         users=UsersTab 
     },
