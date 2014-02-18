@@ -438,9 +438,8 @@ response_frame(_Response, Binary = << _:4/binary, Size:?INT, Body/binary >>) whe
     {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
-                             << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
-                                     when is_binary(Body0),
-                                          FrameFlags < 5 andalso FrameFlags >= 0 ->
+               Binary = << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>) 
+                                     when is_binary(Body0), FrameFlags < 5 andalso FrameFlags >= 0 ->
                                                     
     {Compression, Tracing} = decode_frame_flags(FrameFlags),
     Response = Response0#cqerl_frame{opcode=OpCode, stream_id=ID, compression=Compression, tracing=Tracing},

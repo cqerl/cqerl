@@ -405,11 +405,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             {next_state, live, release_stream_id(StreamID, State)};
         
         {ok, #cqerl_frame{opcode=?CQERL_OP_EVENT}, _EventTerm, Delayed} ->
-            ok;%% TODO Manage incoming server-driven events
-        
-        _ ->
-            Delayed = <<>>,
-            {next_state, live, State}
+            ok%% TODO Manage incoming server-driven events
     end,
     
     case Resp of
@@ -417,9 +413,9 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         activate_socket(?STATE_FROM_RETURN(Resp1)),
         append_delayed_segment(Resp1, Delayed);
       {_, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1);
+        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>});
       {_, _, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1)
+        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>})
     end;
     
 

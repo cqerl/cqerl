@@ -66,7 +66,7 @@ groups() -> [].
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [single_client, n_clients, many_clients].
+    [single_client, n_clients, many_clients, many_sync_clients].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
@@ -355,6 +355,75 @@ many_clients(Config) ->
   DistinctPids = length(Pids),
   Sum = lists:foldr(fun ({Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
   ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds", 
+    [N, DistinctPids, (timer:now_diff(erlang:now(), T1))/1.0e6, (Sum/N)/1.0e6]).
+
+sync_insert() ->
+    receive
+        {Pid, {Client, Q}, Tag, N} ->
+            case cqerl:run_query(Client, Q#cql_query{values=[{id, N}, {name, "defaultvaluehere"}]}) of
+                {ok, void} ->
+                    Pid ! {result, Tag},
+                    ok;
+                Fail ->
+                    ct:fail("FAILED ~p~n",[Fail]),
+                    ok
+            end;
+        OtherMsg ->
+            ct:fail("Wrong msg ~p~n",[OtherMsg]),
+            ok
+    after 1000 ->
+        ct:fail("Timeout~n",[]),
+        timeout
+    end.
+
+many_sync_clients(Config) ->
+    N = 75000,
+    Dt = 0.01,
+    Iterator = fun
+        (_F, 0, _M) -> ok;
+        (F, N, M) ->
+            Client = get_client(Config),
+            erlang:send_after(trunc(Dt*N), self(), {sync_request, self(),Client}),
+            F(F, N-1, M+1)
+        end,
+    Iterator(Iterator, N, 0),
+
+    T1 = erlang:now(),
+    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
+    DelayLooper = fun
+        (_F, 0, 0, Acc) ->
+            Acc;
+        (F, N, M, Acc) ->
+            receive
+                {result, Tag} ->
+                    {T, Client} = gb_trees:get(Tag, Acc),
+                    {Pid, _} = Client,
+                    cqerl:close_client(Client),
+                    F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(erlang:now(), T)}, Acc));
+                {sync_request, P, Client} ->
+                    Tag = make_ref(),
+                    Now = erlang:now(),
+                    Pid = spawn(fun sync_insert/0),
+                    Pid ! {P, {Client, Q}, Tag, N},
+                    F(F, N-1, M, gb_trees:insert(Tag, {Now, Client}, Acc));
+                OtherMsg ->
+                    ct:fail("Unexpected response ~p", [OtherMsg])
+            after 1000 ->
+                ct:fail("All delayed messages did not arrive in time~n")
+            end
+    end,
+    Deltas = gb_trees:to_list(DelayLooper(DelayLooper, N, N, gb_trees:empty())),
+    Pids = lists:foldr(fun
+        ({_, {Pid, _}}, Acc) ->
+            case lists:member(Pid, Acc) of
+                true -> Acc;
+                false -> [Pid | Acc]
+            end
+    end, [], Deltas),
+
+    DistinctPids = length(Pids),
+    Sum = lists:foldr(fun ({_Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
+    ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds --~n",
     [N, DistinctPids, (timer:now_diff(erlang:now(), T1))/1.0e6, (Sum/N)/1.0e6]).
 
 get_client(Config) ->
