@@ -74,6 +74,8 @@ encode_bytes(Bytes) when is_binary(Bytes) ->
 
 -spec encode_short_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
 
+encode_short_bytes(null) ->
+    {ok, << 0:?SHORT >> };
 encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) =< ?MAX_SHORT ->
     Size = size(Bytes),
     {ok, << Size:?SHORT, Bytes/binary >>}.
