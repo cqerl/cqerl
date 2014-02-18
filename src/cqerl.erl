@@ -352,7 +352,6 @@ handle_cast({client_busy, Pid}, State=#cqerl_state{clients=Clients}) ->
     {noreply, State};
 
 handle_cast({client_avail, Pid}, State=#cqerl_state{clients=Clients}) ->
-    ct:log("Avail: ~w", [Pid]),
     case ets:lookup(Clients, Pid) of
         [Client] ->
             ets:insert(Clients, Client#cql_client{busy=false});

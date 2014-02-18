@@ -24,7 +24,9 @@ suite() ->
    {require, ssl, cqerl_test_ssl},
    {require, auth, cqerl_test_auth},
    % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host}].
+   {require, host, cqerl_host},
+   {require, pool_min_size, pool_min_size},
+   {require, pool_max_size, pool_max_size}].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -102,6 +104,7 @@ init_per_suite(Config) ->
       true -> application:ensure_all_started(cqerl);
       false ->
         application:start(crypto),
+        application:start(asn1),
         application:start(public_key),
         application:start(ssl),
         application:start(pooler),
@@ -134,7 +137,9 @@ init_per_suite(Config) ->
       {ssl, RawSSL},
       {prepared_ssl, SSL},
       {keyspace, "test_keyspace_2"},
-      {host, ct:get_config(host)} ] ++ Config.
+      {host, ct:get_config(host)},
+      {pool_min_size, ct:get_config(pool_min_size)},
+      {pool_max_size, ct:get_config(pool_max_size)} ] ++ Config.
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -229,14 +234,15 @@ get_multiple_clients(Config, N, Acc) ->
     get_multiple_clients(Config, N-1, [get_client(Config) | Acc]).
 
 random_selection(Config) ->
-    Clients = get_multiple_clients(Config, 50, []),
+    Clients = get_multiple_clients(Config, 200, []),
     DistinctPids = lists:foldl(fun({Pid, _Ref}, Pids) ->
         case lists:member(Pid, Pids) of
             true -> Pids;
             false -> [Pid | Pids]
         end
     end, [], Clients),
-    5 = length(DistinctPids),
+    MaxSize = proplists:get_value(pool_min_size, Config),
+    MaxSize = length(DistinctPids),
     lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
 
 connect(Config) ->
@@ -539,12 +545,14 @@ get_client(Config) ->
     SSL = proplists:get_value(prepared_ssl, Config),
     Auth = proplists:get_value(auth, Config, undefined),
     Keyspace = proplists:get_value(keyspace, Config),
+    PoolMinSize = proplists:get_value(pool_min_size, Config),
+    PoolMaxSize = proplists:get_value(pool_max_size, Config),
     
     io:format("Options : ~w~n", [[
         {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-        {pool_min_size, 5}, {pool_max_size, 5}
+        {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}
         ]]),
         
     {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                                           {pool_min_size, 5}, {pool_max_size, 5} ]),
+                                           {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]),
     Client.

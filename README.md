@@ -4,7 +4,7 @@ Native Erlang client for CQL3 over Cassandra's binary protocol v2 (a.k.a. what y
 
 [**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)
 
-[**Installation**](#installation) &middot; [**Tests**](#tests) &middot; [**License**](#license)
+[**Installation**](#installation) &middot; [**Compatibility**](#compatibility) &middot; [**Tests**](#tests) &middot; [**License**](#license)
 
 ---
 
@@ -266,6 +266,12 @@ inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7,
 
 Just include this repository in your project's `rebar.config` file and run `./rebar get-deps`. See [rebar][3] for more details on how to use rebar for Erlang project management.
 
+### Compatibility
+
+As said earlier, this library uses Cassandra's newest native protocol version (2), which is said to perform better than the older Thrift-based interface. It also speaks CQL version 3, and uses new features available in Cassandra 2.X, such as paging, parametrization, query preparation and so on.
+
+All this means is that this library works with Cassandra 2.X, configured to enable the native protocol. [This documentation page][8] gives details about the how to configure this protocol. In the `cassandra.yaml` configuration file of your Cassandra installation, the `start_native_transport` need to be set to true and you need to take note of the value for `native_transport_port`, which is the port used by this library.
+
 ### Tests
 
 CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project. 
@@ -304,3 +310,4 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 [5]: http://en.wikipedia.org/wiki/Data_manipulation_language
 [6]: http://www.datastax.com/documentation/cql/3.0/webhelp/index.html#cql/cql_reference/cql_data_types_c.html#reference_ds_dsf_555_yj
 [7]: http://www.datastax.com/dev/blog/client-side-improvements-in-cassandra-2-0
+[8]: http://www.datastax.com/documentation/cassandra/2.0/cassandra/configuration/configCassandra_yaml_r.html

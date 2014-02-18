@@ -405,11 +405,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             {next_state, live, release_stream_id(StreamID, State)};
         
         {ok, #cqerl_frame{opcode=?CQERL_OP_EVENT}, _EventTerm, Delayed} ->
-            ok;%% TODO Manage incoming server-driven events
-        
-        _ ->
-            Delayed = <<>>,
-            {next_state, live, State}
+            ok%% TODO Manage incoming server-driven events
     end,
     
     case Resp of
@@ -417,9 +413,9 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         activate_socket(?STATE_FROM_RETURN(Resp1)),
         append_delayed_segment(Resp1, Delayed);
       {_, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1);
+        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>});
       {_, _, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1)
+        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>})
     end;
     
 
@@ -516,7 +512,9 @@ dequeue_query(State0=#client_state{queued=Queue0}) ->
 
 
 maybe_signal_busy(State) ->
-    if  length(State#client_state.available_slots) == ?QUERIES_MAX - ?QUERIES_HW -> signal_busy();
+    if  
+        length(State#client_state.available_slots) == ?QUERIES_MAX - ?QUERIES_HW -> 
+            signal_busy();
         true -> ok
     end.
     
@@ -536,7 +534,7 @@ release_stream_id(StreamID, State=#client_state{available_slots=Slots, queries=Q
         available_slots=[StreamID | Slots], 
         queries=orddict:store(StreamID, undefined, Queries)
     },
-    if  length(Slots) + 5 == ?QUERIES_MAX - ?QUERIES_HW -> signal_avail();
+    if  length(Slots) - 5 == ?QUERIES_MAX - ?QUERIES_HW -> signal_avail();
         true -> ok
     end,
     {_Dequeued, State3} = dequeue_query(State2),
@@ -699,7 +697,7 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=In
     State1 = State#client_state{ 
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(), 
-        queries=Queries, 
+        queries=Queries,
         available_slots = orddict:fetch_keys(Queries),
         users=UsersTab 
     },
