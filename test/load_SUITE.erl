@@ -87,6 +87,7 @@ init_per_suite(Config) ->
       true -> application:ensure_all_started(cqerl);
       false ->
         application:start(crypto),
+        application:start(asn1),
         application:start(public_key),
         application:start(ssl),
         application:start(pooler),
