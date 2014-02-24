@@ -1,12 +1,13 @@
 -module(cqerl_batch).
 -include("cqerl_protocol.hrl").
 
--export([start_link/3]).
+-export([start_link/3, init/4]).
+-export([system_continue/3, system_terminate/4]).
 
 start_link(Call, Inet, Batch=#cql_query_batch{}) ->
-    spawn_link(fun () -> init(Call, Inet, Batch) end).
+    proc_lib:start_link(?MODULE, init, [Call, Inet, Batch, self()]).
 
-init(Call={ClientPid, _}, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
+init(Call={ClientPid, _}, Inet, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
     Queries = lists:map(fun
         (Query=#cql_query{statement=Statement}) when is_list(Statement) ->
             Query#cql_query{statement=list_to_binary(Statement)};
@@ -16,13 +17,16 @@ init(Call={ClientPid, _}, Inet, Batch=#cql_query_batch{queries=Queries0}) ->
         Queries,
         lists:map(fun (Query) -> cqerl_cache:lookup(ClientPid, Inet, Query) end, Queries)
     ),
-    loop(Call, Inet, Batch#cql_query_batch{queries=QueryStates}).
+    Debug = sys:debug_options([]),
+    proc_lib:init_ack(Parent, {ok, self()}),
+    loop(Call, Inet, Batch#cql_query_batch{queries=QueryStates}, Debug, Parent).
 
-loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
+loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
     case lists:all(fun ({_, queued}) -> false;
                        (_)           -> true end, QueryStates) of
         true -> 
             terminate(Call, Batch);
+        
         false ->
             receive
                 {prepared, CachedQuery=#cqerl_cached_query{key={Inet, Statement}}} ->
@@ -31,10 +35,14 @@ loop(Call, Inet, Batch=#cql_query_batch{queries=QueryStates}) ->
                             {Query, CachedQuery};
                         (Other) -> Other
                     end, Batch#cql_query_batch.queries),
-                    loop(Call, Inet, Batch#cql_query_batch{queries=NewQueries});
+                    loop(Call, Inet, Batch#cql_query_batch{queries=NewQueries}, Debug, Parent);
                 
                 {preparation_failed, Reason} ->
-                    cqerl_client:batch_failed(Call, Batch, Reason)
+                    cqerl_client:batch_failed(Call, Batch, Reason),
+                    exit({failed, {Reason, Call, Batch}});
+                
+                {system, From, Request} ->
+                    sys:handle_system_msg(Request, From, Parent, ?MODULE, Debug, {Call, Inet, Batch})
             end
     end.
 
@@ -50,4 +58,11 @@ terminate(Call, Batch) ->
                          values=cqerl_protocol:encode_query_values(Values, Metadata#cqerl_result_metadata.columns)}
                          
     end, Batch#cql_query_batch.queries),
-    cqerl_client:batch_ready(Call, Batch#cql_query_batch{queries=Queries}).
+    cqerl_client:batch_ready(Call, Batch#cql_query_batch{queries=Queries}),
+    exit(normal).
+
+system_continue(Parent, Debug, {Call, Inet, Batch}) ->
+    loop(Call, Inet, Batch, Debug, Parent).
+
+system_terminate(Reason, _Parent, _Debug, _State) ->
+    exit(Reason).
