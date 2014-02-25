@@ -20,7 +20,10 @@
 -define(QUERIES_MAX, 128).
 -define(QUERIES_HW, 88).
 
--define(STATE_FROM_RETURN(Resp), element(tuple_size(Resp), Resp)).
+-define(STATE_FROM_RETURN(Resp), case element(tuple_size(Resp), Resp) of
+    N_ when is_integer(N_) -> element(tuple_size(Resp) - 1, Resp);
+    State_ -> State_
+end).
 
 -export([init/1, terminate/3,
          starting/2,    starting/3, 
