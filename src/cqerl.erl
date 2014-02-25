@@ -421,8 +421,14 @@ handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     State2 = lists:foldl(fun
         (Arg, State0) -> 
             case Arg of
-                {Inet, Opts} when is_list(Opts) -> ok;
-                Inet -> Opts = []
+                {Ip, Port, Opts} when is_list(Opts) ->
+                    Inet = {Ip, Port};
+                
+                {Inet, Opts} when is_list(Opts) -> 
+                    ok;
+                
+                Inet -> 
+                    Opts = []
             end,
             Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
             State3 = new_pool(Key, Opts, GlobalOpts, State0),
