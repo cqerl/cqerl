@@ -459,16 +459,20 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private functions
 %% =================
 
-node_key(Inet, Keyspace0) ->
+node_key(Inet0, Keyspace0) ->
+    Inet = if
+        is_list(Inet0) -> {Inet0, ?DEFAULT_PORT};
+        true -> Inet0
+    end,
     case Inet of
+        {Ip, Port, Keyspace} -> ok;
         {Ip, Port} -> 
             Keyspace = case Keyspace0 of
                 {LocalOpts, GlobalOpts} ->
                     OptGetter = make_option_getter(GlobalOpts, LocalOpts),
                     OptGetter(keyspace);
                 _ -> Keyspace0
-            end;
-        {Ip, Port, Keyspace} -> ok
+            end
     end,
     Keyspace1 = case Keyspace of
         Val when is_atom(Val) -> Val;
@@ -576,9 +580,17 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User) ->
 prepare_node_info({Localhost, Port}) when Localhost == localhost;
                                           Localhost == "localhost" ->
     {{127, 0, 0, 1}, Port};
+    
 prepare_node_info({Addr, Port}) when is_list(Addr) ->
     {ok, IpAddr} = ?CQERL_PARSE_ADDR(Addr),
     {IpAddr, Port};
+    
+prepare_node_info(Addr) when is_list(Addr);             % "127.0.0.1"
+                             erlang:size(Addr) == 4;    % {127, 0, 0, 1} v4
+                             erlang:size(Addr) == 16 -> 
+                                 
+    prepare_node_info({Addr, ?DEFAULT_PORT});
+
 prepare_node_info(Inet) ->    
     Inet.
 
