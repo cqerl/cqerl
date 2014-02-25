@@ -60,7 +60,8 @@
     clients             :: ets:tab(),
     client_stats        :: list({atom(), #cql_client_stats{}}),
     globalopts          :: list(any()),
-    retrying = false    :: boolean()
+    retrying = false    :: boolean(),
+    named_nodes         :: list()
 }).
 
 -record(cql_client, {
@@ -241,7 +242,8 @@ init([]) ->
     process_flag(trap_exit, true),
     io:format("== Starting CQErl frontend. ==~n", []),
     {ok, #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
-                      client_stats=[]}, 0}.
+                      client_stats=[],
+                      named_nodes=[]}, 0}.
 
 
 
@@ -266,8 +268,16 @@ handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients
             {noreply, State#cqerl_state{retrying=false, client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}}
     end;
 
-handle_call(Req={get_client, Node, Opts}, From, State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts}) ->
-    NodeKey = node_key(Node, {Opts, GlobalOpts}),
+handle_call(Req={get_client, Node, Opts}, From, 
+            State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts, named_nodes=NamedNodes}) ->
+    
+    NodeKey = if 
+        is_atom(Node) ->
+            {ok, Nodes} = orddict:find(Node, NamedNodes),
+            lists:nth(random:uniform(length(Nodes)), Nodes);
+        true ->
+            node_key(Node, {Opts, GlobalOpts})
+    end,
     case orddict:find(NodeKey, Stats) of
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
@@ -389,7 +399,7 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
     case ets:lookup(Clients, From) of
         [#cql_client{node=NodeKey}] ->
             {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
-            {noreply, State = #cqerl_state{client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count = Count-1}, Stats)}};
+            {noreply, State#cqerl_state{client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count = Count-1}, Stats)}};
         [] ->
             {stop, Reason, State}
     end;
@@ -397,13 +407,12 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
 handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
     GlobalOpts = lists:map(
         fun (Key) -> 
-            Val = case application:get_env(cqerl, Key) of
-                undefined -> undefined;
-                {ok, V} -> V
-            end,
-            {Key, Val}
+            case application:get_env(cqerl, Key) of
+                undefined -> {Key, undefined};
+                {ok, V} -> {Key, V}
+            end
         end, 
-        [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace]
+        [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
     ),
     Nodes = case application:get_env(cqerl, cassandra_nodes) of
         undefined -> [];
@@ -481,7 +490,9 @@ node_key(Inet0, Keyspace0) ->
     end,
     {Ip, Port, Keyspace1}.
 
-new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state{client_stats=ClientsStats, clients=Clients}) ->
+new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state{client_stats=ClientsStats, 
+                                                                                 clients=Clients,
+                                                                                 named_nodes=NamedNodes0}) ->
     OptGetter = make_option_getter(GlobalOpts, LocalOpts),
     {Amount, Unit} = OptGetter(client_max_age),
     pooler:new_pool([{name,            pool_from_node(NodeKey)},
@@ -503,7 +514,12 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
     ClientStats = prepare_pool_members(NodeKey, 
                                        #cql_client_stats{count=0, min_count=MinClients, max_count=OptGetter(pool_max_size)}, 
                                        Clients, MinClients),
-    State#cqerl_state{client_stats=orddict:store(NodeKey, ClientStats, ClientsStats)}.
+                                       
+    NamedNodes = case OptGetter(name) of
+        undefined -> NamedNodes0;
+        Name -> orddict:append(Name, NodeKey, NamedNodes0)
+    end,
+    State#cqerl_state{client_stats=orddict:store(NodeKey, ClientStats, ClientsStats), named_nodes=NamedNodes}.
 
 
 prepare_pool_members(_NodeKey, ClientStats, _Clients, 0) -> ClientStats;
@@ -530,7 +546,8 @@ make_option_getter(Local, Global) ->
                             client_max_age -> {30, sec};
                             auth -> {cqerl_auth_plain_handler, []};
                             ssl -> false;
-                            keyspace -> undefined
+                            keyspace -> undefined;
+                            name -> undefined
                         end;
                     GlobalVal -> GlobalVal
                 end;
@@ -560,12 +577,14 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User) ->
             case NewMember of
                 error_no_members -> 
                     no_available_clients;
+                    
                 {Pool, Pid} ->
                     link(Pid),
                     Node1 = node_from_pool(Pool),
                     ets:insert(Clients, #cql_client{node=Node1, busy=false, pid=Pid}),
                     cqerl_client:new_user(Pid, User),
                     {new, Pid, Node1};
+                    
                 Pid ->
                     link(Pid),
                     ets:insert(Clients, #cql_client{node=Node, busy=false, pid=Pid}),
