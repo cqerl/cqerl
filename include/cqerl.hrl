@@ -18,6 +18,13 @@
 -define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
 -define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
 
+-define(CQERL_IS_CLIENT(Client), 
+    is_tuple(Client) andalso 
+    tuple_size(Client) == 2 andalso 
+    is_pid(element(1, Client)) andalso 
+    is_reference(element(2, Client))
+).
+
 -define(CQERL_PARSE_ADDR (Addr), case erlang:function_exported(inet, parse_address, 1) of
     true -> inet:parse_address(Addr);
     false -> inet_parse:address(Addr)
