@@ -498,6 +498,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 dequeue_query(State0=#client_state{queued=Queue0}) ->
     case queue:out(Queue0) of
+        {{value, {Call, Batch=#cql_query_batch{}}}, Queue1} ->
+            State1 = process_outgoing_query(Call, Batch, State0),
+            {true, State1#client_state{queued=Queue1}};
+        
         {{value, {Call, Item}}, Queue1} ->
             case Item of
                 Query=#cql_query{} -> ok;
@@ -506,6 +510,7 @@ dequeue_query(State0=#client_state{queued=Queue0}) ->
             CacheResult = cqerl_cache:lookup(State0#client_state.inet, Query),
             State1 = process_outgoing_query(Call, {CacheResult, Item}, State0),
             {true, State1#client_state{queued=Queue1}};
+        
         {empty, _} ->
             {false, State0}
     end.
