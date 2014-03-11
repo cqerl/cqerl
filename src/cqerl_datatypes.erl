@@ -364,6 +364,10 @@ encode_data({inet, Addr}) when is_list(Addr) ->
 
 encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
     Length = length(List),
+    List2 = case ColType of
+        list -> List;
+        set -> ordsets:from_list(List)
+    end,
     GetValueBinary = fun(Value) -> 
         Bin = encode_data({Type, Value}),
         {ok, ShortBytes} = encode_short_bytes(Bin),
@@ -371,7 +375,7 @@ encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
     end,
     Entries = << << (GetValueBinary(Value))/binary >> || Value <- List >>,
     << Length:?SHORT, Entries/binary >>;
-    
+
 encode_data({{map, KeyType, ValType}, List}) ->
     Length = length(List),
     GetElementBinary = fun(Type, Value) -> 
@@ -451,7 +455,11 @@ decode_data({{ColType, ValueType}, Size, Bin}) when ColType == set; ColType == l
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
     << _N:?SHORT, EntriesBin/binary >> = CollectionBin,
     List = [ element(1, decode_data({ValueType, ShortSize, ValueBin})) || << ShortSize:?SHORT, ValueBin:ShortSize/binary >> <= EntriesBin ],
-    {List, Rest};
+    List2 = case ColType of
+        set -> ordsets:from_list(List);
+        list -> List
+    end,
+    {List2, Rest};
 
 decode_data({{map, KeyType, ValueType}, Size, Bin}) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
