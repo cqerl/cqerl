@@ -293,6 +293,13 @@ encode_data({BigIntType, Number}) when is_integer(Number),
                                        BigIntType == timestamp ->
     <<Number:64/big-signed-integer>>;
 
+encode_data({BigIntType, Number}) when is_float(Number), 
+                                       BigIntType == bigint orelse 
+                                       BigIntType == counter orelse 
+                                       BigIntType == timestamp ->
+    Int = trunc(Number),
+    <<Int:64/big-signed-integer>>;
+
 encode_data({blob, Data}) when is_binary(Data) ->
     Data;
 
@@ -316,8 +323,12 @@ encode_data({float, Val}) ->
 encode_data({double, Val}) ->
     << Val:64/big-float >>;
 
-encode_data({int, Val}) ->
+encode_data({int, Val}) when is_integer(Val) ->
     << Val:32/big-signed-integer >>;
+    
+encode_data({int, Val}) when is_float(Val) ->
+    Int = trunc(Val),
+    << Int:32/big-signed-integer >>;
 
 encode_data({TextType, Val}) when TextType == text orelse TextType == varchar ->
     if  is_binary(Val) -> Val;
