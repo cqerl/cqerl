@@ -69,7 +69,7 @@ All the options given above can be provided as environment variables, in which c
 ]
 ```
 
-Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:new_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:get_client/0`, which chooses an available client at random.
+Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:new_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:new_client/0`, which chooses an available client at random.
 
 ##### Performing queries
 
