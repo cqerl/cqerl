@@ -375,10 +375,6 @@ encode_data({inet, Addr}) when is_list(Addr) ->
 
 encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
     Length = length(List),
-    List2 = case ColType of
-        list -> List;
-        set -> ordsets:from_list(List)
-    end,
     GetValueBinary = fun(Value) -> 
         Bin = encode_data({Type, Value}),
         {ok, ShortBytes} = encode_short_bytes(Bin),
