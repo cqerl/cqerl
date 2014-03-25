@@ -49,7 +49,7 @@ lookup(ClientPid, Inet, #cql_query{reusable=true, statement=Statement}) ->
     end;
 lookup(ClientPid, Inet, Query = #cql_query{named=true}) ->
     lookup(ClientPid, Inet, Query#cql_query{reusable=true});
-lookup(ClientPid, _Inet, #cql_query{reusable=false}) ->
+lookup(_ClientPid, _Inet, #cql_query{reusable=false}) ->
     uncached;
 lookup(ClientPid, Inet, Query = #cql_query{statement=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
