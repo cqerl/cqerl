@@ -238,13 +238,14 @@ start_link() ->
     random:seed(now()),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+
 init([]) ->
     process_flag(trap_exit, true),
     io:format("== Starting CQErl frontend. ==~n", []),
-    {ok, #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
+    BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
                       client_stats=[],
-                      named_nodes=[]}, 0}.
-
+                      named_nodes=[]},
+    {ok, prepare_configured_pools(BaseState)}.
 
 
 
@@ -303,7 +304,10 @@ handle_call(Req={get_client, Node, Opts}, From,
                 
                 {new, _Pid, NodeKey} ->
                     {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
-                    {noreply, State#cqerl_state{retrying=false, client_stats=orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}}
+                    {noreply, State#cqerl_state{
+                        retrying=false, 
+                        client_stats=orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}
+                    }
             end
     end;
 
@@ -404,38 +408,6 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
             {stop, Reason, State}
     end;
 
-handle_info(timeout, State=#cqerl_state{checked_env=false}) ->
-    GlobalOpts = lists:map(
-        fun (Key) -> 
-            case application:get_env(cqerl, Key) of
-                undefined -> {Key, undefined};
-                {ok, V} -> {Key, V}
-            end
-        end, 
-        [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
-    ),
-    Nodes = case application:get_env(cqerl, cassandra_nodes) of
-        undefined -> [];
-        {ok, N} -> N
-    end,
-    State2 = lists:foldl(fun
-        (Arg, State0) -> 
-            case Arg of
-                {Ip, Port, Opts} when is_list(Opts) ->
-                    Inet = {Ip, Port};
-                
-                {Inet, Opts} when is_list(Opts) -> 
-                    ok;
-                
-                Inet -> 
-                    Opts = []
-            end,
-            Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
-            State3 = new_pool(Key, Opts, GlobalOpts, State0),
-            State3
-    end, State, Nodes),
-    {noreply, State2#cqerl_state{ checked_env=true, globalopts=GlobalOpts }};
-
 handle_info({retry, Msg, From, Delay}, State) ->
     case handle_call(Msg, From, State#cqerl_state{retrying=true}) of
         retry -> 
@@ -527,6 +499,38 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
     end,
     State#cqerl_state{client_stats=orddict:store(NodeKey, ClientStats, ClientsStats), named_nodes=NamedNodes}.
 
+
+prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
+    GlobalOpts = lists:map(
+        fun (Key) -> 
+            case application:get_env(cqerl, Key) of
+                undefined -> {Key, undefined};
+                {ok, V} -> {Key, V}
+            end
+        end, 
+        [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
+    ),
+    Nodes = case application:get_env(cqerl, cassandra_nodes) of
+        undefined -> [];
+        {ok, N} -> N
+    end,
+    State2 = lists:foldl(fun
+        (Arg, State0) -> 
+            case Arg of
+                {Ip, Port, Opts} when is_list(Opts) ->
+                    Inet = {Ip, Port};
+                
+                {Inet, Opts} when is_list(Opts) -> 
+                    ok;
+                
+                Inet -> 
+                    Opts = []
+            end,
+            Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
+            State3 = new_pool(Key, Opts, GlobalOpts, State0),
+            State3
+    end, State, Nodes),
+    State2#cqerl_state{ checked_env=true, globalopts=GlobalOpts }.
 
 prepare_pool_members(_NodeKey, ClientStats, _Clients, 0) -> ClientStats;
 prepare_pool_members(NodeKey, ClientStats=#cql_client_stats{count=Count}, Clients, N) ->
