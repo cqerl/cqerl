@@ -85,7 +85,6 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
-
 -spec new_client() -> client().
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
@@ -230,6 +229,7 @@ all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}) ->
     [ cqerl_protocol:decode_row(Row, ColumnSpecs) || Row <- Rows ].
 
 
+
 %% ====================
 %% Gen_Server Callbacks
 %% ====================
@@ -243,8 +243,9 @@ init([]) ->
     process_flag(trap_exit, true),
     io:format("== Starting CQErl frontend. ==~n", []),
     BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
-                      client_stats=[],
-                      named_nodes=[]},
+        client_stats = [],
+        named_nodes = []
+    },
     {ok, prepare_configured_pools(BaseState)}.
 
 
@@ -253,7 +254,7 @@ handle_call(get_any_client, _From, State=#cqerl_state{client_stats=[]}) ->
     {reply, {error, no_configured_node}, State#cqerl_state{retrying=false}};
 
 handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients=Clients, retrying=Retrying}) ->
-    case select_client(Clients, #cql_client{busy=false, _='_'}, From) of
+    case select_client(Clients, #cql_client{busy=false, _ = '_'}, From, State) of
         no_available_clients when Retrying ->
             retry;
         
@@ -264,9 +265,8 @@ handle_call(get_any_client, From, State=#cqerl_state{client_stats=Stats, clients
         {existing, _, _} ->
             {noreply, State#cqerl_state{retrying=false}};
         
-        {new, _Pid, NodeKey} ->
-            {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
-            {noreply, State#cqerl_state{retrying=false, client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}}
+        {new, _Pid} ->
+            {noreply, State#cqerl_state{retrying=false}}
     end;
 
 handle_call(Req={get_client, Node, Opts}, From, 
@@ -286,12 +286,12 @@ handle_call(Req={get_client, Node, Opts}, From,
                 #cql_client_stats{count=0} -> 
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
                 _ -> 
-                    select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From),
+                    select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
                     {noreply, State2#cqerl_state{retrying=false}}
             end;
         
         _ ->
-            case select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From) of
+            case select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State) of
                 no_available_clients when Retrying ->
                     retry;
                 
@@ -302,12 +302,8 @@ handle_call(Req={get_client, Node, Opts}, From,
                 {existing, _, _} ->
                     {noreply, State#cqerl_state{retrying=false}};
                 
-                {new, _Pid, NodeKey} ->
-                    {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
-                    {noreply, State#cqerl_state{
-                        retrying=false, 
-                        client_stats=orddict:store(NodeKey, CStats#cql_client_stats{count=Count+1}, Stats)}
-                    }
+                {new, _Pid} ->
+                    {noreply, State#cqerl_state{retrying=false}}
             end
     end;
 
@@ -527,8 +523,8 @@ prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
                     Opts = []
             end,
             Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
-            State3 = new_pool(Key, Opts, GlobalOpts, State0),
-            State3
+            State1 = new_pool(Key, Opts, GlobalOpts, State0),
+            State1
     end, State, Nodes),
     State2#cqerl_state{ checked_env=true, globalopts=GlobalOpts }.
 
@@ -566,7 +562,7 @@ make_option_getter(Local, Global) ->
     end.
 
 
-select_client(Clients, MatchClient = #cql_client{node=Node}, User) ->
+select_client(Clients, MatchClient = #cql_client{node=Node}, User, State) ->
     case ets:match_object(Clients, MatchClient) of
         AvailableClients when length(AvailableClients) > 0 ->
             RandIdx = random:uniform(length(AvailableClients)),
@@ -581,25 +577,18 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User) ->
         
         [] ->
             NewMember = case Node of
-                '_' -> pooler:take_group_member(cqerl);
+                '_' ->  pooler:take_group_member(cqerl);
                  _  -> pooler:take_member(pool_from_node(Node))
             end,
             case NewMember of
                 error_no_members -> 
                     no_available_clients;
                     
-                {Pool, Pid} ->
-                    link(Pid),
-                    Node1 = node_from_pool(Pool),
-                    ets:insert(Clients, #cql_client{node=Node1, busy=false, pid=Pid}),
-                    cqerl_client:new_user(Pid, User),
-                    {new, Pid, Node1};
-                    
                 Pid ->
                     link(Pid),
                     ets:insert(Clients, #cql_client{node=Node, busy=false, pid=Pid}),
                     cqerl_client:new_user(Pid, User),
-                    {new, Pid, Node}
+                    {new, Pid}
             end
     end.
 
