@@ -37,7 +37,7 @@
   {set | list, column_type()} | datatype().
 
 -type datatype() :: ascii | bigint | blob | boolean | counter | decimal | double | 
-                    float | int | timestamp | uuid | varchat | varint | timeuuid | inet.
+                    float | int | timestamp | uuid | varchar | varint | timeuuid | inet.
   
 -type parameter_val() :: number() | binary() | list() | atom().
 -type parameter() :: { datatype(), parameter_val() }.
