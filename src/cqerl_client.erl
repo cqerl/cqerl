@@ -267,6 +267,15 @@ handle_info({preparation_failed, {_Inet, Statement}, Reason}, live,
             {next_state, live, State}
     end;
 
+handle_info({ tcp_closed, _Socket }, starting, State = #client_state{users=Users}) ->
+    [ gen_server:reply(From, {error, connection_closed}) || From <- Users],
+    {stop, connection_closed, State};
+
+handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
+    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
+    {stop, connection_closed, State};
+
+
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
         %% The frame is incomplete, so we take the accumulated data so far and store it for the next incoming

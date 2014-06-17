@@ -398,6 +398,7 @@ handle_cast(_Msg, State) ->
 handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_stats=Stats}) ->
     case ets:lookup(Clients, From) of
         [#cql_client{node=NodeKey}] ->
+            ets:delete(Clients, From),
             {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
             {noreply, State#cqerl_state{client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count = Count-1}, Stats)}};
         [] ->
