@@ -117,7 +117,7 @@ init([Inet, Opts]) ->
         {ok, Socket, Transport} ->
             {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
             {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
-            % put(uuidstate, uuid:new(self())),
+            put(uuidstate, uuid:new(self())),
             State = #client_state{ 
                 socket=Socket, trans=Transport, inet=Inet,
                 authmod=AuthHandler, authargs=AuthArgs,
