@@ -304,31 +304,33 @@ emptiness(Config) ->
 
 async_insertion_roundtrip(Config) ->
     Client = get_client(Config),
-    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    Ref = cqerl:send_query(Client, #cql_query{statement=Q, values=[
-        {id, "1234123"},
-        {age, 45},
-        {email, <<"yvon@damours.org">>}
-    ]}),
+    
+    Ref = cqerl:send_query(Client, #cql_query{
+        statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>, 
+        values = [
+            {id, "1234123"},
+            {age, 45},
+            {email, <<"yvon@damours.org">>}
+        ]
+    }),
+    receive {result, Ref, void} -> ok end,
+    
     Ref2 = cqerl:send_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
-    Flush  = fun (CB, Res) ->
-        receive
-            {result, Ref, void} -> 
-                CB(CB, Res);
-            {result, Ref2, Result=#cql_result{}} ->
-                {_Row, Result2} = cqerl:next(Result),
-                Row = cqerl:head(Result2),
-                <<"1234123">> = proplists:get_value(id, Row),
-                45 = proplists:get_value(age, Row),
-                <<"yvon@damours.org">> = proplists:get_value(email, Row),
-                cqerl:close_client(Client),
-                Row;
-            Other2 ->
-                ct:log("Unexpected ~w~n", [Other2]),
-                throw({unexpected_msg, Other2})
-        end
+    receive
+        {result, Ref2, Result=#cql_result{}} ->
+            {_Row, Result2} = cqerl:next(Result),
+            Row = cqerl:head(Result2),
+            <<"1234123">> = proplists:get_value(id, Row),
+            45 = proplists:get_value(age, Row),
+            <<"yvon@damours.org">> = proplists:get_value(email, Row),
+            Res = Row;
+            
+        Other ->
+            Res = undefined,
+            ct:fail("Received: ~p~n", [Other])
+            
     end,
-    Res = Flush(Flush, void),
+    
     cqerl:close_client(Client),
     Res.
 
