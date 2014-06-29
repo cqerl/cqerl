@@ -18,8 +18,8 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-new_batch_coordinator(ClientRef, Inet, Batch) ->
-    supervisor:start_child(?MODULE, [{self(), ClientRef}, Inet, Batch]).
+new_batch_coordinator(Call, Inet, Batch) ->
+    supervisor:start_child(?MODULE, [{self(), Call}, Inet, Batch]).
 
 %% ===================================================================
 %% Supervisor callbacks

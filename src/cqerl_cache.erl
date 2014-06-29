@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/2, lookup/3,
+-export([start_link/0, lookup/1, lookup/2,
          query_was_prepared/2, query_preparation_failed/2]).
 
 %% ------------------------------------------------------------------
@@ -34,24 +34,24 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
     
--spec lookup(Inet :: term(), Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
+-spec lookup(Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
 
-lookup(Inet, Query) ->
-    lookup(self(), Inet, Query).
+lookup(Query) ->
+    lookup(self(), Query).
 
-lookup(ClientPid, Inet, #cql_query{reusable=true, statement=Statement}) ->
-    case ets:lookup(?QUERIES_TAB, {Inet, Statement}) of
+lookup(ClientPid, #cql_query{reusable=true, statement=Statement}) ->
+    case ets:lookup(?QUERIES_TAB, {ClientPid, Statement}) of
         [] ->
-            gen_server:cast(?SERVER, {lookup, Inet, Statement, ClientPid, self()}),
+            gen_server:cast(?SERVER, {lookup, Statement, ClientPid, self()}),
             queued;
         [CachedQuery] ->
             CachedQuery
     end;
-lookup(ClientPid, Inet, Query = #cql_query{named=true}) ->
-    lookup(ClientPid, Inet, Query#cql_query{reusable=true});
-lookup(_ClientPid, _Inet, #cql_query{reusable=false}) ->
+lookup(ClientPid, Query = #cql_query{named=true}) ->
+    lookup(ClientPid, Query#cql_query{reusable=true});
+lookup(_ClientPid, #cql_query{reusable=false}) ->
     uncached;
-lookup(ClientPid, Inet, Query = #cql_query{statement=Statement}) ->
+lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
             {ok, RE} = re:compile(?NAMED_BINDINGS_RE),
@@ -60,24 +60,24 @@ lookup(ClientPid, Inet, Query = #cql_query{statement=Statement}) ->
     end,
     case re:run(Statement, RE) of
         nomatch ->
-            lookup(ClientPid, Inet, Query#cql_query{reusable=false, named=false});
+            lookup(ClientPid, Query#cql_query{reusable=false, named=false});
         
         %% In the case reusable is not set, and the query contains ? bindings,
         %% we make it reusable
         {match, [{_, 1}]} when Query#cql_query.reusable == undefined ->
-            lookup(ClientPid, Inet, Query#cql_query{reusable=true, named=false});
+            lookup(ClientPid, Query#cql_query{reusable=true, named=false});
             
         %% In the case the query contains :named bindings,
         %% we make it reusable no matter what
         {match, _} ->
-            lookup(ClientPid, Inet, Query#cql_query{reusable=true, named=true})
+            lookup(ClientPid, Query#cql_query{reusable=true, named=true})
     end.
 
-query_was_prepared(Key, Result) ->
-    gen_server:cast(?SERVER, {query_prepared, Key, Result}).
+query_was_prepared(Query, Result) ->
+    gen_server:cast(?SERVER, {query_prepared, {self(), Query}, Result}).
 
-query_preparation_failed(Key, Reason) ->
-    gen_server:cast(?SERVER, {preparation_failed, Key, Reason}).
+query_preparation_failed(Query, Reason) ->
+    gen_server:cast(?SERVER, {preparation_failed, {self(), Query}, Reason}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -104,15 +104,16 @@ handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
             {noreply, State}
     end;
 
-handle_cast({query_prepared, Key={Inet, _Query}, {QueryID, QueryMetadata, ResultMetadata}}, 
+handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}}, 
             State=#state{queued=Queue, cached_queries=Cache}) ->
-                
-    CachedQuery = #cqerl_cached_query{key=Key, inet=Inet, query_ref=QueryID, 
+    
+    CachedQuery = #cqerl_cached_query{key=Key, query_ref=QueryID, 
                                       params_metadata=QueryMetadata, 
                                       result_metadata=ResultMetadata},
                                       
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
+            ct:log("Reply to clients: ~p", [Waiting]),
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
             ets:insert(Cache, CachedQuery),
             {noreply, State#state{queued=orddict:erase(Key, Queue)}};
@@ -120,8 +121,8 @@ handle_cast({query_prepared, Key={Inet, _Query}, {QueryID, QueryMetadata, Result
             {noreply, State}
     end;
 
-handle_cast({lookup, Inet, Query, ClientPid, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
-    Key = {Inet, Query},
+handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
+    Key = {ClientPid, Query},
     case orddict:find(Key, Queue) of
         {ok, _} ->
             Queue2 = orddict:append(Key, Sender, Queue);

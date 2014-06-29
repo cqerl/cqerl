@@ -121,7 +121,7 @@ init([Inet, Opts]) ->
             State = #client_state{ 
                 socket=Socket, trans=Transport, inet=Inet,
                 authmod=AuthHandler, authargs=AuthArgs,
-                users=[], 
+                users=[],
                 sleep=get_sleep_duration(Opts),
                 keyspace=proplists:get_value(keyspace, Opts)
             },
@@ -181,7 +181,7 @@ live({Msg, Tag, Ref, Item}, State) when Msg == send_query orelse
         Query=#cql_query{} -> ok;
         #cql_result{cql_query=Query=#cql_query{}} -> ok
     end,
-    CacheResult = cqerl_cache:lookup(State#client_state.inet, Query),
+    CacheResult = cqerl_cache:lookup(Query),
     {next_state, live, process_outgoing_query(#cql_call{type=async, caller=Tag, client=Ref}, {CacheResult, Item}, State)};
 
 live(_Event, State) ->
@@ -195,7 +195,7 @@ live({send_query, Ref, Batch=#cql_query_batch{}}, From, State=#client_state{inet
 
 
 live({Msg, Ref, Query}, From, State=#client_state{available_slots=[], queued=Queue0}) when Msg == send_query orelse 
-                                                                                          Msg == fetch_more ->
+                                                                                           Msg == fetch_more ->
     {next_state, live, State#client_state{queued=queue:in({#cql_call{type=sync, caller=From, client=Ref}, Query}, Queue0)}};
 
 live({Msg, Ref, Item}, From, State) when Msg == send_query orelse 
@@ -204,7 +204,7 @@ live({Msg, Ref, Item}, From, State) when Msg == send_query orelse
         Query=#cql_query{} -> ok;
         #cql_result{cql_query=Query=#cql_query{}} -> ok
     end,
-    CacheResult = cqerl_cache:lookup(State#client_state.inet, Query),
+    CacheResult = cqerl_cache:lookup(Query),
     {next_state, live, process_outgoing_query(#cql_call{type=sync, caller=From, client=Ref}, {CacheResult, Item}, State)};
 
 
@@ -395,7 +395,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, ResponseTerm}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_cache:query_was_prepared({State#client_state.inet, Query}, ResponseTerm);
+                    cqerl_cache:query_was_prepared(Query, ResponseTerm);
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
@@ -410,7 +410,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, ErrorTerm, Delayed} when StreamID >= 0 ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_cache:query_preparation_failed({State#client_state.inet, Query}, ErrorTerm);
+                    cqerl_cache:query_preparation_failed(Query, ErrorTerm);
                 {ok, {Call, _}} -> respond_to_user(Call, {error, ErrorTerm});
                 {ok, undefined} -> ok
             end,
@@ -516,7 +516,7 @@ dequeue_query(State0=#client_state{queued=Queue0}) ->
                 Query=#cql_query{} -> ok;
                 #cql_result{cql_query=Query=#cql_query{}} -> ok
             end,
-            CacheResult = cqerl_cache:lookup(State0#client_state.inet, Query),
+            CacheResult = cqerl_cache:lookup(Query),
             State1 = process_outgoing_query(Call, {CacheResult, Item}, State0),
             {true, State1#client_state{queued=Queue1}};
         
