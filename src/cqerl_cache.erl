@@ -113,7 +113,6 @@ handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}},
                                       
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
-            ct:log("Reply to clients: ~p", [Waiting]),
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
             ets:insert(Cache, CachedQuery),
             {noreply, State#state{queued=orddict:erase(Key, Queue)}};
