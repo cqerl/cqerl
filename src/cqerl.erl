@@ -85,7 +85,7 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
--spec new_client() -> client().
+-spec new_client() -> {ok, client()} | no_available_clients.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
