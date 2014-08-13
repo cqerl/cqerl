@@ -48,14 +48,14 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
 
 terminate(Call, Batch) ->
     Queries = lists:map(fun
-        ({#cql_query{statement=Statement, values=Values}, uncached}) ->
+        ({Query = #cql_query{statement=Statement, values=Values}, uncached}) ->
             #cqerl_query{statement=Statement, kind=normal, 
-                         values=cqerl_protocol:encode_query_values(Values)};
+                         values=cqerl_protocol:encode_query_values(Values, Query)};
                          
-        ({#cql_query{values=Values}, 
+        ({Query = #cql_query{values=Values}, 
           #cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
             #cqerl_query{statement=Ref, kind=prepared,
-                         values=cqerl_protocol:encode_query_values(Values, Metadata#cqerl_result_metadata.columns)}
+                         values=cqerl_protocol:encode_query_values(Values, Query, Metadata#cqerl_result_metadata.columns)}
                          
     end, Batch#cql_query_batch.queries),
     cqerl_client:batch_ready(Call, Batch#cql_query_batch{queries=Queries}),
