@@ -398,8 +398,6 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?SHORT, Entries/binary >>;
 
-encode_data({{custom, _}, Value}, _Query) when is_binary(Value) -> Value;
-
 encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_function(Handler) ->
     Handler(Val, Query);
 
