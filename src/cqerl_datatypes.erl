@@ -15,7 +15,7 @@
          encode_proplist_to_map/1,
          encode_proplist_to_multimap/1,
          
-         encode_data/1,
+         encode_data/2,
          decode_data/1,
          
          decode_string/1,
@@ -249,30 +249,30 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
     
     
 
--spec encode_data({Type :: datatype(), Value :: term()}) -> binary().
+-spec encode_data({Type :: datatype(), Value :: term()}, Query :: #cql_query{}) -> binary().
 
-encode_data({_Type, null}) ->
+encode_data({_Type, null}, _Query) ->
     null;
 
-encode_data({timeuuid, now}) ->
+encode_data({timeuuid, now}, _Query) ->
     case get(uuidstate) of
         undefined -> throw(uninitialized_uuidv1_state);
         State -> uuid:get_v1(State)
     end;
 
-encode_data({uuid, new}) ->
+encode_data({uuid, new}, _Query) ->
     uuid:get_v4(strong);
-encode_data({uuid, strong}) ->
+encode_data({uuid, strong}, _Query) ->
     uuid:get_v4(strong);
-encode_data({uuid, weak}) ->
+encode_data({uuid, weak}, _Query) ->
     uuid:get_v4(weak);
 
-encode_data({UuidType, Uuid}) when UuidType == uuid orelse UuidType == timeuuid ->
+encode_data({UuidType, Uuid}, _Query) when UuidType == uuid orelse UuidType == timeuuid ->
     case Uuid of
         << _:128 >> -> Uuid
     end;
 
-encode_data({ascii, Data}) when is_list(Data) ->
+encode_data({ascii, Data}, _Query) when is_list(Data) ->
     case lists:all(fun
         (Int) when is_integer(Int) -> Int >= 0 andalso Int < 128;
         (_) -> false
@@ -281,31 +281,31 @@ encode_data({ascii, Data}) when is_list(Data) ->
         true -> list_to_binary(Data)
     end;
 
-encode_data({ascii, Atom}) when is_atom(Atom) ->
+encode_data({ascii, Atom}, _Query) when is_atom(Atom) ->
     atom_to_binary(Atom, latin1);
 
-encode_data({ascii, Data}) when is_binary(Data) ->
+encode_data({ascii, Data}, _Query) when is_binary(Data) ->
     Data;
 
-encode_data({BigIntType, Number}) when is_integer(Number), 
+encode_data({BigIntType, Number}, _Query) when is_integer(Number), 
                                        BigIntType == bigint orelse 
                                        BigIntType == counter orelse 
                                        BigIntType == timestamp ->
     <<Number:64/big-signed-integer>>;
 
-encode_data({BigIntType, Number}) when is_float(Number), 
+encode_data({BigIntType, Number}, _Query) when is_float(Number), 
                                        BigIntType == bigint orelse 
                                        BigIntType == counter orelse 
                                        BigIntType == timestamp ->
     Int = trunc(Number),
     <<Int:64/big-signed-integer>>;
 
-encode_data({blob, Data}) when is_binary(Data) ->
+encode_data({blob, Data}, _Query) when is_binary(Data) ->
     Data;
 
-encode_data({boolean, true}) ->
+encode_data({boolean, true}, _Query) ->
     <<1>>;
-encode_data({boolean, false}) ->
+encode_data({boolean, false}, _Query) ->
     <<0>>;
 
 %% Arbitrary precision decimal value, given as {UnscaledValue, Scale} tuple where
@@ -313,35 +313,35 @@ encode_data({boolean, false}) ->
 %% - UnscaledValue being an integer or arbitrary-precision
 %% - Scale being a 32-bit signed integer
 %% e.g. 1.234e-3 == 1234e-6 is equivalent to {1234, -6} in the expected notation
-encode_data({decimal, {UnscaledVal, Scale}}) ->
-    EncodedUnscaledVal = encode_data({varint, UnscaledVal}),
+encode_data({decimal, {UnscaledVal, Scale}}, _Query) ->
+    EncodedUnscaledVal = encode_data({varint, UnscaledVal}, _Query),
     << Scale:?INT, EncodedUnscaledVal/binary >>;
 
-encode_data({float, Val}) ->
+encode_data({float, Val}, _Query) ->
     << Val:32/big-float >>;
 
-encode_data({double, Val}) ->
+encode_data({double, Val}, _Query) ->
     << Val:64/big-float >>;
 
-encode_data({int, Val}) when is_integer(Val) ->
+encode_data({int, Val}, _Query) when is_integer(Val) ->
     << Val:32/big-signed-integer >>;
     
-encode_data({int, Val}) when is_float(Val) ->
+encode_data({int, Val}, _Query) when is_float(Val) ->
     Int = trunc(Val),
     << Int:32/big-signed-integer >>;
 
-encode_data({TextType, Val}) when TextType == text orelse TextType == varchar ->
+encode_data({TextType, Val}, _Query) when TextType == text orelse TextType == varchar ->
     if  is_binary(Val) -> Val;
         is_list(Val) -> list_to_binary(Val);
         is_atom(Val) -> atom_to_binary(Val, latin1)
     end;
 
-encode_data({timestamp, now}) ->
+encode_data({timestamp, now}, _Query) ->
     {MS, S, McS} = os:timestamp(),
     MlS = MS * 1000000000 + S * 1000 + trunc(McS/1000),
-    encode_data({timestamp, MlS});
+    encode_data({timestamp, MlS}, _Query);
 
-encode_data({varint, Val}) when is_integer(Val) ->
+encode_data({varint, Val}, _Query) when is_integer(Val) ->
     ByteCountF = math:log(Val) / math:log(2) / 8,
     ByteCount0 = trunc(ByteCountF),
     ByteCount = if  ByteCount0 == ByteCountF -> ByteCount0;
@@ -349,7 +349,7 @@ encode_data({varint, Val}) when is_integer(Val) ->
                 end,
     << Val:ByteCount/big-signed-integer-unit:8 >>;
 
-encode_data({inet, Addr}) when is_tuple(Addr) ->
+encode_data({inet, Addr}, _Query) when is_tuple(Addr) ->
     if
         tuple_size(Addr) == 4 -> %% IPv4
             {A, B, C, D} = Addr,
@@ -369,28 +369,28 @@ encode_data({inet, Addr}) when is_tuple(Addr) ->
                M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>
     end;
 
-encode_data({inet, Addr}) when is_list(Addr) ->
+encode_data({inet, Addr}, _Query) when is_list(Addr) ->
     {ok, AddrTuple} = ?CQERL_PARSE_ADDR(Addr),
-    encode_data({inet, AddrTuple});
+    encode_data({inet, AddrTuple}, _Query);
 
-encode_data({{ColType, Type}, List}) when ColType == list; ColType == set ->
+encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == set ->
     List2 = case ColType of
         list -> List;
         set -> ordsets:from_list(List)
     end,
     Length = length(List2),
     GetValueBinary = fun(Value) -> 
-        Bin = encode_data({Type, Value}),
+        Bin = encode_data({Type, Value}, _Query),
         {ok, ShortBytes} = encode_short_bytes(Bin),
         ShortBytes
     end,
     Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
     << Length:?SHORT, Entries/binary >>;
 
-encode_data({{map, KeyType, ValType}, List}) ->
+encode_data({{map, KeyType, ValType}, List}, _Query) ->
     Length = length(List),
     GetElementBinary = fun(Type, Value) -> 
-        Bin = encode_data({Type, Value}),
+        Bin = encode_data({Type, Value}, _Query),
         {ok, ShortBytes} = encode_short_bytes(Bin),
         ShortBytes
     end,
@@ -398,9 +398,10 @@ encode_data({{map, KeyType, ValType}, List}) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?SHORT, Entries/binary >>;
 
-encode_data({{custom, _}, Value}) when is_binary(Value) -> Value;
+encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_function(Handler) ->
+    Handler(Val, Query);
 
-encode_data({Type, _}) -> throw({bad_param_type, Type}).
+encode_data({Type, _}, _Query) -> throw({bad_param_type, Type}).
 
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 

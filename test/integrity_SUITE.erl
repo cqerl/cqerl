@@ -59,7 +59,7 @@ groups() -> [
         simple_insertion_roundtrip, async_insertion_roundtrip, 
         emptiness,
         {transactions, [parallel], [
-            {types, [parallel], [all_datatypes, collection_types, counter_type]},
+            {types, [parallel], [all_datatypes, custom_encoders, collection_types, counter_type]},
             batches_and_pages
         ]}
     ]}
@@ -422,6 +422,55 @@ all_datatypes(Config) ->
     end, [Row1, Row2, Row3]),
     cqerl:close_client(Client),
     [Row1, Row2, Row3].
+
+custom_encoders(Config) ->
+    Client = get_client(Config),
+
+    Cols = datatypes_columns([varchar, varchar, varchar]),
+    CreationQ = <<"CREATE TABLE entries2_1(",  Cols/binary, " PRIMARY KEY(col1, col2, col3));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, table = <<"entries2_1">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2_1(col1, col2, col3) VALUES (?, ?, ?)">>},
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
+        {col1, <<"test">>},
+        {col2, <<"hello">>},
+        {col3, <<"testing tuples">>}
+    ]}),
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
+        {col1, <<"test">>},
+        {col2, <<"nice to have">>},
+        {col3, <<"custom encoder">>}
+    ]}),
+
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{
+        statement = <<"SELECT * FROM entries2_1 WHERE col1 = ? AND (col2,col3) IN ?;">>,
+
+        values = [
+            {col1, <<"test">>},
+            {'in(col2,col3)', [
+                [<<"hello">>,<<"testing tuples">>],
+                [<<"nice to have">>,<<"custom encoder">>]
+            ]}
+        ],
+
+        % provide custom encoder for TupleType
+        value_encode_handler = fun({Type={custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, List}, Query) ->
+            GetElementBinary = fun(Value) -> 
+                Bin = cqerl_datatypes:encode_data({text, Value}, Query),
+                Size = size(Bin),
+                <<Size:32/big-signed-integer, Bin/binary>>
+            end,
+
+            << << (GetElementBinary(Value))/binary >> || Value <- List >>
+        end
+    }),
+
+    [RRow1, RRow2] = cqerl:all_rows(Result),
+
+    cqerl:close_client(Client),
+    ok.
 
 collection_types(Config) ->
     Client = get_client(Config),

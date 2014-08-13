@@ -54,7 +54,9 @@
     page_state              :: binary() | undefined,
     
     consistency = ?CQERL_CONSISTENCY_ONE :: consistency_level(),
-    serial_consistency = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined
+    serial_consistency = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined,
+
+    value_encode_handler = undefined :: function() | undefined
 }).
 
 -record(cql_call, {

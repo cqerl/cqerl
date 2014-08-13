@@ -6,5 +6,6 @@ logs
 *.beam
 *.plt
 erl_crash.dump
+.rebar
 
 .DS_Store

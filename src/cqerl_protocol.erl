@@ -10,7 +10,7 @@
 -export([startup_frame/2, options_frame/1, auth_frame/2, prepare_frame/2, register_frame/2, 
          query_frame/3, execute_frame/3, batch_frame/2,
          response_frame/2,
-         decode_row/2, encode_query_values/1, encode_query_values/2]).
+         decode_row/2, encode_query_values/2, encode_query_values/3]).
 
 %% =======================
 %% DATA ENCODING FUNCTIONS
@@ -565,17 +565,17 @@ decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQER
 
 
 
-encode_query_values(Values) ->
-    lists:map(fun cqerl_datatypes:encode_data/1, Values).
+encode_query_values(Values, Query) ->
+    [cqerl_datatypes:encode_data(Value, Query) || Value <- Values].
 
-encode_query_values(Values, []) ->
-    encode_query_values(Values);
-encode_query_values(Values, ColumnSpecs) ->
+encode_query_values(Values, Query, []) ->
+    encode_query_values(Values, Query);
+encode_query_values(Values, Query, ColumnSpecs) ->
     lists:map(fun
         (#cqerl_result_column_spec{name=ColumnName, type=Type}) ->
             case proplists:get_value(ColumnName, Values) of
                 undefined -> throw({missing_parameter, {parameter, ColumnName}, {in, Values}, {specs, ColumnSpecs}});
-                Value -> cqerl_datatypes:encode_data({Type, Value})
+                Value -> cqerl_datatypes:encode_data({Type, Value}, Query)
             end
     end, ColumnSpecs).
 
