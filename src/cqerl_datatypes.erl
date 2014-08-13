@@ -398,6 +398,8 @@ encode_data({{map, KeyType, ValType}, List}) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?SHORT, Entries/binary >>;
 
+encode_data({{custom, _}, Value}) when is_binary(Value) -> Value;
+
 encode_data({Type, _}) -> throw({bad_param_type, Type}).
 
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.

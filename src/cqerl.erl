@@ -85,7 +85,7 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
--spec new_client() -> client().
+-spec new_client() -> {ok, client()} | no_available_clients.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
@@ -157,7 +157,7 @@ has_more_pages(#cql_result{}) -> true.
 %% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
 %%            return with the result from Cassandra (synchronously).
 
--spec fetch_more(Continuation :: #cql_result{}) -> no_more_result | #cql_result{}.
+-spec fetch_more(Continuation :: #cql_result{}) -> no_more_result | {ok, #cql_result{}}.
 fetch_more(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> 
     no_more_result;
 fetch_more(Continuation) ->
