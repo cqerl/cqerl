@@ -423,25 +423,30 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
     
 
 handle_info({ Transport, Socket, BinaryMsg }, sleep, State = #client_state{ socket=Socket, trans=Transport, sleep=Duration, delayed=Delayed0 }) ->
-    Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
+    case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
         %% To keep packets coherent, we still need to handle fragmented messages
         {delay, Delayed} ->
-            {next_state, sleep, State#client_state{delayed=Delayed}};
+            activate_socket(State),
+            %% Use a finite timeout if we have a message fragment; otherwise, use infinity.
+            Duration1 = case Delayed of
+                <<>> -> Duration;
+                _ -> infinity
+            end,
+            {next_state, sleep, State#client_state{delayed=Delayed}, Duration1};
         
         %% While sleeping, any response to previously sent queries are ignored, 
         %% but we still need to manage internal state accordingly
-        {ok, #cqerl_frame{stream_id=StreamID}, _ResponseTerm, _Delayed} when StreamID < ?QUERIES_MAX, StreamID >= 0 ->
+        {ok, #cqerl_frame{stream_id=StreamID}, _ResponseTerm, Delayed} when StreamID < ?QUERIES_MAX, StreamID >= 0 ->
             Queries0 = State#client_state.queries,
             Slots0 = State#client_state.available_slots,
             Queries1 = orddict:store(StreamID, undefined, Queries0),
             Slots1 = ordsets:add_element(StreamID, Slots0),
-            {next_state, sleep, State#client_state{available_slots=Slots1, queries=Queries1, delayed = <<>>}, Duration};
+            State1 = State#client_state{available_slots=Slots1, queries=Queries1, delayed = <<>>},
+            handle_info({Transport, Socket, Delayed}, sleep, State1);
         
-        _ ->
-            {next_state, sleep, State#client_state{delayed = <<>>}, Duration}
-    end,
-    activate_socket(?STATE_FROM_RETURN(Resp)),
-    Resp;
+        {ok, #cqerl_frame{opcode=?CQERL_OP_EVENT}, _EventTerm, Delayed} ->
+            handle_info({Transport, Socket, Delayed}, sleep, State#client_state{delayed = <<>>})
+    end;
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, live, State=#client_state{users=Users}) ->
     case ets:match_object(Users, #client_user{pid=Pid, _='_'}) of
