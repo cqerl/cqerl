@@ -439,7 +439,7 @@ handle_info({ Transport, Socket, BinaryMsg }, sleep, State = #client_state{ sock
         
         %% While sleeping, any response to previously sent queries are ignored, 
         %% but we still need to manage internal state accordingly
-        {ok, #cqerl_frame{stream_id=StreamID}} when StreamID < ?QUERIES_MAX, StreamID >= 0 ->
+        {ok, #cqerl_frame{stream_id=StreamID}, _ResponseTerm, _Delayed} when StreamID < ?QUERIES_MAX, StreamID >= 0 ->
             Queries0 = State#client_state.queries,
             Slots0 = State#client_state.available_slots,
             Queries1 = orddict:store(StreamID, undefined, Queries0),
