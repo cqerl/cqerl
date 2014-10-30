@@ -450,20 +450,20 @@ custom_encoders(Config) ->
         values = [
             {col1, <<"test">>},
             {'in(col2,col3)', [
-                [<<"hello">>,<<"testing tuples">>],
-                [<<"nice to have">>,<<"custom encoder">>]
+                {<<"hello">>,<<"testing tuples">>},
+                {<<"nice to have">>,<<"custom encoder">>}
             ]}
         ],
 
         % provide custom encoder for TupleType
-        value_encode_handler = fun({Type={custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, List}, Query) ->
+        value_encode_handler = fun({Type={custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, Tuple}, Query) ->
             GetElementBinary = fun(Value) -> 
                 Bin = cqerl_datatypes:encode_data({text, Value}, Query),
                 Size = size(Bin),
                 <<Size:32/big-signed-integer, Bin/binary>>
             end,
 
-            << << (GetElementBinary(Value))/binary >> || Value <- List >>
+            << << (GetElementBinary(Value))/binary >> || Value <- tuple_to_list(Tuple) >>
         end
     }),
 
