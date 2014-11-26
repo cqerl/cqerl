@@ -465,7 +465,7 @@ node_key(Inet0, Keyspace0) ->
     end,
     {Ip, Port, Keyspace1}.
 
-new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state{client_stats=ClientsStats, 
+new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state{client_stats=ClientsStats,
                                                                                  clients=Clients,
                                                                                  named_nodes=NamedNodes0}) ->
     OptGetter = make_option_getter(GlobalOpts, LocalOpts),
@@ -476,7 +476,7 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
                      {max_count,       OptGetter(pool_max_size)},
                      {cull_interval,   OptGetter(pool_cull_interval)},
                      {max_age,         {Amount/2, Unit}},
-                     {start_mfa,       {cqerl_client, start_link, [{Ip, Port}, 
+                     {start_mfa,       {cqerl_client, start_link, [{Ip, Port},
                                            [  {auth, OptGetter(auth)},
                                               {ssl, OptGetter(ssl)},
                                               {sleep_duration, {Amount/2, Unit}},
@@ -517,10 +517,10 @@ prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
                 {Ip, Port, Opts} when is_list(Opts) ->
                     Inet = {Ip, Port};
                 
-                {Inet, Opts} when is_list(Opts) -> 
+                {Inet, Opts} when is_list(Opts) ->
                     ok;
                 
-                Inet -> 
+                Inet ->
                     Opts = []
             end,
             Key = node_key(prepare_node_info(Inet), {Opts, GlobalOpts}),
@@ -596,26 +596,28 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
 
 -spec prepare_node_info(NodeInfo :: any()) -> Node :: inet().
 
-prepare_node_info({Localhost, Port}) when Localhost == localhost;
-                                          Localhost == "localhost" ->
-    {{127, 0, 0, 1}, Port};
-    
-prepare_node_info({Addr, Port}) when is_list(Addr) ->
-    {ok, IpAddr} = ?CQERL_PARSE_ADDR(Addr),
-    {IpAddr, Port};
-    
-prepare_node_info(Addr) when is_list(Addr);             % "127.0.0.1"
-                             erlang:size(Addr) == 4;    % {127, 0, 0, 1} v4
-                             erlang:size(Addr) == 16 -> 
-                                 
-    prepare_node_info({Addr, ?DEFAULT_PORT});
+prepare_node_info({AtomAddr, Port}) when is_atom(AtomAddr) ->
+  prepare_node_info({atom_to_list(AtomAddr), Port});
 
-prepare_node_info(Inet) ->    
-    Inet.
+prepare_node_info({StringAddr, Port}) when is_list(StringAddr) ->
+    case ?CQERL_PARSE_ADDR(StringAddr) of
+      {ok, IpAddr} -> {IpAddr, Port};
+      {error, _Reason} -> {StringAddr, Port}
+    end;
+
+prepare_node_info({TupleAddr, Port}) when is_tuple(TupleAddr) andalso erlang:size(TupleAddr) == 4;    % v4
+                                          is_tuple(TupleAddr) andalso erlang:size(TupleAddr) == 8 ->  % v6
+    {TupleAddr, Port};
+
+prepare_node_info(Addr) when is_atom(Addr);
+                             is_list(Addr);
+                             is_tuple(Addr) andalso erlang:size(Addr) == 4;    % v4
+                             is_tuple(Addr) andalso erlang:size(Addr) == 8 ->  % v6
+    prepare_node_info({Addr, ?DEFAULT_PORT}).
 
 -spec pool_from_node(Node :: inet()) -> atom().
 
-pool_from_node(Node = { Addr , Port, Keyspace }) when is_tuple(Addr), is_integer(Port), is_atom(Keyspace) ->
+pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).
 
 -spec node_from_pool(Pool :: atom()) -> inet().
