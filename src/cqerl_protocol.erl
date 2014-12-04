@@ -10,7 +10,11 @@
 -export([startup_frame/2, options_frame/1, auth_frame/2, prepare_frame/2, register_frame/2,
          query_frame/3, execute_frame/3, batch_frame/2,
          response_frame/2,
-         decode_row/2, encode_query_values/2, encode_query_values/3]).
+         decode_result_metadata/1,
+         decode_result_matrix/4,
+         decode_row/2,
+         encode_query_values/2,
+         encode_query_values/3]).
 
 %% =======================
 %% DATA ENCODING FUNCTIONS
@@ -508,9 +512,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 1:?INT, _Body/bin
 
 %% Rows result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 2:?INT, Body/binary >>) ->
-    {ok, Metadata, << RowsCount:?INT, Rest0/binary >>} = decode_result_metadata(Body),
-    {ok, ResultSet, _Rest} = decode_result_matrix(RowsCount, Metadata#cqerl_result_metadata.columns_count, Rest0, []),
-    {ok, {rows, {Metadata#cqerl_result_metadata{rows_count=RowsCount}, ResultSet}}};
+    {ok, {rows, Body}};
 
 %% Set_keyspace result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 3:?INT, Body/binary >>) ->
@@ -519,10 +521,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 3:?INT, Body/bina
 
 %% Prepared result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 4:?INT, Body/binary >>) ->
-    {ok, QueryID, Rest0} = ?DATA:decode_short_bytes(Body),
-    {ok, QueryMetadata, Rest1} = decode_result_metadata(Rest0),
-    {ok, ResultMetadata, _Rest} = decode_result_metadata(Rest1),
-    {ok, {prepared, {QueryID, QueryMetadata, ResultMetadata}}};
+    {ok, {prepared, Body}};
 
 %% Schema_change result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/binary >>) ->

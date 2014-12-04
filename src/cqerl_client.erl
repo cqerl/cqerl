@@ -356,6 +356,10 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
     activate_socket(?STATE_FROM_RETURN(Resp)),
     append_delayed_segment(Resp, Delayed);
 
+handle_info({ rows, Call, Result }, live, State) ->
+    respond_to_user(Call, Result),
+    {next_state, live, State};
+
 handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>) of
         {delay, Delayed} ->
@@ -367,21 +371,12 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
-        
-        {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {rows, {ResultMetadata, ResultSet}}, Delayed} ->
+
+        {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {rows, RawMsg}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
-                {ok, {Call=#cql_call{client=ClientRef}, {Query, ColumnSpecs}}} ->
-                    respond_to_user(Call, #cql_result{
-                        client = {self(), ClientRef},
-                        cql_query = Query#cql_query{page_state = ResultMetadata#cqerl_result_metadata.page_state},
-                        columns = case ColumnSpecs of
-                            undefined   -> ResultMetadata#cqerl_result_metadata.columns;
-                            []          -> ResultMetadata#cqerl_result_metadata.columns;
-                            _           -> ColumnSpecs
-                        end,
-                        dataset = ResultSet
-                    });
-                {ok, undefined} -> ok
+                {ok, undefined} -> ok;
+                {ok, UserQuery} ->
+                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg})
             end,
             {next_state, live, release_stream_id(StreamID, State)};
 
@@ -391,11 +386,11 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
-        
-        {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, ResponseTerm}, Delayed} ->
+
+        {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, RawMsg}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_cache:query_was_prepared(Query, ResponseTerm);
+                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg});
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
