@@ -609,45 +609,14 @@ process_outgoing_query(Call,
                     columns=ColumnSpecs} ->
             SkipMetadata = true
     end,
-    {ok, Frame} = case CachedResult of
-        uncached ->
-            Queries1 = orddict:store(I, {Call, {Query, ColumnSpecs}}, Queries0),
-            cqerl_protocol:query_frame(BaseFrame,
-                #cqerl_query_parameters{
-                    skip_metadata       = SkipMetadata,
-                    consistency         = Query#cql_query.consistency,
-                    page_state          = Query#cql_query.page_state,
-                    page_size           = Query#cql_query.page_size,
-                    serial_consistency  = Query#cql_query.serial_consistency
-                },
-                #cqerl_query{
-                    kind    = normal,
-                    statement = Query#cql_query.statement,
-                    values  = cqerl_protocol:encode_query_values(Values, Query)
-                }
-            );
-
-        #cqerl_cached_query{query_ref=Ref, result_metadata=#cqerl_result_metadata{columns=CachedColumnSpecs}, params_metadata=PMetadata} ->
-            Queries1 = orddict:store(I, {Call, {Query, CachedColumnSpecs}}, Queries0),
-            cqerl_protocol:execute_frame(BaseFrame,
-                #cqerl_query_parameters{
-                    skip_metadata       = length(CachedColumnSpecs) > 0,
-                    consistency         = Query#cql_query.consistency,
-                    page_state          = Query#cql_query.page_state,
-                    page_size           = Query#cql_query.page_size,
-                    serial_consistency  = Query#cql_query.serial_consistency
-                },
-                #cqerl_query{
-                    kind    = prepared,
-                    statement = Ref,
-                    values  = cqerl_protocol:encode_query_values(Values, Query, PMetadata#cqerl_result_metadata.columns)
-                }
-            )
+    Queries1 = case CachedResult of
+        uncached -> orddict:store(I, {Call, {Query, ColumnSpecs}}, Queries0);
+        #cqerl_cached_query{result_metadata=#cqerl_result_metadata{columns=CachedColumnSpecs}} ->
+            orddict:store(I, {Call, {Query, CachedColumnSpecs}}, Queries0)
     end,
-    send_to_db(State1, Frame),
+    cqerl_processor_sup:new_processor({ State#client_state.trans, State#client_state.socket, CachedResult }, {send, BaseFrame, Values, Query, SkipMetadata}),
     maybe_signal_busy(State2 = State1#client_state{queries=Queries1}),
     State2.
-
 
 
 

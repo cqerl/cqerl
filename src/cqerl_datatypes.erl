@@ -255,10 +255,7 @@ encode_data({_Type, null}, _Query) ->
     null;
 
 encode_data({timeuuid, now}, _Query) ->
-    case get(uuidstate) of
-        undefined -> throw(uninitialized_uuidv1_state);
-        State -> uuid:get_v1(State)
-    end;
+    uuid:get_v1(uuid:new(self(), os));
 
 encode_data({uuid, new}, _Query) ->
     uuid:get_v4(strong);

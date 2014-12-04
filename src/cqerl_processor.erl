@@ -32,4 +32,43 @@ process(ClientPid, UserQuery, { rows, Msg }) ->
         dataset = ResultSet
     },
     ClientPid ! {rows, Call, Result},
-    ok.
+    ok;
+
+process(_ClientPid, {Trans, Socket, CachedResult}, { send, BaseFrame, Values, Query, SkipMetadata }) ->
+    {ok, Frame} = case CachedResult of
+        uncached ->
+            cqerl_protocol:query_frame(BaseFrame,
+                #cqerl_query_parameters{
+                    skip_metadata       = SkipMetadata,
+                    consistency         = Query#cql_query.consistency,
+                    page_state          = Query#cql_query.page_state,
+                    page_size           = Query#cql_query.page_size,
+                    serial_consistency  = Query#cql_query.serial_consistency
+                },
+                #cqerl_query{
+                    kind    = normal,
+                    statement = Query#cql_query.statement,
+                    values  = cqerl_protocol:encode_query_values(Values, Query)
+                }
+            );
+
+        #cqerl_cached_query{query_ref=Ref, result_metadata=#cqerl_result_metadata{columns=CachedColumnSpecs}, params_metadata=PMetadata} ->
+            cqerl_protocol:execute_frame(BaseFrame,
+                #cqerl_query_parameters{
+                    skip_metadata       = length(CachedColumnSpecs) > 0,
+                    consistency         = Query#cql_query.consistency,
+                    page_state          = Query#cql_query.page_state,
+                    page_size           = Query#cql_query.page_size,
+                    serial_consistency  = Query#cql_query.serial_consistency
+                },
+                #cqerl_query{
+                    kind    = prepared,
+                    statement = Ref,
+                    values  = cqerl_protocol:encode_query_values(Values, Query, PMetadata#cqerl_result_metadata.columns)
+                }
+            )
+    end,
+    case Trans of
+        tcp -> gen_tcp:send(Socket, Frame);
+        ssl -> ssl:send(Socket, Frame)
+    end.
