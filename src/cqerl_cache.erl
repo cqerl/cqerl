@@ -17,7 +17,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-         
+
 -define(QUERIES_TAB, cqerl_cached_queries).
 -define(NAMED_BINDINGS_RE_KEY, cqerl_cache_named_bindings_re).
 -define(NAMED_BINDINGS_RE, "'*(\\?|:\\w+)'*(?=([^\"]*\"[^\"]*\")*[^\"]*$)").
@@ -33,7 +33,7 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-    
+
 -spec lookup(Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
 
 lookup(Query) ->
@@ -61,12 +61,12 @@ lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     case re:run(Statement, RE) of
         nomatch ->
             lookup(ClientPid, Query#cql_query{reusable=false, named=false});
-        
+
         %% In the case reusable is not set, and the query contains ? bindings,
         %% we make it reusable
         {match, [{_, 1}]} when Query#cql_query.reusable == undefined ->
             lookup(ClientPid, Query#cql_query{reusable=true, named=false});
-            
+
         %% In the case the query contains :named bindings,
         %% we make it reusable no matter what
         {match, _} ->
@@ -86,8 +86,8 @@ query_preparation_failed(Query, Reason) ->
 init(_Args) ->
     {ok, #state{
         queued=[],
-        cached_queries=ets:new(?QUERIES_TAB, [set, named_table, protected, 
-                                              {read_concurrency, true}, 
+        cached_queries=ets:new(?QUERIES_TAB, [set, named_table, protected,
+                                              {read_concurrency, true},
                                               {keypos, #cqerl_cached_query.key}
                                               ])
     }}.
@@ -104,13 +104,13 @@ handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
             {noreply, State}
     end;
 
-handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}}, 
+handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}},
             State=#state{queued=Queue, cached_queries=Cache}) ->
-    
-    CachedQuery = #cqerl_cached_query{key=Key, query_ref=QueryID, 
-                                      params_metadata=QueryMetadata, 
+
+    CachedQuery = #cqerl_cached_query{key=Key, query_ref=QueryID,
+                                      params_metadata=QueryMetadata,
                                       result_metadata=ResultMetadata},
-                                      
+
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
@@ -127,7 +127,7 @@ handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cache
             Queue2 = orddict:append(Key, Sender, Queue);
         error ->
             case ets:lookup(Cache, Key) of
-                [CachedQuery] -> 
+                [CachedQuery] ->
                     Queue2 = Queue,
                     Sender ! {prepared, CachedQuery};
                 [] ->
