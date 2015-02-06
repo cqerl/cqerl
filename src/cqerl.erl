@@ -235,11 +235,11 @@ all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}) ->
 %% ====================
 
 start_link() ->
-    random:seed(now()),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
 init([]) ->
+    random:seed(now()),
     process_flag(trap_exit, true),
     io:format("== Starting CQErl frontend. ==~n", []),
     BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
