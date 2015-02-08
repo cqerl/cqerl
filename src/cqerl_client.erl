@@ -705,9 +705,16 @@ create_socket({Addr, Port}, Opts) ->
     Result = case proplists:lookup(ssl, Opts) of
         {ssl, false} ->
             Transport = tcp,
-            gen_tcp:connect(Addr, Port, BaseOpts, 2000);
+            case proplists:lookup(tcp_opts, Opts) of
+                none ->
+                    gen_tcp:connect(Addr, Port, BaseOpts, 2000);
+                {tcp_opts, TCPOpts} ->
+                    gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000)
+            end;
+
         {ssl = Transport, true} ->
             ssl:connect(Addr, Port, BaseOpts, 2000);
+
         {ssl = Transport, SSLOpts} when is_list(SSLOpts) ->
             ssl:connect(Addr, Port, SSLOpts ++ BaseOpts, 2000)
     end,
