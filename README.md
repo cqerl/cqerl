@@ -8,7 +8,7 @@ Native Erlang client for CQL3 over Cassandra's binary protocol v2 (a.k.a. what y
 
 ---
 
-*This project is still relatively new and is under active development, so you are welcome to contribute to it with improvements, suggestions and any issues you encounter.*
+*This project is still relatively new, so you are welcome to contribute to it with improvements, suggestions and any issues you encounter.*
 
 ### At a glance
 
