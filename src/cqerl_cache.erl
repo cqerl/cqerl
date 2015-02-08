@@ -74,7 +74,7 @@ lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     end.
 
 
-query_was_prepared({Pid, Query}=Key, Result) when is_pid(Pid) ->
+query_was_prepared({Pid, _Query}=Key, Result) when is_pid(Pid) ->
     gen_server:cast(?SERVER, {query_prepared, Key, Result});
 
 query_was_prepared(Query, Result) ->

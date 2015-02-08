@@ -1,5 +1,5 @@
 %% @doc Handler for SASL-based authentication with Cassandra
-%% 
+%%
 %% Authentication with cassandra can take any form, as long as it follows
 %% <a href="http://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer">
 %% SASL principles</a>. The actual implementation (what each message will contain)
@@ -10,14 +10,14 @@
 %% <code>auth_init/3</code> will be called by CQErl upon receiving a
 %% request from the server to start authentication. Arguments are:
 %% <ul>
-%%   <li>List of arguments set in the application environment for this 
+%%   <li>List of arguments set in the application environment for this
 %%       authentication handler</li>
 %%   <li>The name of the authenticator Java class used by Cassandra (as <code>binary()</code>)</li>
-%%   <li>A <code>{Ip, Port}</code> tuple where <code>Ip</code> is a tuple of integers 
+%%   <li>A <code>{Ip, Port}</code> tuple where <code>Ip</code> is a tuple of integers
 %%       of length 4 (v4) or 16 (v6).</li>
 %% </ul>
 %%
-%% Return type can be <code>{reply, Reply :: binary(), State :: any()}</code> or 
+%% Return type can be <code>{reply, Reply :: binary(), State :: any()}</code> or
 %% <code>{close, Reason :: any()}</code>.
 %%
 %% <code>auth_handle_challenge/2</code> will be called every time a challenge
@@ -41,14 +41,14 @@
                   byte(), byte(), byte(), byte(),
                   byte(), byte(), byte(), byte()}, integer()}.
 
--callback auth_init([any()], binary(), inet()) -> 
+-callback auth_init([any()], binary(), inet()) ->
   {reply, Response :: binary(), State :: any()} | {close, Reason :: any()}.
-  
--callback auth_handle_challenge(binary(), State :: any()) -> 
+
+-callback auth_handle_challenge(binary(), State :: any()) ->
   {reply, Response :: binary(), State :: any()} | {close, Reason :: any()}.
-  
--callback auth_handle_success(binary(), State :: any()) -> 
+
+-callback auth_handle_success(binary(), State :: any()) ->
   ok | {close, Reason :: any()}.
 
--callback auth_handle_error(binary(), State :: any()) -> 
+-callback auth_handle_error(binary(), State :: any()) ->
   no_return().

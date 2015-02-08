@@ -7,7 +7,7 @@
 -export([encode_plain_credentials/1]).
 
 %% @doc Encodes a proplist structure with <code>username</code> and <code>password</code> keys
-%% into the binary structure expected for the SASL PLAIN mechanism. Extracted from Cassandra's 
+%% into the binary structure expected for the SASL PLAIN mechanism. Extracted from Cassandra's
 %% <a href="https://github.com/apache/cassandra/blob/trunk/src/java/org/apache/cassandra/auth/PasswordAuthenticator.java#L305">
 %% PasswordAuthenticator class</a>. The values in the proplist can be binary strings or plain strings (lists).
 
@@ -35,7 +35,7 @@ auth_init([{Username, Password}], AuthClass, Address) ->
 
 auth_init(Credentials, ?SASL_PASSWORD_AUTH, _Address) ->
   case encode_plain_credentials(Credentials) of
-    Bin when size(Bin) == 2 -> 
+    Bin when size(Bin) == 2 ->
       {close, no_credentials_provided};
     CredentialsBin ->
       {reply, CredentialsBin, undefined}

@@ -7,36 +7,36 @@
 -export([
     prepare_client/1,
     prepare_client/2,
-    
-    new_client/0, 
-    new_client/1, 
-    new_client/2, 
-    
+
+    new_client/0,
+    new_client/1,
+    new_client/2,
+
     close_client/1,
-    
-    run_query/2, 
+
+    run_query/2,
     send_query/2,
-    
+
     has_more_pages/1,
-    fetch_more/1, 
+    fetch_more/1,
     fetch_more_async/1,
-    
+
     size/1,
     head/1,
     tail/1,
     next/1,
     all_rows/1,
-    
+
     start_link/0
 ]).
 
 -export([
-    init/1, 
-    terminate/2, 
+    init/1,
+    terminate/2,
     code_change/3,
-    
-    handle_call/3, 
-    handle_cast/2, 
+
+    handle_call/3,
+    handle_cast/2,
     handle_info/2
 ]).
 
@@ -92,7 +92,7 @@ new_client() ->
 -spec new_client(Inet :: inet()) ->    client().
 new_client({}) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
-new_client(Inet) -> 
+new_client(Inet) ->
     new_client(Inet, []).
 
 -spec new_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> client() | {error, no_client_available}.
@@ -111,9 +111,9 @@ new_client(Inet, Opts) ->
 -spec close_client(ClientRef :: client()) -> no_return().
 close_client(ClientRef) ->
     cqerl_client:remove_user(ClientRef).
-    
-    
-    
+
+
+
 
 %% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
 %%            return with the result from Cassandra (synchronously).
@@ -158,7 +158,7 @@ has_more_pages(#cql_result{}) -> true.
 %%            return with the result from Cassandra (synchronously).
 
 -spec fetch_more(Continuation :: #cql_result{}) -> no_more_result | {ok, #cql_result{}}.
-fetch_more(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> 
+fetch_more(#cql_result{cql_query=#cql_query{page_state=undefined}}) ->
     no_more_result;
 fetch_more(Continuation) ->
     cqerl_client:fetch_more(Continuation).
@@ -166,10 +166,10 @@ fetch_more(Continuation) ->
 
 
 
-%% @doc Send a query to be executed asynchronously. This method returns immediately with a unique tag. 
+%% @doc Send a query to be executed asynchronously. This method returns immediately with a unique tag.
 %%
-%% When a successful response is received from cassandra, a <code>{result, Tag, Result :: #cql_result{}}</code> 
-%% message is sent to the calling process. 
+%% When a successful response is received from cassandra, a <code>{result, Tag, Result :: #cql_result{}}</code>
+%% message is sent to the calling process.
 %%
 %% If there is an error with the query, a <code>{error, Tag, Error :: #cql_error{}}</code> will be sent to the calling process.
 %%
@@ -189,12 +189,12 @@ send_query(ClientRef, Query) ->
 %% connection is dropped.
 
 -spec fetch_more_async(Continuation :: #cql_result{}) -> reference() | no_more_result.
-fetch_more_async(#cql_result{cql_query=#cql_query{page_state=undefined}}) -> 
+fetch_more_async(#cql_result{cql_query=#cql_query{page_state=undefined}}) ->
     no_more_result;
 fetch_more_async(Continuation) ->
     cqerl_client:fetch_more_async(Continuation).
-    
-    
+
+
 
 %% @doc The number of rows in a result set
 
@@ -212,7 +212,7 @@ head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}) ->
 tail(#cql_result{dataset=[]}) -> empty_dataset;
 tail(Result=#cql_result{dataset=[_Row|Rest]}) ->
     Result#cql_result{dataset=Rest}.
-    
+
 %% @doc Returns a tuple of <code>{HeadRow, ResultTail}</code>.
 %%
 %% This can be used to iterate over a result set efficiently. Successively
@@ -257,22 +257,22 @@ handle_call(get_any_client, From, State=#cqerl_state{clients=Clients, retrying=R
     case select_client(Clients, #cql_client{busy=false, _ = '_'}, From, State) of
         no_available_clients when Retrying ->
             retry;
-        
+
         no_available_clients ->
             erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, get_any_client, From, ?RETRY_INITIAL_DELAY}),
             {noreply, State#cqerl_state{retrying=false}};
-        
+
         {existing, _, _} ->
             {noreply, State#cqerl_state{retrying=false}};
-        
+
         {new, _Pid} ->
             {noreply, State#cqerl_state{retrying=false}}
     end;
 
-handle_call(Req={get_client, Node, Opts}, From, 
+handle_call(Req={get_client, Node, Opts}, From,
             State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts, named_nodes=NamedNodes}) ->
-    
-    NodeKey = if 
+
+    NodeKey = if
         is_atom(Node) ->
             {ok, Nodes} = orddict:find(Node, NamedNodes),
             lists:nth(random:uniform(length(Nodes)), Nodes);
@@ -283,25 +283,25 @@ handle_call(Req={get_client, Node, Opts}, From,
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             case orddict:find(NodeKey, State2#cqerl_state.client_stats) of
-                #cql_client_stats{count=0} -> 
+                #cql_client_stats{count=0} ->
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
-                _ -> 
+                _ ->
                     select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
                     {noreply, State2#cqerl_state{retrying=false}}
             end;
-        
+
         _ ->
             case select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State) of
                 no_available_clients when Retrying ->
                     retry;
-                
+
                 no_available_clients ->
                     erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, Req, From, ?RETRY_INITIAL_DELAY}),
                     {noreply, State#cqerl_state{retrying=false}};
-                
+
                 {existing, _, _} ->
                     {noreply, State#cqerl_state{retrying=false}};
-                
+
                 {new, _Pid} ->
                     {noreply, State#cqerl_state{retrying=false}}
             end
@@ -317,16 +317,16 @@ handle_call(_Msg, _From, State) ->
 handle_cast({prepare_client, Node, Opts}, State=#cqerl_state{client_stats=Stats, globalopts=GlobalOpts}) ->
     NodeKey = node_key(Node, {Opts, GlobalOpts}),
     case orddict:find(NodeKey, Stats) of
-        error -> 
+        error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             {noreply, State2};
-        _ -> 
+        _ ->
             {noreply, State}
     end;
-    
+
 handle_cast({client_alive, Pid, Inet, Keyspace}, State=#cqerl_state{clients=Clients, client_stats=Stats}) ->
     case ets:lookup(Clients, Pid) of
-        [_Client] -> 
+        [_Client] ->
             {noreply, State};
         _ ->
             NodeKey = node_key(Inet, Keyspace),
@@ -335,7 +335,7 @@ handle_cast({client_alive, Pid, Inet, Keyspace}, State=#cqerl_state{clients=Clie
                 {ok, CStats=#cql_client_stats{count=Count, min_count=Min}} when Count < Min ->
                     FindMember = fun (F, Acc) ->
                         case pooler:take_member(PoolKey) of
-                            error_no_members -> 
+                            error_no_members ->
                                 {State, Acc};
                             Pid ->
                                 link(Pid),
@@ -407,7 +407,7 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
 
 handle_info({retry, Msg, From, Delay}, State) ->
     case handle_call(Msg, From, State#cqerl_state{retrying=true}) of
-        retry -> 
+        retry ->
             case erlang:round(math:pow(Delay, ?RETRY_EXP_FACT)) of
                 NewDelay when NewDelay < ?RETRY_MAX_DELAY ->
                     erlang:send_after(NewDelay, self(), {retry, Msg, From, NewDelay});
@@ -415,10 +415,10 @@ handle_info({retry, Msg, From, Delay}, State) ->
                     gen_server:reply(From, {error, no_available_clients})
             end,
             {noreply, State};
-        
-        {noreply, State1} -> 
+
+        {noreply, State1} ->
             {noreply, State1};
-        
+
         {reply, Reply, State1} ->
             gen_server:reply(From, Reply),
             {noreply, State1}
@@ -450,7 +450,7 @@ node_key(Inet0, Keyspace0) ->
     end,
     case Inet of
         {Ip, Port, Keyspace} -> ok;
-        {Ip, Port} -> 
+        {Ip, Port} ->
             Keyspace = case Keyspace0 of
                 {LocalOpts, GlobalOpts} ->
                     OptGetter = make_option_getter(GlobalOpts, LocalOpts),
@@ -481,15 +481,15 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
                                               {ssl, OptGetter(ssl)},
                                               {sleep_duration, {Amount/2, Unit}},
                                               {keyspace, Keyspace} ]
-                                        ]} 
+                                        ]}
                      }
                    ]),
-    
+
     MinClients = OptGetter(pool_min_size),
-    ClientStats = prepare_pool_members(NodeKey, 
-                                       #cql_client_stats{count=0, min_count=MinClients, max_count=OptGetter(pool_max_size)}, 
+    ClientStats = prepare_pool_members(NodeKey,
+                                       #cql_client_stats{count=0, min_count=MinClients, max_count=OptGetter(pool_max_size)},
                                        Clients, MinClients),
-                                       
+
     NamedNodes = case OptGetter(name) of
         undefined -> NamedNodes0;
         Name -> orddict:append(Name, NodeKey, NamedNodes0)
@@ -499,12 +499,12 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
 
 prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
     GlobalOpts = lists:map(
-        fun (Key) -> 
+        fun (Key) ->
             case application:get_env(cqerl, Key) of
                 undefined -> {Key, undefined};
                 {ok, V} -> {Key, V}
             end
-        end, 
+        end,
         [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
     ),
     Nodes = case application:get_env(cqerl, cassandra_nodes) of
@@ -512,14 +512,14 @@ prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
         {ok, N} -> N
     end,
     State2 = lists:foldl(fun
-        (Arg, State0) -> 
+        (Arg, State0) ->
             case Arg of
                 {Ip, Port, Opts} when is_list(Opts) ->
                     Inet = {Ip, Port};
-                
+
                 {Inet, Opts} when is_list(Opts) ->
                     ok;
-                
+
                 Inet ->
                     Opts = []
             end,
@@ -532,7 +532,7 @@ prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
 prepare_pool_members(_NodeKey, ClientStats, _Clients, 0) -> ClientStats;
 prepare_pool_members(NodeKey, ClientStats=#cql_client_stats{count=Count}, Clients, N) ->
     case pooler:take_member(pool_from_node(NodeKey)) of
-        error_no_members -> 
+        error_no_members ->
             prepare_pool_members(NodeKey, ClientStats, Clients, N-1);
         Pid ->
             link(Pid),
@@ -575,16 +575,16 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
                 false ->
                     no_available_clients
             end;
-        
+
         [] ->
             NewMember = case Node of
                 '_' ->  pooler:take_group_member(cqerl);
                  _  -> pooler:take_member(pool_from_node(Node))
             end,
             case NewMember of
-                error_no_members -> 
+                error_no_members ->
                     no_available_clients;
-                    
+
                 Pid ->
                     link(Pid),
                     ets:insert(Clients, #cql_client{node=Node, busy=false, pid=Pid}),
@@ -619,10 +619,3 @@ prepare_node_info(Addr) when is_atom(Addr);
 
 pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).
-
--spec node_from_pool(Pool :: atom()) -> inet().
-
-node_from_pool(PoolName) when is_atom(PoolName) ->
-    binary_to_term(base64:decode(atom_to_binary(PoolName, latin1))).
-
-    
