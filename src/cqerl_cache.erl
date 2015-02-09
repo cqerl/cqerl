@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/1, lookup/2,
+-export([start_link/0, lookup/1, lookup/2, lookup_many/2,
          query_was_prepared/2, query_preparation_failed/2]).
 
 %% ------------------------------------------------------------------
@@ -72,6 +72,25 @@ lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
         {match, _} ->
             lookup(ClientPid, Query#cql_query{reusable=true, named=true})
     end.
+
+
+lookup_many(ClientPid, Queries) ->
+    { States, _ } = lists:foldr(fun
+        (#cql_query{reusable=false}, { States0, Statements }) ->
+            { [uncached | States0], Statements };
+
+        (Query=#cql_query{statement=Statement}, { States0, Statements }) ->
+            case orddict:find(Statement, Statements) of
+                error ->
+                    Value = lookup(ClientPid, Query),
+                    { [Value | States0],
+                       orddict:store(Statement, Value, Statements)};
+
+                {ok, Value} ->
+                    { [Value | States0], Statements }
+            end
+    end, {[], orddict:new()}, Queries),
+    States.
 
 
 query_was_prepared({Pid, _Query}=Key, Result) when is_pid(Pid) ->

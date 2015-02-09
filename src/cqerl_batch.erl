@@ -17,7 +17,7 @@ init(Call={ClientPid, _}, _Inet, Batch=#cql_query_batch{queries=Queries0}, Paren
     end, Queries0),
     QueryStates = lists:zip(
         Queries,
-        lists:map(fun (Query) -> cqerl_cache:lookup(ClientPid, Query) end, Queries)
+        cqerl_cache:lookup_many(ClientPid, Queries)
     ),
     loop(Call, Batch#cql_query_batch{queries=QueryStates}, Debug, Parent).
 
