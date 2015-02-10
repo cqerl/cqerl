@@ -20,7 +20,7 @@
 
 -define(QUERIES_TAB, cqerl_cached_queries).
 -define(NAMED_BINDINGS_RE_KEY, cqerl_cache_named_bindings_re).
--define(NAMED_BINDINGS_RE, "'*(\\?|:\\w+)'*(?=([^\"]*\"[^\"]*\")*[^\"]*$)").
+-define(NAMED_BINDINGS_RE, "'*(\\?|:\\w+)'*(?:(?:[^\"]*\"[^\"]*\")*[^\"]*$)").
 
 -record(state, {
     cached_queries :: ets:tid(),
@@ -54,11 +54,11 @@ lookup(_ClientPid, #cql_query{reusable=false}) ->
 lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
-            {ok, RE} = re:compile(?NAMED_BINDINGS_RE),
+            {ok, RE} = re2:compile(?NAMED_BINDINGS_RE),
             put(?NAMED_BINDINGS_RE_KEY, RE);
         RE -> ok
     end,
-    case re:run(Statement, RE) of
+    case re2:match(Statement, RE) of
         nomatch ->
             lookup(ClientPid, Query#cql_query{reusable=false, named=false});
 
