@@ -139,7 +139,7 @@ close_client(ClientRef) ->
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
 %% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> #cql_result{}.
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
     cqerl_client:run_query(ClientRef, Query).
 
