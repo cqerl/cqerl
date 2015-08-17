@@ -85,17 +85,17 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
--spec new_client() -> {ok, client()} | no_available_clients.
+-spec new_client() -> {ok, client()} | {error, no_available_clients}.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
--spec new_client(Inet :: inet()) ->    client().
+-spec new_client(Inet :: inet()) -> {ok, client()}.
 new_client({}) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
 new_client(Inet) ->
     new_client(Inet, []).
 
--spec new_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> client() | {error, no_client_available}.
+-spec new_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients}.
 new_client({}, Opts) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, Opts);
 new_client(Inet, Opts) ->
@@ -139,7 +139,7 @@ close_client(ClientRef) ->
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
 %% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> #cql_result{}.
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
     cqerl_client:run_query(ClientRef, Query).
 
