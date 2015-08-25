@@ -32,7 +32,7 @@
 
 -record(cqerl_startup_options, { 
     cql_version = <<"3.0.0">> :: binary(), 
-    compression = <<>>        :: binary() 
+    compression = <<>>        :: lz4 | snappy| undefined
 }).
 
 -record(cqerl_query_parameters, {
@@ -52,7 +52,7 @@
 -record(cqerl_result_column_spec, {
     keyspace = <<>>        :: binary(),
     table_name = <<>>      :: binary(),
-    name = <<>>            :: binary(),
+    name = <<>>            :: binary() | atom(),
     type = undefined       :: column_type()
 }).
 

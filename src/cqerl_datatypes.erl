@@ -400,7 +400,7 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 
 encode_data({Type, _}, _Query) -> throw({bad_param_type, Type}).
 
--spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: datatype(), integer(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
 decode_data({_Type, NullSize, Bin}) when NullSize < 0 ->
     {null, Bin};

@@ -60,9 +60,9 @@ end).
 }).
 
 -record(client_user, {
-    ref :: reference(),
-    pid :: pid(),
-    monitor :: reference()
+    ref :: reference() | '_',
+    pid :: pid() | '_',
+    monitor :: reference() | '_'
 }).
 
 %% ------------------------------------------------------------------
