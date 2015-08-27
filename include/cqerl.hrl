@@ -44,7 +44,7 @@
 -type named_parameter() :: { atom(), parameter_val() }.
 
 -record(cql_query, {
-    statement   = <<>>      :: binary(),
+    statement   = <<>>      :: binary() | string(),
     values      = []        :: [ parameter() | named_parameter() ],
     
     reusable    = undefined :: undefined | boolean(),

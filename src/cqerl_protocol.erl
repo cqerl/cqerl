@@ -546,7 +546,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
         EventName == ?CQERL_EVENT_STATUS_CHANGE ->
             {ok, TopologyChangeName, Rest1} = ?DATA:decode_string(Rest0),
             TopologyChangeType = binary_to_atom(TopologyChangeName, latin1),
-            {ok, ChangedNodeInet, _Rest} = ?DATA:decode_inet(Rest1),
+            {ok, ChangedNodeInet, _Rest} = ?DATA:decode_data({inet, 4, Rest1}),
             {ok, {EventName, {TopologyChangeType, ChangedNodeInet}}};
 
         EventName == ?CQERL_EVENT_SCHEMA_CHANGE ->
