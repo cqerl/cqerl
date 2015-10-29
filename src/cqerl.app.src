@@ -11,7 +11,8 @@
   {applications, [kernel,
                   stdlib,
                   ssl,
-                  pooler]},
+                  pooler,
+                  re2]},
 
   {mod, { cqerl_app, []}},
   {env, []}
