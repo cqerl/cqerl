@@ -94,6 +94,7 @@
 -define(RETRY_MAX_DELAY, 1000).
 -define(RETRY_EXP_FACT, 1.15).
 
+-define(DEFAULT_QUERY_RETRY, 2).
 -define(DEFAULT_PORT, 9042).
 -define(LOCALHOST, "127.0.0.1").
 
@@ -185,8 +186,27 @@ close_client(ClientRef) ->
 
 -spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
-    cqerl_client:run_query(ClientRef, Query).
+    run_query(ClientRef, Query, ?DEFAULT_QUERY_RETRY).
 
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}, non_neg_integer()) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+run_query(ClientRef, Query, Retry) when Retry =< 0->
+    cqerl_client:run_query(ClientRef, Query);
+
+run_query(ClientRef, Query, Retry) ->
+    case cqerl_client:run_query(ClientRef, Query) of
+        {error, Reason}=Response when is_tuple(Reason) ->
+            case element(1, Reason) of
+                16#1100 -> %% Write timeout
+                    error_logger:info_msg("Cassandra write timeout, retrying retry=~p", [Retry]),
+                    run_query(ClientRef, Query, Retry - 1);
+                16#1200 -> %% Read timeout
+                    error_logger:info_msg("Cassandra read timeout, retrying retry=~p", [Retry]),
+                    run_query(ClientRef, Query, Retry - 1);
+                _ ->
+                    Response
+            end;
+        Response -> Response
+    end.
 
 
 
