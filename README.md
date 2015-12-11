@@ -174,22 +174,22 @@ When performing queries, you can provide more information than just the query st
     
 3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`. 
 4. You can specify how many rows you want in every result page using the `page_size` (integer) field. The devs at Cassandra recommend a value of 100 (which is the default).
-5. You can also specify what `consistency` you want the query to be executed under. Possible values include (all defined in [`include/cqerl.hrl`](include/cqerl.hrl)):
+5. You can also specify what `consistency` you want the query to be executed under. Possible values include:
 
-    * `?CQERL_CONSISTENCY_ANY`
-    * `?CQERL_CONSISTENCY_ONE`       
-    * `?CQERL_CONSISTENCY_TWO`        
-    * `?CQERL_CONSISTENCY_THREE`
-    * `?CQERL_CONSISTENCY_QUORUM`     
-    * `?CQERL_CONSISTENCY_ALL`        
-    * `?CQERL_CONSISTENCY_LOCAL_QUORUM`
-    * `?CQERL_CONSISTENCY_EACH_QUORUM`
-    * `?CQERL_CONSISTENCY_LOCAL_ONE`
+    * `any`
+    * `one`       
+    * `two`        
+    * `three`
+    * `quorum`     
+    * `all`        
+    * `local_quorum`
+    * `each_quorum`
+    * `local_one`
     
 6. In case you want to perform a [lightweight transaction][4] using `INSERT` or `UPDATE`, you can also specify the `serial_consistency` that will be use when performing it. Possible values are:
 
-    * `?CQERL_CONSISTENCY_SERIAL`
-    * `?CQERL_CONSISTENCY_LOCAL_SERIAL`
+    * `serial`
+    * `local_serial`
     
 ##### Variable bindings
 

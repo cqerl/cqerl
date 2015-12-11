@@ -138,9 +138,9 @@ close_client(ClientRef) ->
 %% later executions of the <strong>same query</strong> to be performed faster. This parameter is <code>true</code> by default when you provide bindings in the query (positional <code>?</code>
 %% parameters or named <code>:var</code> parameters), and <code>false</code> by default when you don't. You can override the defaults.
 %%
-%% <em>Consistency</em> one of constants defined in <code>cqerl.hrl</code>, namely <code>?CQERL_CONSISTENCY_[Const]</code> where <code>Const</code> can be <code>ANY</code>, <code>ONE</code>,
-%% <code>TWO</code>, <code>THREE</code>, <code>QUORUM</code>, <code>ALL</code>, <code>LOCAL_QUORUM</code>, <code>EACH_QUORUM</code>, <code>SERIAL</code>,
-%% <code>LOCAL_SERIAL</code> or <code>LOCAL_ONE</code>.
+%% <em>Consistency</em> is represented as an atom and can be any of <code>any</code>, <code>one</code>,
+%% <code>two</code>, <code>three</code>, <code>quorum</code>, <code>all</code>, <code>local_quorum</code>, <code>each_quorum</code>, <code>serial</code>,
+%% <code>local_serial</code> or <code>local_one</code>.
 %%
 %% How <em>bindings</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
