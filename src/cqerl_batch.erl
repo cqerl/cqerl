@@ -38,7 +38,10 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
                     loop(Call, Batch#cql_query_batch{queries=NewQueries}, Debug, Parent);
 
                 {preparation_failed, Reason} ->
-                    cqerl_client:batch_failed(Call, Batch, Reason),
+                    %% TODO: The function cqerl_client:batch_failed/3 doesn't
+                    %% exist. If this call is important, the function will need
+                    %% to be implemented. Otherwise, we should remove this call.
+                    %% cqerl_client:batch_failed(Call, Batch, Reason),
                     exit({failed, {Reason, Call, Batch}});
 
                 {system, From, Request} ->
