@@ -72,8 +72,8 @@
 }).
 
 -record(cql_client, {
-    node  :: tuple(),
-    pid   :: pid(),
+    node  :: tuple() | '_',
+    pid   :: pid() | '_',
     busy  :: boolean()
 }).
 
