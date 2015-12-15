@@ -22,9 +22,11 @@
 
 -include("cqerl.hrl").
 
+-type compression_type() :: lz4 | snappy | undefined.
+
 -record(cqerl_frame, {
     compression = false           :: boolean(),
-    compression_type = undefined  :: lz4 | snappy | undefined,
+    compression_type = undefined  :: compression_type(),
     tracing = false               :: boolean(),
     opcode                        :: integer(),
     stream_id = 0                 :: integer()
@@ -32,7 +34,7 @@
 
 -record(cqerl_startup_options, {
     cql_version = <<"3.0.0">> :: binary(),
-    compression = <<>>        :: binary()
+    compression = undefined   :: compression_type()
 }).
 
 -record(cqerl_query_parameters, {

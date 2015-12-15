@@ -115,16 +115,14 @@ encode_proplist_to_map(PropList) ->
     Length = length(IOList),
     {ok, << Length:?SHORT, Binary/binary >>}.
 
+to_binary(Atom) when is_atom(Atom) -> atom_to_binary(Atom, latin1);
+to_binary(List) when is_list(List) -> list_to_binary(List);
+to_binary(Binary) when is_binary(Binary) -> Binary.
 
 encode_proplist_to_map([{Key, Value}|Rest], Acc) when is_binary(Value) ->
-    KeyBin0 = case Key of
-        Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
-        String when is_list(String) -> list_to_binary(String);
-        String when is_binary(String) -> String
-    end,
-    {ok, KeyBin1} = encode_string(KeyBin0),
-    {ok, ValueBin} = encode_string(Value),
-    encode_proplist_to_map(Rest, [[KeyBin1, ValueBin] | Acc]);
+    {ok, KeyBin} = encode_string(to_binary(Key)),
+    {ok, ValueBin} = encode_string(to_binary(Value)),
+    encode_proplist_to_map(Rest, [[KeyBin, ValueBin] | Acc]);
 
 encode_proplist_to_map([_|Rest], Acc) ->
     encode_proplist_to_map(Rest, Acc);
