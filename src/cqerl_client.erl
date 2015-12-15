@@ -787,7 +787,7 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
         end,
         lists:map(fun (Version) -> semver:parse(Version) end, Versions)
     ),
-    case application:get_env(cqerl, preferred_cql_version) of
+    case application:get_env(cqerl, preferred_cql_version, undefined) of
         undefined ->
             [GreaterVersion|_] = SemVersions;
 
