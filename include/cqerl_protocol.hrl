@@ -54,7 +54,7 @@
 -record(cqerl_result_column_spec, {
     keyspace = <<>>        :: binary(),
     table_name = <<>>      :: binary(),
-    name = <<>>            :: binary(),
+    name = undefined       :: atom(),
     type = undefined       :: column_type()
 }).
 
