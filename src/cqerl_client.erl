@@ -814,10 +814,8 @@ seq_frame(State=#client_state{compression_type=CompressionType, available_slots=
 
 
 module_exists(Module) ->
-    case is_atom(Module) of
-        true ->
-            try Module:module_info() of _InfoList -> true
-            catch _:_ -> false end;
+    case code:is_loaded(Module) of
+        {file, _} -> true;
         false -> false
     end.
 
