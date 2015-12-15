@@ -75,21 +75,17 @@ new_user(Pid, From) ->
 remove_user({ClientPid, ClientRef}) ->
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
 
-run_query({ClientPid, ClientRef}, Query) when is_binary(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=Query}}, ?FSM_TIMEOUT);
-run_query({ClientPid, ClientRef}, Query) when is_list(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=list_to_binary(Query)}}, ?FSM_TIMEOUT);
-run_query({ClientPid, ClientRef}, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query#cql_query{statement=list_to_binary(Statement)}}, ?FSM_TIMEOUT);
+run_query(Client, Query) when ?IS_IOLIST(Query) ->
+    run_query(Client, #cql_query{statement=Query});
+run_query(Client, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
+    run_query(Client, Query#cql_query{statement=iolist_to_binary(Statement)});
 run_query({ClientPid, ClientRef}, Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query}, ?FSM_TIMEOUT).
 
-query_async(Client, Query) when is_binary(Query) ->
+query_async(Client, Query) when ?IS_IOLIST(Query) ->
     query_async(Client, #cql_query{statement=Query});
-query_async(Client, Query) when is_list(Query) ->
-    query_async(Client, #cql_query{statement=list_to_binary(Query)});
 query_async(Client, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-    query_async(Client, Query#cql_query{statement=list_to_binary(Statement)});
+    query_async(Client, Query#cql_query{statement=iolist_to_binary(Statement)});
 query_async({ClientPid, ClientRef}, Query) ->
     QueryRef = make_ref(),
     gen_fsm:send_event(ClientPid, {send_query, {self(), QueryRef}, ClientRef, Query}),

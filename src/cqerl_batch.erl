@@ -11,9 +11,8 @@ init(Call={ClientPid, _}, _Inet, Batch=#cql_query_batch{queries=Queries0}, Paren
     Debug = sys:debug_options([]),
     proc_lib:init_ack(Parent, {ok, self()}),
     Queries = lists:map(fun
-        (Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-            Query#cql_query{statement=list_to_binary(Statement)};
-        (Query) -> Query
+        (Query=#cql_query{statement=Statement}) ->
+            Query#cql_query{statement=iolist_to_binary(Statement)}
     end, Queries0),
     QueryStates = lists:zip(
         Queries,
