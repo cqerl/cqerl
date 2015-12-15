@@ -24,6 +24,7 @@
          decode_long_string/1,
          decode_bytes/1,
          decode_short_bytes/1,
+         decode_inet/1,
          decode_string_list/1,
          decode_map_to_proplist/1,
          decode_multimap_to_proplist/1]).
@@ -207,6 +208,9 @@ decode_short_bytes(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Len
     {error, malformed_binary, Bin}.
 
 
+decode_inet(<<Length:?CHAR, Rest/binary>>) ->
+    <<Address:Length/binary, Port:?INT, Rest1/binary>> = Rest,
+    {ok, {binary_to_list(Address), Port}, Rest1}.
 
 
 decode_string_list(<< ListLength:?SHORT, Rest/binary >>) ->
