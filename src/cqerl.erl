@@ -115,7 +115,7 @@ new_client(Inet, Opts) ->
 %%
 %% This function will return immediately no matter if the client has already been closed or not.
 
--spec close_client(ClientRef :: client()) -> no_return().
+-spec close_client(ClientRef :: client()) -> ok.
 close_client(ClientRef) ->
     cqerl_client:remove_user(ClientRef).
 
