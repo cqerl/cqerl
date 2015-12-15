@@ -301,7 +301,7 @@ handle_call(Req={get_client, Node, Opts}, From,
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             case orddict:find(NodeKey, State2#cqerl_state.client_stats) of
-                #cql_client_stats{count=0} ->
+                {ok, #cql_client_stats{count=0}} ->
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
                 _ ->
                     select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
