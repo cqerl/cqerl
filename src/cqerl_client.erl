@@ -24,10 +24,7 @@
     {ok, Val} -> Val
 end).
 
--define(STATE_FROM_RETURN(Resp), case element(tuple_size(Resp), Resp) of
-    N_ when is_integer(N_) -> element(tuple_size(Resp) - 1, Resp);
-    State_ -> State_
-end).
+-define(IS_IOLIST(L), is_list(L) orelse is_binary(L)).
 
 -export([init/1, terminate/3,
          starting/2,    starting/3,
@@ -357,7 +354,8 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT}, {set_keyspace, _KeySpaceName}, Delayed} ->
             {next_state, live, switch_to_live_state(State) }
     end,
-    activate_socket(?STATE_FROM_RETURN(Resp)),
+    {_, _, State1} = Resp,
+    activate_socket(State1),
     append_delayed_segment(Resp, Delayed);
 
 handle_info({ rows, Call, Result }, live, State) ->
@@ -420,12 +418,10 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
     end,
 
     case Resp of
-      {stop, Resp1} ->
-        activate_socket(?STATE_FROM_RETURN(Resp1)),
+      {stop, {_, _, State1} = Resp1} ->
+        activate_socket(State1),
         append_delayed_segment(Resp1, Delayed);
-      {_, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>});
-      {_, _, _, State1} ->
+      {next_state, live, State1} ->
         handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>})
     end;
 
@@ -543,10 +539,7 @@ maybe_signal_busy(State) ->
 
 
 append_delayed_segment({X, Y, State}, Delayed) ->
-    {X, Y, State#client_state{delayed=Delayed}};
-append_delayed_segment({X, Y, Z, State}, Delayed) ->
-    {X, Y, Z, State#client_state{delayed=Delayed}}.
-
+    {X, Y, State#client_state{delayed=Delayed}}.
 
 
 
