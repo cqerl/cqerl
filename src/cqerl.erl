@@ -73,6 +73,8 @@
 -define(RETRY_INITIAL_DELAY, 10).
 -define(RETRY_MAX_DELAY, 1000).
 -define(RETRY_EXP_FACT, 1.15).
+-define(QUERY_RETRY_BACKOFF_INITIAL, 8).
+-define(QUERY_RETRY_BACKOFF_MAX, 1024).
 
 -define(DEFAULT_QUERY_RETRY, 2).
 -define(DEFAULT_PORT, 9042).
@@ -145,19 +147,24 @@ run_query(ClientRef, Query) ->
     run_query(ClientRef, Query, ?DEFAULT_QUERY_RETRY).
 
 -spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}, non_neg_integer()) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
-run_query(ClientRef, Query, Retry) when Retry =< 0->
+run_query(ClientRef, Query, Retry) ->
+    run_query(ClientRef, Query, Retry, ?QUERY_RETRY_BACKOFF_INITIAL).
+
+run_query(ClientRef, Query, Retry, _Backoff) when Retry =< 0->
     cqerl_client:run_query(ClientRef, Query);
 
-run_query(ClientRef, Query, Retry) ->
+run_query(ClientRef, Query, Retry, Backoff) ->
     case cqerl_client:run_query(ClientRef, Query) of
         {error, Reason}=Response when is_tuple(Reason) ->
             case element(1, Reason) of
                 16#1100 -> %% Write timeout
-                    error_logger:info_msg("Cassandra write timeout, retrying retry=~p", [Retry]),
-                    run_query(ClientRef, Query, Retry - 1);
+                    error_logger:info_msg("Cassandra write timeout, retrying retry=~p backoff=~p", [Retry, Backoff]),
+                    timer:sleep(Backoff),
+                    run_query(ClientRef, Query, Retry - 1, max(Backoff * 8, ?QUERY_RETRY_BACKOFF_MAX));
                 16#1200 -> %% Read timeout
-                    error_logger:info_msg("Cassandra read timeout, retrying retry=~p", [Retry]),
-                    run_query(ClientRef, Query, Retry - 1);
+                    error_logger:info_msg("Cassandra read timeout, retrying retry=~p backoff=~p", [Retry, Backoff]),
+                    timer:sleep(Backoff),
+                    run_query(ClientRef, Query, Retry - 1, max(Backoff * 8, ?QUERY_RETRY_BACKOFF_MAX));
                 _ ->
                     Response
             end;
