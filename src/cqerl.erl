@@ -50,9 +50,9 @@
 -export_type([client/0, inet/0]).
 
 -record(cql_client_stats, {
-    min_count :: integer(),
-    max_count :: integer(),
-    count = 0 :: integer()
+    min_count :: integer() | '_',
+    max_count :: integer() | '_',
+    count = 0 :: integer() | '_'
 }).
 
 -record(cqerl_state, {
@@ -65,15 +65,18 @@
 }).
 
 -record(cql_client, {
-    node  :: tuple(),
-    pid   :: pid(),
-    busy  :: boolean()
+    node  :: tuple() | '_',
+    pid   :: pid() | '_',
+    busy  :: boolean() | '_'
 }).
 
 -define(RETRY_INITIAL_DELAY, 10).
 -define(RETRY_MAX_DELAY, 1000).
 -define(RETRY_EXP_FACT, 1.15).
+-define(QUERY_RETRY_BACKOFF_INITIAL, 8).
+-define(QUERY_RETRY_BACKOFF_MAX, 1024).
 
+-define(DEFAULT_QUERY_RETRY, 2).
 -define(DEFAULT_PORT, 9042).
 
 -spec prepare_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> ok.
@@ -85,11 +88,11 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
--spec new_client() -> {ok, client()} | {error, no_available_clients}.
+-spec new_client() -> {ok, client()} | {error, no_available_clients} | {error, no_configured_node}.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
--spec new_client(Inet :: inet()) -> {ok, client()}.
+-spec new_client(Inet :: inet()) -> {ok, client()} | {error_no_available_clients}.
 new_client({}) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
 new_client(Inet) ->
@@ -108,7 +111,7 @@ new_client(Inet, Opts) ->
 %%
 %% This function will return immediately no matter if the client has already been closed or not.
 
--spec close_client(ClientRef :: client()) -> no_return().
+-spec close_client(ClientRef :: client()) -> ok.
 close_client(ClientRef) ->
     cqerl_client:remove_user(ClientRef).
 
@@ -139,10 +142,34 @@ close_client(ClientRef) ->
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
 %% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
-    cqerl_client:run_query(ClientRef, Query).
+    run_query(ClientRef, Query, ?DEFAULT_QUERY_RETRY).
 
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}, non_neg_integer()) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+run_query(ClientRef, Query, Retry) ->
+    run_query(ClientRef, Query, Retry, ?QUERY_RETRY_BACKOFF_INITIAL).
+
+run_query(ClientRef, Query, Retry, _Backoff) when Retry =< 0->
+    cqerl_client:run_query(ClientRef, Query);
+
+run_query(ClientRef, Query, Retry, Backoff) ->
+    case cqerl_client:run_query(ClientRef, Query) of
+        {error, Reason}=Response when is_tuple(Reason) ->
+            case element(1, Reason) of
+                16#1100 -> %% Write timeout
+                    error_logger:info_msg("Cassandra write timeout, retrying retry=~p backoff=~p", [Retry, Backoff]),
+                    timer:sleep(Backoff),
+                    run_query(ClientRef, Query, Retry - 1, max(Backoff * 8, ?QUERY_RETRY_BACKOFF_MAX));
+                16#1200 -> %% Read timeout
+                    error_logger:info_msg("Cassandra read timeout, retrying retry=~p backoff=~p", [Retry, Backoff]),
+                    timer:sleep(Backoff),
+                    run_query(ClientRef, Query, Retry - 1, max(Backoff * 8, ?QUERY_RETRY_BACKOFF_MAX));
+                _ ->
+                    Response
+            end;
+        Response -> Response
+    end.
 
 
 
@@ -283,7 +310,7 @@ handle_call(Req={get_client, Node, Opts}, From,
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             case orddict:find(NodeKey, State2#cqerl_state.client_stats) of
-                #cql_client_stats{count=0} ->
+                {ok, #cql_client_stats{count=0}} ->
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
                 _ ->
                     select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
@@ -615,7 +642,6 @@ prepare_node_info(Addr) when is_atom(Addr);
                              is_tuple(Addr) andalso erlang:size(Addr) == 8 ->  % v6
     prepare_node_info({Addr, ?DEFAULT_PORT}).
 
--spec pool_from_node(Node :: inet()) -> atom().
-
+-spec pool_from_node ({maybe_improper_list() | tuple(),integer(),atom()}) -> atom().
 pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).

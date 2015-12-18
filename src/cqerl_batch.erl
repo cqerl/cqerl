@@ -38,7 +38,8 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
                     loop(Call, Batch#cql_query_batch{queries=NewQueries}, Debug, Parent);
 
                 {preparation_failed, Reason} ->
-                    cqerl_client:batch_failed(Call, Batch, Reason),
+                    % TODO batch_failed does not exist.
+                    % cqerl_client:batch_failed(Call, Batch, Reason),
                     exit({failed, {Reason, Call, Batch}});
 
                 {system, From, Request} ->
