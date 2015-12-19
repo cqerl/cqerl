@@ -1,5 +1,5 @@
--define(CQERL_FRAME_RESP,         16#82).
--define(CQERL_FRAME_REQ,          16#02).
+-define(CQERL_FRAME_RESP,         16#84).
+-define(CQERL_FRAME_REQ,          16#04).
 -define(CQERL_FRAME_COMPRESSION,  16#01).
 -define(CQERL_FRAME_TRACING,      16#02).
 
@@ -23,16 +23,16 @@
 -include("cqerl.hrl").
 
 -record(cqerl_frame, {
-    compression = false           :: boolean(), 
-    compression_type = undefined  :: lz4 | snappy | undefined, 
-    tracing = false               :: boolean(), 
-    opcode                        :: integer(), 
-    stream_id = 0                 :: integer() 
+    compression = false           :: boolean(),
+    compression_type = undefined  :: lz4 | snappy | undefined,
+    tracing = false               :: boolean(),
+    opcode                        :: integer(),
+    stream_id = 0                 :: integer()
 }).
 
--record(cqerl_startup_options, { 
-    cql_version = <<"3.0.0">> :: binary(), 
-    compression = <<>>        :: binary() 
+-record(cqerl_startup_options, {
+    cql_version = <<"3.0.0">> :: binary(),
+    compression = <<>>        :: binary()
 }).
 
 -record(cqerl_query_parameters, {

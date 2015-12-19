@@ -66,7 +66,9 @@ groups() -> [].
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [single_client, n_clients, many_clients, many_sync_clients].
+    [
+    single_client, n_clients, many_clients, many_sync_clients
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
@@ -134,7 +136,7 @@ init_per_suite(Config) ->
             {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, Q)
     end,
     cqerl:run_query(Client, "USE test_keyspace_1;"),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>, table = <<"entries1">>}} =
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>, name = <<"entries1">>}} =
       cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
     cqerl:close_client(Client),
     

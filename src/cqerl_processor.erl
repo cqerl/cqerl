@@ -11,7 +11,7 @@ start_link(ClientPid, UserQuery, Msg) ->
 
 process(ClientPid, Query, { prepared, Msg }) ->
     {ok, QueryID, Rest0} = cqerl_datatypes:decode_short_bytes(Msg),
-    {ok, QueryMetadata, Rest1} = cqerl_protocol:decode_result_metadata(Rest0),
+    {ok, QueryMetadata, Rest1} = cqerl_protocol:decode_prepared_metadata(Rest0),
     {ok, ResultMetadata, _Rest} = cqerl_protocol:decode_result_metadata(Rest1),
     cqerl_cache:query_was_prepared({ClientPid, Query}, {QueryID, QueryMetadata, ResultMetadata}),
     ok;

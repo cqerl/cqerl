@@ -80,6 +80,8 @@
 
 -record(cql_schema_changed, {
     change_type :: created | updated | dropped,
+    target      :: atom(),
     keyspace    :: binary(),
-    table       :: binary()
+    name        :: binary(),
+    args        :: [ binary() ]
 }).

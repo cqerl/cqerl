@@ -255,7 +255,13 @@ encode_data({_Type, null}, _Query) ->
     null;
 
 encode_data({timeuuid, now}, _Query) ->
-    uuid:get_v1(uuid:new(self(), os));
+    State = case get(timeuuid_state) of
+        undefined -> uuid:new(self(), os);
+        State1 -> State1
+    end,
+    {UUID, NewState} = uuid:get_v1(State),
+    put(timeuuid_state, NewState),
+    UUID;
 
 encode_data({uuid, new}, _Query) ->
     uuid:get_v4(strong);
@@ -284,16 +290,25 @@ encode_data({ascii, Atom}, _Query) when is_atom(Atom) ->
 encode_data({ascii, Data}, _Query) when is_binary(Data) ->
     Data;
 
+encode_data({time, {Hours, Minutes, Seconds}}, Query) when is_integer(Hours),
+                                        is_integer(Minutes),
+                                        is_integer(Seconds) orelse is_float(Seconds) ->
+
+    Number = (Hours * 3600 + Minutes * 60 + Seconds) * math:pow(10, 9),
+    encode_data({time, Number}, Query);
+
 encode_data({BigIntType, Number}, _Query) when is_integer(Number),
                                        BigIntType == bigint orelse
                                        BigIntType == counter orelse
-                                       BigIntType == timestamp ->
+                                       BigIntType == timestamp orelse
+                                       BigIntType == time ->
     <<Number:64/big-signed-integer>>;
 
 encode_data({BigIntType, Number}, _Query) when is_float(Number),
                                        BigIntType == bigint orelse
                                        BigIntType == counter orelse
-                                       BigIntType == timestamp ->
+                                       BigIntType == timestamp orelse
+                                       BigIntType == time ->
     Int = trunc(Number),
     <<Int:64/big-signed-integer>>;
 
@@ -323,15 +338,27 @@ encode_data({double, Val}, _Query) ->
 encode_data({int, Val}, _Query) when is_integer(Val) ->
     << Val:32/big-signed-integer >>;
 
+encode_data({smallint, Val}, _Query) when is_integer(Val) ->
+    << Val:16/big-signed-integer >>;
+
+encode_data({tinyint, Val}, _Query) when is_integer(Val) ->
+    << Val:8/big-signed-integer >>;
+
 encode_data({int, Val}, _Query) when is_float(Val) ->
     Int = trunc(Val),
     << Int:32/big-signed-integer >>;
 
+encode_data({date, Date={_Year, _Month, _Day}}, Query) ->
+    RefDayCount = calendar:date_to_gregorian_days({1970, 1, 1}),
+    ThisDayCount = calendar:date_to_gregorian_days(Date) - RefDayCount + trunc(math:pow(2, 31)),
+    << ThisDayCount:32/big-unsigned-integer >>;
+
 encode_data({TextType, Val}, _Query) when TextType == text orelse TextType == varchar ->
-    if  is_binary(Val) -> Val;
+    Res = if  is_binary(Val) -> Val;
         is_list(Val) -> list_to_binary(Val);
-        is_atom(Val) -> atom_to_binary(Val, latin1)
-    end;
+        is_atom(Val) -> atom_to_binary(Val, utf8)
+    end,
+    Res;
 
 encode_data({timestamp, now}, _Query) ->
     {MS, S, McS} = os:timestamp(),
@@ -378,22 +405,41 @@ encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == se
     Length = length(List2),
     GetValueBinary = fun(Value) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, ShortBytes} = encode_short_bytes(Bin),
-        ShortBytes
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
     end,
     Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
-    << Length:?SHORT, Entries/binary >>;
+    << Length:?INT, Entries/binary >>;
 
 encode_data({{map, KeyType, ValType}, List}, _Query) ->
     Length = length(List),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, ShortBytes} = encode_short_bytes(Bin),
-        ShortBytes
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
-    << Length:?SHORT, Entries/binary >>;
+    << Length:?INT, Entries/binary >>;
+
+encode_data({tuple, Types, Tuple}, _Query) when is_tuple(Tuple) ->
+    encode_data({tuple, Types, tuple_to_list(Tuple)}, _Query);
+encode_data({tuple, Types, List}, _Query) when is_list(List) ->
+    GetValueBinary = fun({Type, Value}) ->
+        Bin = encode_data({Type, Value}, _Query),
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
+    end,
+    << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- lists:zip(Types, List) >>;
+
+encode_data({udt, Types, Values}, _Query) when is_list(Values) ->
+    GetValueBinary = fun({Name, Type}) ->
+        Value = proplists:get_value(binary_to_atom(Name, utf8), Values),
+        Bin = encode_data({Type, Value}, _Query),
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
+    end,
+    << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
 
 encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_function(Handler) ->
     Handler(Val, Query);
@@ -411,12 +457,21 @@ decode_data({UuidType, 16, Bin}) when UuidType == uuid orelse UuidType == timeuu
 
 decode_data({BigIntType, 8, Bin}) when BigIntType == bigint orelse
                                        BigIntType == counter orelse
-                                       BigIntType == timestamp ->
+                                       BigIntType == timestamp orelse
+                                       BigIntType == time ->
     << Number:64/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
 decode_data({int, 4, Bin}) ->
     << Number:32/big-signed-integer, Rest/binary >> = Bin,
+    {Number, Rest};
+
+decode_data({smallint, 2, Bin}) ->
+    << Number:16/big-signed-integer, Rest/binary >> = Bin,
+    {Number, Rest};
+
+decode_data({tinyint, 1, Bin}) ->
+    << Number:8/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
 decode_data({double, 8, Bin}) ->
@@ -426,6 +481,13 @@ decode_data({double, 8, Bin}) ->
 decode_data({float, 4, Bin}) ->
     << Val:32/big-float, Rest/binary >> = Bin,
     {Val, Rest};
+
+decode_data({date, 4, Bin}) ->
+    << ThisDayCount:32/big-unsigned-integer, Rest/binary >> = Bin,
+    RefDayCount = calendar:date_to_gregorian_days({1970, 1, 1}),
+    GregorianDays = ThisDayCount - trunc(math:pow(2, 31)) + RefDayCount,
+    Date = calendar:gregorian_days_to_date(GregorianDays),
+    {Date, Rest};
 
 decode_data({TextType, Size, Bin}) when TextType == ascii orelse
                                         TextType == varchar ->
@@ -464,20 +526,35 @@ decode_data({inet, 16, << Addr:16/binary, Rest/binary >>}) ->
 
 decode_data({{ColType, ValueType}, Size, Bin}) when ColType == set; ColType == list ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
-    << _N:?SHORT, EntriesBin/binary >> = CollectionBin,
-    List = [ element(1, decode_data({ValueType, ShortSize, ValueBin})) || << ShortSize:?SHORT, ValueBin:ShortSize/binary >> <= EntriesBin ],
+    << _N:?INT, EntriesBin/binary >> = CollectionBin,
+    List0 = [ decode_data({ValueType, Size1, ValueBin}) || << Size1:?INT, ValueBin:Size1/binary >> <= EntriesBin ],
+    List1 = [ Value || {Value, _Rest} <- List0 ],
     List2 = case ColType of
-        set -> ordsets:from_list(List);
-        list -> List
+        set -> ordsets:from_list(List1);
+        list -> List1
     end,
+    {List2, Rest};
+
+decode_data({{tuple, ValueTypes}, Size, Bin}) ->
+    << CollectionBin:Size/binary, Rest/binary>> = Bin,
+    List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
+    List1 = [ decode_data({ValueType, Size2, ValueBin}) || {ValueType, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
+    List2 = [ Value || {Value, _Rest} <- List1 ],
+    {List2, Rest};
+
+decode_data({{udt, ValueTypes}, Size, Bin}) ->
+    << CollectionBin:Size/binary, Rest/binary>> = Bin,
+    List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
+    List1 = [ {Name, decode_data({ValueType, Size2, ValueBin})} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
+    List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
     {List2, Rest};
 
 decode_data({{map, KeyType, ValueType}, Size, Bin}) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
-    << _N:?SHORT, EntriesBin/binary >> = CollectionBin,
-    List = [ { element(1, decode_data({KeyType, KShortSize, KeyBin})),
-               element(1, decode_data({ValueType, VShortSize, ValueBin})) } ||
-        << KShortSize:?SHORT, KeyBin:KShortSize/binary, VShortSize:?SHORT, ValueBin:VShortSize/binary >> <= EntriesBin ],
+    << _N:?INT, EntriesBin/binary >> = CollectionBin,
+    List = [ { element(1, decode_data({KeyType, KSize, KeyBin})),
+               element(1, decode_data({ValueType, VSize, ValueBin})) } ||
+        << KSize:?INT, KeyBin:KSize/binary, VSize:?INT, ValueBin:VSize/binary >> <= EntriesBin ],
     {List, Rest};
 
 decode_data({_, Size, << Size:?INT, Data/binary >>}) ->

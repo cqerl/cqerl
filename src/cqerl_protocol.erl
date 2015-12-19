@@ -11,6 +11,7 @@
          query_frame/3, execute_frame/3, batch_frame/2,
          response_frame/2,
          decode_result_metadata/1,
+         decode_prepared_metadata/1,
          decode_result_matrix/4,
          decode_row/2,
          encode_query_values/2,
@@ -173,7 +174,18 @@ decode_type(<< 16#22:?SHORT, Rest/binary >>) ->
     {ok, Type, Rest1} = decode_type(Rest),
     {ok, {set, Type}, Rest1};
 
-decode_type(<< Type:?SHORT, Rest/binary >>) when Type > 0, Type =< 16 ->
+decode_type(<< 16#30:?SHORT, Rest/binary >>) ->
+    {ok, _KeyspaceName, Rest1} = ?DATA:decode_string(Rest),
+    {ok, _TypeName, Rest2} = ?DATA:decode_string(Rest1),
+    <<Size:?SHORT, Rest3/binary>> = Rest2,
+    {ok, Types, Rest4} = decode_udt_type(Size, Rest3),
+    {ok, {udt, Types}, Rest4};
+
+decode_type(<< 16#31:?SHORT, Size:?SHORT, Rest/binary >>) ->
+    {ok, Types, Rest1} = decode_tuple_type(Size, Rest),
+    {ok, {tuple, Types}, Rest1};
+
+decode_type(<< Type:?SHORT, Rest/binary >>) when Type > 0, Type =< 20 ->
     TypeName = case Type of
         1 -> ascii;
         2 -> bigint;
@@ -190,12 +202,66 @@ decode_type(<< Type:?SHORT, Rest/binary >>) when Type > 0, Type =< 16 ->
         14 -> varint;
         15 -> timeuuid;
         16 -> inet;
+        17 -> date;
+        18 -> time;
+        19 -> smallint;
+        20 -> tinyint;
         _ -> unknown
     end,
     {ok, TypeName, Rest}.
 
 
+decode_tuple_type(Size, Rest) ->
+    {ok, Types, Rest1} = decode_tuple_type(Size, [], Rest),
+    {ok, lists:reverse(Types), Rest1}.
 
+decode_tuple_type(0, Acc, Rest) ->
+    {ok, Acc, Rest};
+decode_tuple_type(Size, Acc, Rest) ->
+    {ok, Type, Rest1} = decode_type(Rest),
+    decode_tuple_type(Size-1, [Type | Acc], Rest1).
+
+
+decode_udt_type(Size, Rest) ->
+    {ok, Types, Rest1} = decode_udt_type(Size, [], Rest),
+    {ok, lists:reverse(Types), Rest1}.
+
+decode_udt_type(0, Acc, Rest) ->
+    {ok, Acc, Rest};
+decode_udt_type(Size, Acc, Rest) ->
+    {ok, ColName, Rest1} = ?DATA:decode_string(Rest),
+    {ok, ColType, Rest2} = decode_type(Rest1),
+    decode_udt_type(Size-1, [{ColName, ColType} | Acc], Rest2).
+
+
+decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, PKCount:?INT, Rest/binary >>) ->
+    {ok, [GlobalTableSpec]} = decode_flags(Flags, [0]),
+
+    % TODO: Take the following into account. 
+    % Currently, we ignore the pk indices. We're not going eager routing yet.
+    {ok, PKIndices, Rest1} = decode_primarykey_indices(Rest, PKCount),
+
+    case GlobalTableSpec of
+        true ->
+            {ok, KeySpaceName, Rest2} = ?DATA:decode_string(Rest1),
+            {ok, TableName, Rest3} = ?DATA:decode_string(Rest2),
+            GlobalSpec = {KeySpaceName, TableName};
+        false ->
+            GlobalSpec = undefined,
+            Rest3 = Rest
+    end,
+
+    {ok, Columns, Rest4} = decode_columns_metadata(GlobalSpec, Rest3, ColumnCount, []),
+    {ok, #cqerl_result_metadata{columns_count=ColumnCount,
+                                columns=Columns}, Rest4}.
+
+decode_primarykey_indices(Binary, NumIndices) ->
+    decode_primarykey_indices(Binary, NumIndices, []).
+
+decode_primarykey_indices(Binary, 0, Acc) ->
+    {ok, lists:reverse(Acc), Binary};
+decode_primarykey_indices(<< PKIndex:?SHORT, Rest/binary >>, RemindingIndices, Acc) ->
+    decode_primarykey_indices(Rest, RemindingIndices-1, [PKIndex | Acc]).
 
 decode_result_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec, HasMorePages, NoMetadata]} = decode_flags(Flags, [0, 1, 2]),
@@ -285,11 +351,11 @@ request_frame(#cqerl_frame{tracing=Tracing,
                            compression_type=CompressionType,
                            stream_id=ID,
                            opcode=OpCode}, Body) when is_binary(Body) ->
-
+        
     FrameFlags = encode_frame_flags(Compression, Tracing),
     {ok, MaybeCompressedBody} = maybe_compress_body(Compression, CompressionType, Body),
     Size = size(MaybeCompressedBody),
-    {ok, iolist_to_binary([ << ?CQERL_FRAME_REQ:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR >>,
+    {ok, iolist_to_binary([ << ?CQERL_FRAME_REQ:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR >>,
                             << Size:?INT >>,
                             MaybeCompressedBody ])}.
 
@@ -415,11 +481,12 @@ execute_frame(Frame=#cqerl_frame{},
     {ok, binary()} | {error, badarg}.
 
 batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
-                                                   mode=Mode,
+                                                   mode=Type,
                                                    queries=Queries}) ->
     {ok, QueriesBin} = encode_batch_queries(Queries, []),
+    Flags = 0,
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_BATCH},
-                  << Mode:?CHAR, QueriesBin/binary, Consistency:?SHORT >>).
+                  << Type:?CHAR, QueriesBin/binary, Consistency:?SHORT, Flags:?CHAR >>).
 
 
 
@@ -435,21 +502,28 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
 -spec response_frame(ResponseFrame :: #cqerl_frame{}, Response :: bitstring()) ->
     {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}.
 
-response_frame(_Response, Binary) when size(Binary) < 8 ->
+response_frame(_Response, Binary) when size(Binary) < 9 ->
     {delay, Binary};
 
-response_frame(_Response, Binary = << _:4/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
+response_frame(_Response, Binary = << _:5/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
     {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
-               << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:8/big-signed-integer, OpCode:?CHAR, Size:?INT, Body0/binary >>)
-                                     when is_binary(Body0), FrameFlags < 5 andalso FrameFlags >= 0 ->
+               Whole = << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
+                                     when is_binary(Body0) ->
 
-    {Compression, Tracing} = decode_frame_flags(FrameFlags),
+    {ok, [Compression, Tracing, HasWarnings]} = decode_flags(FrameFlags, [0, 1, 3]),
     Response = Response0#cqerl_frame{opcode=OpCode, stream_id=ID, compression=Compression, tracing=Tracing},
     << Body1:Size/binary, Rest/binary >> = Body0,
     {ok, UncompressedBody} = maybe_decompress_body(Compression, CompressionType, Body1),
-    {ok, ResponseTerm} = decode_response_term(Response, UncompressedBody),
+    case HasWarnings of
+        true ->
+            {ok, Warnings, Body2} = ?DATA:decode_string_list(UncompressedBody),
+            io:format("Warning from Cassandra: ~p~n", [Warnings]);
+        false ->
+            Body2 = UncompressedBody
+    end,
+    {ok, ResponseTerm} = decode_response_term(Response, Body2),
     {ok, Response, ResponseTerm, Rest};
 
 response_frame(_, Binary) ->
@@ -526,17 +600,29 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 4:?INT, Body/bina
 %% Schema_change result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/binary >>) ->
     {ok, ChangeName, Rest1} = ?DATA:decode_string(Body),
-    ChangeType = case binary_to_atom(ChangeName, latin1) of
-        'CREATED' -> created;
-        'DROPPED' -> dropped;
-        'UPDATED' -> updated
+    {ok, TargetString, Rest2} = ?DATA:decode_string(Rest1),
+    SchemaChange0 = #cql_schema_changed{change_type=list_to_atom(string:to_lower(binary_to_list(ChangeName))),
+                                        target=list_to_atom(string:to_lower(binary_to_list(TargetString)))},
+    SchemaChange1 = if
+        SchemaChange0#cql_schema_changed.target == keyspace ->
+            {ok, KeyspaceName, _Rest} = ?DATA:decode_string(Rest2),
+            SchemaChange0#cql_schema_changed{keyspace=KeyspaceName};
+
+        SchemaChange0#cql_schema_changed.target == table orelse
+        SchemaChange0#cql_schema_changed.target == type ->
+            {ok, KeyspaceName, Rest3} = ?DATA:decode_string(Rest2),
+            {ok, EntityName, _Rest} = ?DATA:decode_string(Rest3),
+            SchemaChange0#cql_schema_changed{keyspace=KeyspaceName, name=EntityName};
+
+        SchemaChange0#cql_schema_changed.target == function orelse
+        SchemaChange0#cql_schema_changed.target == aggregate ->
+            {ok, KeyspaceName, Rest3} = ?DATA:decode_string(Rest2),
+            {ok, EntityName, Rest4} = ?DATA:decode_string(Rest3),
+            {ok, Args, _Rest} = ?DATA:decode_string_list(Rest4),
+            SchemaChange0#cql_schema_changed{keyspace=KeyspaceName, name=EntityName, args=Args}
     end,
-    {ok, KeySpaceName, Rest2} = ?DATA:decode_string(Rest1),
-    {ok, TableName, _Rest} = ?DATA:decode_string(Rest2),
-    {ok, {schema_change, #cql_schema_changed{change_type=ChangeType,
-                                             keyspace=KeySpaceName,
-                                             table=TableName}
-                                             }};
+    
+    {ok, {schema_change, SchemaChange1}};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
     {ok, EventNameBin, Rest0} = ?DATA:decode_string(Body),
