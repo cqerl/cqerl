@@ -424,9 +424,9 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?INT, Entries/binary >>;
 
-encode_data({tuple, Types, Tuple}, _Query) when is_tuple(Tuple) ->
+encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
     encode_data({tuple, Types, tuple_to_list(Tuple)}, _Query);
-encode_data({tuple, Types, List}, _Query) when is_list(List) ->
+encode_data({{tuple, Types}, List}, _Query) when is_list(List) ->
     GetValueBinary = fun({Type, Value}) ->
         Bin = encode_data({Type, Value}, _Query),
         {ok, Bytes} = encode_bytes(Bin),
@@ -434,7 +434,7 @@ encode_data({tuple, Types, List}, _Query) when is_list(List) ->
     end,
     << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- lists:zip(Types, List) >>;
 
-encode_data({udt, Types, Values}, _Query) when is_list(Values) ->
+encode_data({{udt, Types}, Values}, _Query) when is_list(Values) ->
     GetValueBinary = fun({Name, Type}) ->
         Value = proplists:get_value(binary_to_atom(Name, utf8), Values),
         Bin = encode_data({Type, Value}, _Query),
@@ -446,7 +446,7 @@ encode_data({udt, Types, Values}, _Query) when is_list(Values) ->
 encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_function(Handler) ->
     Handler(Val, Query);
 
-encode_data({Type, _}, _Query) -> throw({bad_param_type, Type}).
+encode_data({Type, Rest}, _Query) -> throw({bad_param_type, Type, Rest}).
 
 
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
