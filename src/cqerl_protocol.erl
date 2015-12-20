@@ -43,7 +43,6 @@ encode_query_valuelist(Values) when is_list(Values) ->
 
 
 
-
 encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
                                                 skip_metadata=SkipMetadata,
                                                 page_state=PageState,
@@ -648,14 +647,27 @@ encode_query_values(Values, Query) ->
 
 encode_query_values(Values, Query, []) ->
     encode_query_values(Values, Query);
-encode_query_values(Values, Query, ColumnSpecs) ->
+encode_query_values(Values, Query, ColumnSpecs) when is_list(Values) ->
     lists:map(fun
         (#cqerl_result_column_spec{name=ColumnName, type=Type}) ->
             case proplists:get_value(ColumnName, Values) of
                 undefined -> throw({missing_parameter, {parameter, ColumnName}, {in, Values}, {specs, ColumnSpecs}});
                 Value -> cqerl_datatypes:encode_data({Type, Value}, Query)
             end
-    end, ColumnSpecs).
+    end, ColumnSpecs);
+
+encode_query_values(ValueMap, Query, ColumnSpecs) ->
+    case code:which(maps) of
+        non_existing ->
+            throw(invalid_valuelist);
+        _ ->
+            case erlang:is_map(ValueMap) of
+                true ->
+                    encode_query_values(maps:to_list(ValueMap), Query, ColumnSpecs);
+                _ ->
+                    throw(invalid_valuelist)
+            end
+    end.
 
 
 
