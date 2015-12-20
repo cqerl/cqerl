@@ -22,10 +22,15 @@
     fetch_more_async/1,
 
     size/1,
+
     head/1,
+    head/2,
+
     tail/1,
     next/1,
+
     all_rows/1,
+    all_rows/2,
 
     start_link/0
 ]).
@@ -204,8 +209,14 @@ size(#cql_result{dataset=Dataset}) -> length(Dataset).
 %% @doc Returns the first row of result, as a property list
 
 head(#cql_result{dataset=[]}) -> empty_dataset;
-head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}) ->
-    cqerl_protocol:decode_row(Row, ColumnSpecs).
+head(Result) ->
+    case application:get_env(cqerl, maps) of
+        {ok, true} -> head(Result, [{maps, true}]);
+        _ -> head(Result, [])
+    end.
+
+head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}, Opts) ->
+    cqerl_protocol:decode_row(Row, ColumnSpecs, Opts).
 
 %% @doc Returns all rows of result, except the first one
 
@@ -225,9 +236,14 @@ next(Result) -> {head(Result), tail(Result)}.
 %% @doc Returns a list of rows as property lists
 
 all_rows(#cql_result{dataset=[]}) -> [];
-all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}) ->
-    [ cqerl_protocol:decode_row(Row, ColumnSpecs) || Row <- Rows ].
+all_rows(Result) ->
+    case application:get_env(cqerl, maps) of
+        {ok, true} -> all_rows(Result, [{maps, true}]);
+        _ -> all_rows(Result, [])
+    end.
 
+all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}, Opts) when is_list(Opts) ->
+    [ cqerl_protocol:decode_row(Row, ColumnSpecs, Opts) || Row <- Rows ].
 
 
 %% ====================

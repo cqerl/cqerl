@@ -13,7 +13,7 @@
          decode_result_metadata/1,
          decode_prepared_metadata/1,
          decode_result_matrix/4,
-         decode_row/2,
+         decode_row/3,
          encode_query_values/2,
          encode_query_values/3]).
 
@@ -132,13 +132,6 @@ maybe_decompress_body(true, lz4, Body) ->       lz4:unpack(Body).
 %% DATA DECODING FUNCTIONS
 %% =======================
 
-decode_frame_flags(3) -> {true, true};
-decode_frame_flags(2) -> {false, true};
-decode_frame_flags(1) -> {true, false};
-decode_frame_flags(0) -> {false, false}.
-
-
-
 
 decode_flags(Flags, ListOfMasks) ->
     decode_flags(Flags, ListOfMasks, []).
@@ -237,9 +230,9 @@ decode_udt_type(Size, Acc, Rest) ->
 decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, PKCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec]} = decode_flags(Flags, [0]),
 
-    % TODO: Take the following into account. 
+    % TODO: Take the following into account.
     % Currently, we ignore the pk indices. We're not going eager routing yet.
-    {ok, PKIndices, Rest1} = decode_primarykey_indices(Rest, PKCount),
+    {ok, _PKIndices, Rest1} = decode_primarykey_indices(Rest, PKCount),
 
     case GlobalTableSpec of
         true ->
@@ -351,7 +344,7 @@ request_frame(#cqerl_frame{tracing=Tracing,
                            compression_type=CompressionType,
                            stream_id=ID,
                            opcode=OpCode}, Body) when is_binary(Body) ->
-        
+
     FrameFlags = encode_frame_flags(Compression, Tracing),
     {ok, MaybeCompressedBody} = maybe_compress_body(Compression, CompressionType, Body),
     Size = size(MaybeCompressedBody),
@@ -509,7 +502,7 @@ response_frame(_Response, Binary = << _:5/binary, Size:?INT, Body/binary >>) whe
     {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
-               Whole = << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
+               << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
                                      when is_binary(Body0) ->
 
     {ok, [Compression, Tracing, HasWarnings]} = decode_flags(FrameFlags, [0, 1, 3]),
@@ -621,7 +614,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/bina
             {ok, Args, _Rest} = ?DATA:decode_string_list(Rest4),
             SchemaChange0#cql_schema_changed{keyspace=KeyspaceName, name=EntityName, args=Args}
     end,
-    
+
     {ok, {schema_change, SchemaChange1}};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
@@ -664,9 +657,40 @@ encode_query_values(Values, Query, ColumnSpecs) ->
             end
     end, ColumnSpecs).
 
-decode_row(Row, ColumnSpecs) ->
+
+
+decode_row(Row, ColumnSpecs, []) ->
+    decode_proplist_row(Row, ColumnSpecs);
+
+decode_row(Row, ColumnSpecs, [{maps, true}]) ->
+    case code:which(maps) of
+        non_existing -> decode_proplist_row(Row, ColumnSpecs);
+        _ -> decode_map_row(Row, ColumnSpecs)
+    end;
+decode_row(Row, ColumnSpecs, Opts) ->
+    try code:which(maps) of
+        non_existing -> throw(non_map);
+        _ ->
+            case proplists:lookup(maps, Opts) of
+                {maps, true} -> decode_map_row(Row, ColumnSpecs);
+                _ -> throw(non_map)
+            end
+    catch
+        throw:non_map ->
+            decode_proplist_row(Row, ColumnSpecs)
+    end.
+
+decode_proplist_row(Row, ColumnSpecs) ->
     lists:map(fun
         ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
             {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}),
             {Name, Data}
     end, lists:zip(Row, ColumnSpecs)).
+
+decode_map_row(Row, ColumnSpecs) ->
+    maps:from_list(lists:map(fun
+        ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
+            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, [ maps ]),
+            {Name, Data}
+    end, lists:zip(Row, ColumnSpecs))).
+

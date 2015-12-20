@@ -16,6 +16,8 @@
          encode_proplist_to_multimap/1,
 
          encode_data/2,
+
+         decode_data/2,
          decode_data/1,
 
          decode_string/1,
@@ -446,88 +448,93 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 
 encode_data({Type, _}, _Query) -> throw({bad_param_type, Type}).
 
+
 -spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
-decode_data({_Type, NullSize, Bin}) when NullSize < 0 ->
+decode_data(R) -> decode_data(R, []).
+
+-spec decode_data({Type :: datatype(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
+
+decode_data({_Type, NullSize, Bin}, _Opts) when NullSize < 0 ->
     {null, Bin};
 
-decode_data({UuidType, 16, Bin}) when UuidType == uuid orelse UuidType == timeuuid ->
+decode_data({UuidType, 16, Bin}, _Opts) when UuidType == uuid orelse UuidType == timeuuid ->
     << Uuid:16/binary, Rest/binary >> = Bin,
     {Uuid, Rest};
 
-decode_data({BigIntType, 8, Bin}) when BigIntType == bigint orelse
+decode_data({BigIntType, 8, Bin}, _Opts) when BigIntType == bigint orelse
                                        BigIntType == counter orelse
                                        BigIntType == timestamp orelse
                                        BigIntType == time ->
     << Number:64/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({int, 4, Bin}) ->
+decode_data({int, 4, Bin}, _Opts) ->
     << Number:32/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({smallint, 2, Bin}) ->
+decode_data({smallint, 2, Bin}, _Opts) ->
     << Number:16/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({tinyint, 1, Bin}) ->
+decode_data({tinyint, 1, Bin}, _Opts) ->
     << Number:8/big-signed-integer, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({double, 8, Bin}) ->
+decode_data({double, 8, Bin}, _Opts) ->
     << Val:64/big-float, Rest/binary >> = Bin,
     {Val, Rest};
 
-decode_data({float, 4, Bin}) ->
+decode_data({float, 4, Bin}, _Opts) ->
     << Val:32/big-float, Rest/binary >> = Bin,
     {Val, Rest};
 
-decode_data({date, 4, Bin}) ->
+decode_data({date, 4, Bin}, _Opts) ->
     << ThisDayCount:32/big-unsigned-integer, Rest/binary >> = Bin,
     RefDayCount = calendar:date_to_gregorian_days({1970, 1, 1}),
     GregorianDays = ThisDayCount - trunc(math:pow(2, 31)) + RefDayCount,
     Date = calendar:gregorian_days_to_date(GregorianDays),
     {Date, Rest};
 
-decode_data({TextType, Size, Bin}) when TextType == ascii orelse
+decode_data({TextType, Size, Bin}, _Opts) when TextType == ascii orelse
                                         TextType == varchar ->
     << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
 
-decode_data({blob, Size, Bin}) when Size < 0 ->
+decode_data({blob, Size, Bin}, _Opts) when Size < 0 ->
     {<<>>, Bin};
 
-decode_data({blob, Size, Bin}) ->
+decode_data({blob, Size, Bin}, _Opts) ->
     << Text:Size/binary, Rest/binary >> = Bin,
     {Text, Rest};
 
-decode_data({boolean, 1, Bin}) ->
+decode_data({boolean, 1, Bin}, _Opts) ->
     << Bool:8, Rest/binary >> = Bin,
     {Bool /= 0, Rest};
 
-decode_data({varint, Size, Bin}) ->
+decode_data({varint, Size, Bin}, _Opts) ->
     << Number:Size/big-signed-integer-unit:8, Rest/binary >> = Bin,
     {Number, Rest};
 
-decode_data({decimal, Size, Bin}) ->
+decode_data({decimal, Size, Bin}, _Opts) ->
     << Scale:?INT, Bin1/binary >> = Bin,
     IntSize = Size - 4,
     << Unscaled:IntSize/big-signed-integer-unit:8, Rest/binary >> = Bin1,
     {{Unscaled, Scale}, Rest};
 
-decode_data({inet, 4, << Addr:4/binary, Rest/binary >>}) ->
+decode_data({inet, 4, << Addr:4/binary, Rest/binary >>}, _Opts) ->
     << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR >> = Addr,
     {{A, B, C, D}, Rest};
 
-decode_data({inet, 16, << Addr:16/binary, Rest/binary >>}) ->
+decode_data({inet, 16, << Addr:16/binary, Rest/binary >>}, _Opts) ->
     << A:?SHORT, B:?SHORT, C:?SHORT, D:?SHORT,
        E:?SHORT, F:?SHORT, G:?SHORT, H:?SHORT >> = Addr,
     {{A, B, C, D, E, F, G, H}, Rest};
 
-decode_data({{ColType, ValueType}, Size, Bin}) when ColType == set; ColType == list ->
+decode_data({{ColType, ValueType}, Size, Bin}, Opts) when ColType == set; ColType == list ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
     << _N:?INT, EntriesBin/binary >> = CollectionBin,
-    List0 = [ decode_data({ValueType, Size1, ValueBin}) || << Size1:?INT, ValueBin:Size1/binary >> <= EntriesBin ],
+    List0 = [ decode_data({ValueType, Size1, ValueBin}, Opts) || << Size1:?INT, ValueBin:Size1/binary >> <= EntriesBin ],
     List1 = [ Value || {Value, _Rest} <- List0 ],
     List2 = case ColType of
         set -> ordsets:from_list(List1);
@@ -535,28 +542,40 @@ decode_data({{ColType, ValueType}, Size, Bin}) when ColType == set; ColType == l
     end,
     {List2, Rest};
 
-decode_data({{tuple, ValueTypes}, Size, Bin}) ->
+decode_data({{tuple, ValueTypes}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
     List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
-    List1 = [ decode_data({ValueType, Size2, ValueBin}) || {ValueType, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
+    List1 = [ decode_data({ValueType, Size2, ValueBin}, Opts) || {ValueType, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ Value || {Value, _Rest} <- List1 ],
     {List2, Rest};
 
-decode_data({{udt, ValueTypes}, Size, Bin}) ->
+decode_data({{udt, ValueTypes}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
     List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
-    List1 = [ {Name, decode_data({ValueType, Size2, ValueBin})} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
+    List1 = [ {Name, decode_data({ValueType, Size2, ValueBin}, Opts)} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
-    {List2, Rest};
 
-decode_data({{map, KeyType, ValueType}, Size, Bin}) ->
+    case proplists:lookup(maps, Opts) of
+        {maps, true} ->
+            {maps:from_list(List2), Rest};
+        _ ->
+            {List2, Rest}
+    end;
+
+decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
     << _N:?INT, EntriesBin/binary >> = CollectionBin,
-    List = [ { element(1, decode_data({KeyType, KSize, KeyBin})),
-               element(1, decode_data({ValueType, VSize, ValueBin})) } ||
+    List = [ { element(1, decode_data({KeyType, KSize, KeyBin}, Opts)),
+               element(1, decode_data({ValueType, VSize, ValueBin}, Opts)) } ||
         << KSize:?INT, KeyBin:KSize/binary, VSize:?INT, ValueBin:VSize/binary >> <= EntriesBin ],
-    {List, Rest};
 
-decode_data({_, Size, << Size:?INT, Data/binary >>}) ->
+    case proplists:lookup(maps, Opts) of
+        {maps, trus} ->
+            {maps:from_list(List), Rest};
+        _ ->
+            {List, Rest}
+    end;
+
+decode_data({_, Size, << Size:?INT, Data/binary >>}, _Opts) ->
     << Data:Size/binary, Rest/binary >> = Data,
     {{unknown_type, Data}, Rest}.
