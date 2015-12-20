@@ -615,6 +615,9 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
 prepare_node_info({AtomAddr, Port}) when is_atom(AtomAddr) ->
   prepare_node_info({atom_to_list(AtomAddr), Port});
 
+prepare_node_info({BinaryArr, Port}) when is_binary(BinaryArr) ->
+    prepare_node_info({ binary_to_list(BinaryArr), Port });
+
 prepare_node_info({StringAddr, Port}) when is_list(StringAddr) ->
     case ?CQERL_PARSE_ADDR(StringAddr) of
       {ok, IpAddr} -> {IpAddr, Port};
