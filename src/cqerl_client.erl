@@ -462,6 +462,10 @@ dequeue_query(State0=#state{queued=Queue0}) ->
             State1 = process_outgoing_query(Call, Batch, State0),
             {true, State1#state{queued=Queue1}};
 
+        {{value, {prepare, Query}}, Queue1} when is_binary(Query) ->
+            State1 = process_outgoing_query(prepare, Query, State0),
+            {true, State1#client_state{queued=Queue1}};
+
         {{value, {Call, Item}}, Queue1} ->
             Query = case Item of
                 #cql_query{} -> Item;
