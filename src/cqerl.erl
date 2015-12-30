@@ -614,6 +614,11 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
 
 -spec prepare_node_info(NodeInfo :: any()) -> Node :: inet().
 
+prepare_node_info({AtomAddr, Port}) when is_list(Port) ->
+    {PortInt, []} = string:to_integer(Port),
+    prepare_node_info({ AtomAddr, PortInt });
+prepare_node_info({AtomAddr, Port}) when is_binary(Port) ->
+    prepare_node_info({ AtomAddr, binary_to_list(Port) });
 prepare_node_info({AtomAddr, Port}) when is_atom(AtomAddr) ->
   prepare_node_info({atom_to_list(AtomAddr), Port});
 
@@ -638,5 +643,10 @@ prepare_node_info(Addr) when is_atom(Addr);
 
 -spec pool_from_node(Node :: inet()) -> atom().
 
+pool_from_node({ Addr, Port, Keyspace }) when is_list(Port) ->
+    {PortInt, []} = string:to_integer(Port),
+    pool_from_node({ Addr, PortInt, Keyspace });
+pool_from_node({ Addr, Port, Keyspace }) when is_binary(Port) ->
+    pool_from_node({ Addr, binary_to_list(Port), Keyspace });
 pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).
