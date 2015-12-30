@@ -274,7 +274,11 @@ encode_data({uuid, weak}, _Query) ->
 
 encode_data({UuidType, Uuid}, _Query) when UuidType == uuid orelse UuidType == timeuuid ->
     case Uuid of
-        << _:128 >> -> Uuid
+        << _:128 >> ->
+            Uuid;
+        UuidList when is_list(UuidList) andalso length(UuidList) == 36;
+                      is_binary(UuidList) andalso size(UuidList) == 36 ->
+            uuid:string_to_uuid(UuidList)
     end;
 
 encode_data({ascii, Data}, _Query) when is_list(Data) ->
