@@ -350,7 +350,7 @@ encode_data({int, Val}, _Query) when is_float(Val) ->
     Int = trunc(Val),
     << Int:32/big-signed-integer >>;
 
-encode_data({date, Date={_Year, _Month, _Day}}, Query) ->
+encode_data({date, Date={_Year, _Month, _Day}}, _Query) ->
     RefDayCount = calendar:date_to_gregorian_days({1970, 1, 1}),
     ThisDayCount = calendar:date_to_gregorian_days(Date) - RefDayCount + trunc(math:pow(2, 31)),
     << ThisDayCount:32/big-unsigned-integer >>;
