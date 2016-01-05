@@ -253,7 +253,7 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
 
 
 
--spec encode_data({Type :: datatype(), Value :: term()}, Query :: #cql_query{}) -> binary().
+-spec encode_data({Type :: datatype() | {datatype(), term()}, Value :: term()}, Query :: #cql_query{}) -> binary().
 
 encode_data({_Type, null}, _Query) ->
     null;
@@ -455,11 +455,11 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 encode_data({Type, Rest}, _Query) -> throw({bad_param_type, Type, Rest}).
 
 
--spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
 decode_data(R) -> decode_data(R, []).
 
--spec decode_data({Type :: datatype(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
 
 decode_data({_Type, NullSize, Bin}, _Opts) when NullSize < 0 ->
     {null, Bin};
