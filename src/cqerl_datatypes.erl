@@ -431,7 +431,7 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
     << Length:?INT, Entries/binary >>;
 
 encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
-    encode_data({tuple, Types, tuple_to_list(Tuple)}, _Query);
+    encode_data({{tuple, Types}, tuple_to_list(Tuple)}, _Query);
 encode_data({{tuple, Types}, List}, _Query) when is_list(List) ->
     GetValueBinary = fun({Type, Value}) ->
         Bin = encode_data({Type, Value}, _Query),
