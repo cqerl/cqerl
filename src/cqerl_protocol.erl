@@ -478,6 +478,10 @@ execute_frame(Frame=#cqerl_frame{},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
+encode_mode_name(Mode) when is_integer(Mode) -> Mode;
+encode_mode_name(logged)   -> ?CQERL_BATCH_LOGGED;
+encode_mode_name(unlogged) -> ?CQERL_BATCH_UNLOGGED;
+encode_mode_name(counter)  -> ?CQERL_BATCH_COUNTER.
 
 
 %% @doc Given frame options and batch record (containing a set of queries), produce a
@@ -491,9 +495,10 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
                                                    queries=Queries}) ->
     {ok, QueriesBin} = encode_batch_queries(Queries, []),
     Flags = 0,
+    TypeInt = encode_mode_name(Type),
     ConsistencyInt = encode_consistency_name(Consistency),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_BATCH},
-                  << Type:?CHAR, QueriesBin/binary, ConsistencyInt:?SHORT, Flags:?CHAR >>).
+                  << TypeInt:?CHAR, QueriesBin/binary, ConsistencyInt:?SHORT, Flags:?CHAR >>).
 
 
 

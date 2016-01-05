@@ -213,13 +213,13 @@ Special cases include:
 To perform batched queries (which can include any non-`SELECT` [DML][5] statements), simply put one or more `#cql_query{}` records in a `#cql_query_batch{}` record, and run it in place of a normal `#cql_query{}`. `#cql_query_batch{}` include the following fields:
 
 1. The `consistency` level to apply when executing the batch of queries.
-2. The `mode` of the batch, which can be `?CQERL_BATCH_LOGGED`, `?CQERL_BATCH_UNLOGGED` or `?CQERL_BATCH_COUNTER` (declared in [`include/cqerl.hrl`](include/cqerl.hrl)). Running a batch in *unlogged* mode removes the performance penalty of enforcing atomicity. The *counter* mode should be used to perform batched mutation of counter values.
+2. The `mode` of the batch, which can be `logged`, `unlogged` or `counter`. Running a batch in *unlogged* mode removes the performance penalty of enforcing atomicity. The *counter* mode should be used to perform batched mutation of counter values.
 3. Finally, you must specify the list of `queries`.
 
 ```erlang
 InsertQ = #cql_query{statement = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);"},
 {ok, void} = cqerl:run_query(Client, #cql_query_batch{
-  mode=?CQERL_BATCH_UNLOGGED,
+  mode=unlogged,
   queries=[
     InsertQ#cql_query{values = [{id, new},{name, "sean"},{password, "12312"}]},
     InsertQ#cql_query{values = [{id, new},{name, "jenna"},{password, "11111"}]},

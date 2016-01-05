@@ -32,6 +32,7 @@
 
 -type consistency_level() :: any | one | two | three | quorum | all | local_quorum | each_quorum | serial | local_serial | local_one.
 -type serial_consistency() :: serial | local_serial.
+-type batch_mode() :: logged | unlogged | counter.
 -type column_type() ::
   {custom, binary()} |
   {map, column_type(), column_type()} |
@@ -67,8 +68,8 @@
 }).
 
 -record(cql_query_batch, {
-    mode                = ?CQERL_BATCH_LOGGED :: ?CQERL_BATCH_LOGGED .. ?CQERL_BATCH_COUNTER,
     consistency         = one :: consistency_level(),
+    mode                = logged :: batch_mode() | integer(),
     queries             = [] :: list(tuple())
 }).
 
