@@ -650,7 +650,9 @@ encode_query_values(Values, Query, []) ->
 encode_query_values(Values, Query, ColumnSpecs) when is_list(Values) ->
     lists:map(fun
         (#cqerl_result_column_spec{name=ColumnName, type=Type}) ->
-            case proplists:get_value(ColumnName, Values) of
+            case proplists:get_value(ColumnName, Values, not_found) of
+                not_found ->
+                    throw({missing_parameter, {parameter, ColumnName}, {in, Values}, {specs, ColumnSpecs}});
                 undefined ->
                     cqerl_datatypes:encode_data({Type, null}, Query);
                 Value ->
