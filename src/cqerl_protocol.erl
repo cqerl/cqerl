@@ -94,10 +94,10 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
             PageStateFlag = 0
     end,
 
-    case SerialConsistency of
-        SerialConsistency when SerialConsistency == serial ;
-                               SerialConsistency == local_serial ->
-            SerialConsistencyInt = encode_consistency_name(SerialConsistency),
+    SerialConsistencyInt = encode_consistency_name(SerialConsistency),
+    case SerialConsistencyInt of
+        SerialConsistencyInt when SerialConsistencyInt == ?CQERL_CONSISTENCY_SERIAL;
+                                  SerialConsistencyInt == ?CQERL_CONSISTENCY_LOCAL_SERIAL ->
             SerialConsistencyBin = << SerialConsistencyInt:?SHORT >>,
             SerialConsistencyFlag = 1;
         _ ->
