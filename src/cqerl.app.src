@@ -12,8 +12,12 @@
                   stdlib,
                   ssl,
                   pooler,
-                  re2]},
+                  re2,
+                  semver,
+                  snappy,
+                  lz4,
+                  uuid]},
 
-  {mod, { cqerl_app, []}},
+  {mod, {cqerl_app, []}},
   {env, []}
  ]}.
