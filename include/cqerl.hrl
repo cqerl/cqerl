@@ -30,9 +30,15 @@
     false -> inet_parse:address(Addr)
   end).
 
+-type consistency_level_int() :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL.
 -type consistency_level() :: any | one | two | three | quorum | all | local_quorum | each_quorum | serial | local_serial | local_one.
+
+-type serial_consistency_int() :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL.
 -type serial_consistency() :: serial | local_serial.
+
+-type batch_mode_int() :: ?CQERL_BATCH_LOGGED | ?CQERL_BATCH_UNLOGGED | ?CQERL_BATCH_COUNTER.
 -type batch_mode() :: logged | unlogged | counter.
+
 -type column_type() ::
   {custom, binary()} |
   {map, column_type(), column_type()} |
@@ -55,8 +61,8 @@
     page_size   = 100       :: integer(),
     page_state              :: binary() | undefined,
     
-    consistency = one :: consistency_level(),
-    serial_consistency = undefined :: serial_consistency() | undefined,
+    consistency = one :: consistency_level() | consistency_level_int(),
+    serial_consistency = undefined :: serial_consistency() | serial_consistency_int() | undefined,
 
     value_encode_handler = undefined :: function() | undefined
 }).
@@ -68,8 +74,8 @@
 }).
 
 -record(cql_query_batch, {
-    consistency         = one :: consistency_level(),
-    mode                = logged :: batch_mode() | integer(),
+    consistency         = one :: consistency_level() | consistency_level_int(),
+    mode                = logged :: batch_mode() | batch_mode_int(),
     queries             = [] :: list(tuple())
 }).
 

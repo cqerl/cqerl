@@ -42,6 +42,7 @@ encode_query_valuelist(Values) when is_list(Values) ->
     {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
 
 
+-spec encode_consistency_name(consistency_level() | consistency_level_int()) -> consistency_level_int().
 encode_consistency_name(Name) when is_integer(Name) -> Name;
 encode_consistency_name(any)          -> ?CQERL_CONSISTENCY_ANY;
 encode_consistency_name(one)          -> ?CQERL_CONSISTENCY_ONE;
@@ -478,6 +479,7 @@ execute_frame(Frame=#cqerl_frame{},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
+-spec encode_mode_name(batch_mode() | batch_mode_int()) -> batch_mode_int().
 encode_mode_name(Mode) when is_integer(Mode) -> Mode;
 encode_mode_name(logged)   -> ?CQERL_BATCH_LOGGED;
 encode_mode_name(unlogged) -> ?CQERL_BATCH_UNLOGGED;

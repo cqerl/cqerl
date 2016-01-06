@@ -36,11 +36,11 @@
 }).
 
 -record(cqerl_query_parameters, {
-    consistency         = any :: any | one | two | three | quorum | all | local_quorum | each_quorum | serial | local_serial | integer(),
+    consistency         = any :: consistency_level() | consistency_level_int(),
     skip_metadata       = false :: boolean(),
     page_state          = undefined :: binary() | undefined,
     page_size           = undefined :: integer() | undefined,
-    serial_consistency  = undefined :: serial | local_serial | undefined | integer()
+    serial_consistency  = undefined :: serial_consistency() | serial_consistency_int() | undefined
 }).
 
 -record(cqerl_query, {
