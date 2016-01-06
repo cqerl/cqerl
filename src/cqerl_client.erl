@@ -24,10 +24,7 @@
     {ok, Val} -> Val
 end).
 
--define(STATE_FROM_RETURN(Resp), case element(tuple_size(Resp), Resp) of
-    N_ when is_integer(N_) -> element(tuple_size(Resp) - 1, Resp);
-    State_ -> State_
-end).
+-define(IS_IOLIST(L), is_list(L) orelse is_binary(L)).
 
 -export([init/1, terminate/3,
          starting/2,    starting/3,
@@ -60,9 +57,9 @@ end).
 }).
 
 -record(client_user, {
-    ref :: reference(),
+    ref :: reference() | '_',
     pid :: pid(),
-    monitor :: reference()
+    monitor :: reference() | '_'
 }).
 
 %% ------------------------------------------------------------------
@@ -78,21 +75,17 @@ new_user(Pid, From) ->
 remove_user({ClientPid, ClientRef}) ->
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
 
-run_query({ClientPid, ClientRef}, Query) when is_binary(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=Query}}, ?FSM_TIMEOUT);
-run_query({ClientPid, ClientRef}, Query) when is_list(Query) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, #cql_query{statement=list_to_binary(Query)}}, ?FSM_TIMEOUT);
-run_query({ClientPid, ClientRef}, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-    gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query#cql_query{statement=list_to_binary(Statement)}}, ?FSM_TIMEOUT);
+run_query(Client, Query) when ?IS_IOLIST(Query) ->
+    run_query(Client, #cql_query{statement=Query});
+run_query(Client, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
+    run_query(Client, Query#cql_query{statement=iolist_to_binary(Statement)});
 run_query({ClientPid, ClientRef}, Query) ->
     gen_fsm:sync_send_event(ClientPid, {send_query, ClientRef, Query}, ?FSM_TIMEOUT).
 
-query_async(Client, Query) when is_binary(Query) ->
+query_async(Client, Query) when ?IS_IOLIST(Query) ->
     query_async(Client, #cql_query{statement=Query});
-query_async(Client, Query) when is_list(Query) ->
-    query_async(Client, #cql_query{statement=list_to_binary(Query)});
 query_async(Client, Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-    query_async(Client, Query#cql_query{statement=list_to_binary(Statement)});
+    query_async(Client, Query#cql_query{statement=iolist_to_binary(Statement)});
 query_async({ClientPid, ClientRef}, Query) ->
     QueryRef = make_ref(),
     gen_fsm:send_event(ClientPid, {send_query, {self(), QueryRef}, ClientRef, Query}),
@@ -357,7 +350,8 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT}, {set_keyspace, _KeySpaceName}, Delayed} ->
             {next_state, live, switch_to_live_state(State) }
     end,
-    activate_socket(?STATE_FROM_RETURN(Resp)),
+    {_, _, State1} = Resp,
+    activate_socket(State1),
     append_delayed_segment(Resp, Delayed);
 
 handle_info({ rows, Call, Result }, live, State) ->
@@ -420,12 +414,10 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
     end,
 
     case Resp of
-      {stop, Resp1} ->
-        activate_socket(?STATE_FROM_RETURN(Resp1)),
+      {stop, {_, _, State1} = Resp1} ->
+        activate_socket(State1),
         append_delayed_segment(Resp1, Delayed);
-      {_, _, State1} ->
-        handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>});
-      {_, _, _, State1} ->
+      {next_state, live, State1} ->
         handle_info({Transport, Socket, Delayed}, live, State1#client_state{delayed = <<>>})
     end;
 
@@ -539,10 +531,7 @@ maybe_signal_busy(State) ->
 
 
 append_delayed_segment({X, Y, State}, Delayed) ->
-    {X, Y, State#client_state{delayed=Delayed}};
-append_delayed_segment({X, Y, Z, State}, Delayed) ->
-    {X, Y, Z, State#client_state{delayed=Delayed}}.
-
+    {X, Y, State#client_state{delayed=Delayed}}.
 
 
 
@@ -783,7 +772,7 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
         end,
         lists:map(fun (Version) -> semver:parse(Version) end, Versions)
     ),
-    case application:get_env(cqerl, preferred_cql_version) of
+    case application:get_env(cqerl, preferred_cql_version, undefined) of
         undefined ->
             [GreaterVersion|_] = SemVersions;
 
@@ -810,10 +799,8 @@ seq_frame(State=#client_state{compression_type=CompressionType, available_slots=
 
 
 module_exists(Module) ->
-    case is_atom(Module) of
-        true ->
-            try Module:module_info() of _InfoList -> true
-            catch _:_ -> false end;
+    case code:is_loaded(Module) of
+        {file, _} -> true;
         false -> false
     end.
 

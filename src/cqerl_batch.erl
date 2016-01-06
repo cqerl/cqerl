@@ -11,9 +11,8 @@ init(Call={ClientPid, _}, _Inet, Batch=#cql_query_batch{queries=Queries0}, Paren
     Debug = sys:debug_options([]),
     proc_lib:init_ack(Parent, {ok, self()}),
     Queries = lists:map(fun
-        (Query=#cql_query{statement=Statement}) when is_list(Statement) ->
-            Query#cql_query{statement=list_to_binary(Statement)};
-        (Query) -> Query
+        (Query=#cql_query{statement=Statement}) ->
+            Query#cql_query{statement=iolist_to_binary(Statement)}
     end, Queries0),
     QueryStates = lists:zip(
         Queries,
@@ -38,7 +37,10 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
                     loop(Call, Batch#cql_query_batch{queries=NewQueries}, Debug, Parent);
 
                 {preparation_failed, Reason} ->
-                    cqerl_client:batch_failed(Call, Batch, Reason),
+                    %% TODO: The function cqerl_client:batch_failed/3 doesn't
+                    %% exist. If this call is important, the function will need
+                    %% to be implemented. Otherwise, we should remove this call.
+                    %% cqerl_client:batch_failed(Call, Batch, Reason),
                     exit({failed, {Reason, Call, Batch}});
 
                 {system, From, Request} ->

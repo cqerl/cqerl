@@ -24,6 +24,7 @@
          decode_long_string/1,
          decode_bytes/1,
          decode_short_bytes/1,
+         decode_inet/1,
          decode_string_list/1,
          decode_map_to_proplist/1,
          decode_multimap_to_proplist/1]).
@@ -114,16 +115,14 @@ encode_proplist_to_map(PropList) ->
     Length = length(IOList),
     {ok, << Length:?SHORT, Binary/binary >>}.
 
+to_binary(Atom) when is_atom(Atom) -> atom_to_binary(Atom, latin1);
+to_binary(List) when is_list(List) -> list_to_binary(List);
+to_binary(Binary) when is_binary(Binary) -> Binary.
 
 encode_proplist_to_map([{Key, Value}|Rest], Acc) when is_binary(Value) ->
-    KeyBin0 = case Key of
-        Atom when is_atom(Atom) -> atom_to_binary(Atom, latin1);
-        String when is_list(String) -> list_to_binary(String);
-        String when is_binary(String) -> String
-    end,
-    {ok, KeyBin1} = encode_string(KeyBin0),
-    {ok, ValueBin} = encode_string(Value),
-    encode_proplist_to_map(Rest, [[KeyBin1, ValueBin] | Acc]);
+    {ok, KeyBin} = encode_string(to_binary(Key)),
+    {ok, ValueBin} = encode_string(to_binary(Value)),
+    encode_proplist_to_map(Rest, [[KeyBin, ValueBin] | Acc]);
 
 encode_proplist_to_map([_|Rest], Acc) ->
     encode_proplist_to_map(Rest, Acc);
@@ -207,6 +206,9 @@ decode_short_bytes(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Len
     {error, malformed_binary, Bin}.
 
 
+decode_inet(<<Length:?CHAR, Rest/binary>>) ->
+    <<Address:Length/binary, Port:?INT, Rest1/binary>> = Rest,
+    {ok, {binary_to_list(Address), Port}, Rest1}.
 
 
 decode_string_list(<< ListLength:?SHORT, Rest/binary >>) ->
@@ -251,7 +253,7 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
 
 
 
--spec encode_data({Type :: datatype(), Value :: term()}, Query :: #cql_query{}) -> binary().
+-spec encode_data({Type :: datatype() | {datatype(), term()}, Value :: term()}, Query :: #cql_query{}) -> binary().
 
 encode_data({_Type, null}, _Query) ->
     null;
@@ -429,7 +431,7 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
     << Length:?INT, Entries/binary >>;
 
 encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
-    encode_data({tuple, Types, tuple_to_list(Tuple)}, _Query);
+    encode_data({{tuple, Types}, tuple_to_list(Tuple)}, _Query);
 encode_data({{tuple, Types}, List}, _Query) when is_list(List) ->
     GetValueBinary = fun({Type, Value}) ->
         Bin = encode_data({Type, Value}, _Query),
@@ -453,11 +455,11 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 encode_data({Type, Rest}, _Query) -> throw({bad_param_type, Type, Rest}).
 
 
--spec decode_data({Type :: datatype(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
 
 decode_data(R) -> decode_data(R, []).
 
--spec decode_data({Type :: datatype(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
 
 decode_data({_Type, NullSize, Bin}, _Opts) when NullSize < 0 ->
     {null, Bin};

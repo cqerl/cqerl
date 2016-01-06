@@ -72,8 +72,8 @@
 }).
 
 -record(cql_client, {
-    node  :: tuple(),
-    pid   :: pid(),
+    node  :: tuple() | '_',
+    pid   :: pid() | '_',
     busy  :: boolean()
 }).
 
@@ -96,13 +96,13 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
--spec new_client(Inet :: inet()) -> {ok, client()}.
+-spec new_client(Inet :: inet() | {}) -> {ok, client()}.
 new_client({}) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
 new_client(Inet) ->
     new_client(Inet, []).
 
--spec new_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients}.
+-spec new_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients}.
 new_client({}, Opts) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, Opts);
 new_client(Inet, Opts) ->
@@ -115,7 +115,7 @@ new_client(Inet, Opts) ->
 %%
 %% This function will return immediately no matter if the client has already been closed or not.
 
--spec close_client(ClientRef :: client()) -> no_return().
+-spec close_client(ClientRef :: client()) -> ok.
 close_client(ClientRef) ->
     cqerl_client:remove_user(ClientRef).
 
@@ -146,7 +146,7 @@ close_client(ClientRef) ->
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
 %% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+-spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
     cqerl_client:run_query(ClientRef, Query).
 
@@ -301,7 +301,7 @@ handle_call(Req={get_client, Node, Opts}, From,
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             case orddict:find(NodeKey, State2#cqerl_state.client_stats) of
-                #cql_client_stats{count=0} ->
+                {ok, #cql_client_stats{count=0}} ->
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
                 _ ->
                     select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
@@ -641,7 +641,7 @@ prepare_node_info(Addr) when is_atom(Addr);
                              is_tuple(Addr) andalso erlang:size(Addr) == 8 ->  % v6
     prepare_node_info({Addr, ?DEFAULT_PORT}).
 
--spec pool_from_node(Node :: inet()) -> atom().
+-spec pool_from_node(Node :: {inet:ip_address() | string(), integer() | string() | binary(), atom()}) -> atom().
 
 pool_from_node({ Addr, Port, Keyspace }) when is_list(Port) ->
     {PortInt, []} = string:to_integer(Port),
