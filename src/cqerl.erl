@@ -92,7 +92,7 @@ prepare_client(Inet) -> prepare_client(Inet, []).
 
 
 
--spec new_client() -> {ok, client()} | {error, no_available_clients}.
+-spec new_client() -> {ok, client()} | {error, no_available_clients | no_configured_node}.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
@@ -102,7 +102,7 @@ new_client({}) ->
 new_client(Inet) ->
     new_client(Inet, []).
 
--spec new_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients}.
+-spec new_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients} | {closed, term()}.
 new_client({}, Opts) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, Opts);
 new_client(Inet, Opts) ->
