@@ -86,8 +86,9 @@ groups() -> [
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [datatypes_test, 
-     {group, connection}, 
+    [datatypes_test,
+     protocol_test,
+     {group, connection},
      {group, database}
     ].
 
@@ -234,7 +235,10 @@ end_per_testcase(TestCase, Config) ->
 
 datatypes_test(_Config) ->
     ok = eunit:test(cqerl_datatypes).
-    
+
+protocol_test(_Config) ->
+    ok = eunit:test(cqerl_protocol).
+
 get_multiple_clients(Config, 0, Acc) -> Acc;
 get_multiple_clients(Config, N, Acc) ->
     get_multiple_clients(Config, N-1, [get_client(Config) | Acc]).
