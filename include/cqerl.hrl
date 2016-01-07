@@ -30,8 +30,8 @@
     false -> inet_parse:address(Addr)
   end).
 
--type consistency_level_int() :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL.
--type consistency_level() :: any | one | two | three | quorum | all | local_quorum | each_quorum | serial | local_serial | local_one.
+-type consistency_level_int() :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_EACH_QUORUM | ?CQERL_CONSISTENCY_LOCAL_ONE.
+-type consistency_level() :: any | one | two | three | quorum | all | local_quorum | each_quorum | local_one.
 
 -type serial_consistency_int() :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL.
 -type serial_consistency() :: serial | local_serial.
