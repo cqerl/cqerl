@@ -38,11 +38,11 @@
 }).
 
 -record(cqerl_query_parameters, {
-    consistency         = ?CQERL_CONSISTENCY_ANY :: ?CQERL_CONSISTENCY_ANY .. ?CQERL_CONSISTENCY_LOCAL_SERIAL,
+    consistency         = any :: consistency_level() | consistency_level_int(),
     skip_metadata       = false :: boolean(),
     page_state          = undefined :: binary() | undefined,
     page_size           = undefined :: integer() | undefined,
-    serial_consistency  = undefined :: ?CQERL_CONSISTENCY_SERIAL | ?CQERL_CONSISTENCY_LOCAL_SERIAL | undefined
+    serial_consistency  = undefined :: serial_consistency() | serial_consistency_int() | undefined
 }).
 
 -record(cqerl_query, {

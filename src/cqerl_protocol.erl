@@ -42,6 +42,24 @@ encode_query_valuelist(Values) when is_list(Values) ->
     {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
 
 
+-spec encode_consistency_name(consistency_level() | consistency_level_int()) -> consistency_level_int().
+encode_consistency_name(Name) when is_integer(Name) -> Name;
+encode_consistency_name(any)          -> ?CQERL_CONSISTENCY_ANY;
+encode_consistency_name(one)          -> ?CQERL_CONSISTENCY_ONE;
+encode_consistency_name(two)          -> ?CQERL_CONSISTENCY_TWO;
+encode_consistency_name(three)        -> ?CQERL_CONSISTENCY_THREE;
+encode_consistency_name(quorum)       -> ?CQERL_CONSISTENCY_QUORUM;
+encode_consistency_name(all)          -> ?CQERL_CONSISTENCY_ALL;
+encode_consistency_name(local_quorum) -> ?CQERL_CONSISTENCY_LOCAL_QUORUM;
+encode_consistency_name(each_quorum)  -> ?CQERL_CONSISTENCY_EACH_QUORUM;
+encode_consistency_name(local_one)    -> ?CQERL_CONSISTENCY_LOCAL_ONE.
+
+-spec encode_serial_consistency_name(serial_consistency() | serial_consistency_int() | undefined) -> 0 | serial_consistency_int().
+encode_serial_consistency_name(Name) when is_integer(Name) -> Name;
+encode_serial_consistency_name(undefined)    -> 0;
+encode_serial_consistency_name(serial)       -> ?CQERL_CONSISTENCY_SERIAL;
+encode_serial_consistency_name(local_serial) -> ?CQERL_CONSISTENCY_LOCAL_SERIAL.
+
 
 encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
                                                 skip_metadata=SkipMetadata,
@@ -81,17 +99,19 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
             PageStateFlag = 0
     end,
 
-    case SerialConsistency of
-        SerialConsistency when SerialConsistency == ?CQERL_CONSISTENCY_SERIAL ;
-                                                     SerialConsistency == ?CQERL_CONSISTENCY_LOCAL_SERIAL ->
-            SerialConsistencyBin = << SerialConsistency:?SHORT >>,
+    SerialConsistencyInt = encode_serial_consistency_name(SerialConsistency),
+    case SerialConsistencyInt of
+        SerialConsistencyInt when SerialConsistencyInt == ?CQERL_CONSISTENCY_SERIAL;
+                                  SerialConsistencyInt == ?CQERL_CONSISTENCY_LOCAL_SERIAL ->
+            SerialConsistencyBin = << SerialConsistencyInt:?SHORT >>,
             SerialConsistencyFlag = 1;
         _ ->
             SerialConsistencyBin = <<>>,
             SerialConsistencyFlag = 0
     end,
+    ConsistencyInt = encode_consistency_name(Consistency),
     Flags = << 0:3, SerialConsistencyFlag:1, PageStateFlag:1, PageSizeFlag:1, SkipMetadataFlag:1, ValuesFlag:1 >>,
-    {ok, iolist_to_binary([ << Consistency:?SHORT >>, Flags, ValueBin, PageSizeBin, PageStateBin, SerialConsistencyBin ])}.
+    {ok, iolist_to_binary([ << ConsistencyInt:?SHORT >>, Flags, ValueBin, PageSizeBin, PageStateBin, SerialConsistencyBin ])}.
 
 
 
@@ -464,6 +484,11 @@ execute_frame(Frame=#cqerl_frame{},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
+-spec encode_mode_name(batch_mode() | batch_mode_int()) -> batch_mode_int().
+encode_mode_name(Mode) when is_integer(Mode) -> Mode;
+encode_mode_name(logged)   -> ?CQERL_BATCH_LOGGED;
+encode_mode_name(unlogged) -> ?CQERL_BATCH_UNLOGGED;
+encode_mode_name(counter)  -> ?CQERL_BATCH_COUNTER.
 
 
 %% @doc Given frame options and batch record (containing a set of queries), produce a
@@ -477,8 +502,10 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
                                                    queries=Queries}) ->
     {ok, QueriesBin} = encode_batch_queries(Queries, []),
     Flags = 0,
+    TypeInt = encode_mode_name(Type),
+    ConsistencyInt = encode_consistency_name(Consistency),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_BATCH},
-                  << Type:?CHAR, QueriesBin/binary, Consistency:?SHORT, Flags:?CHAR >>).
+                  << TypeInt:?CHAR, QueriesBin/binary, ConsistencyInt:?SHORT, Flags:?CHAR >>).
 
 
 
