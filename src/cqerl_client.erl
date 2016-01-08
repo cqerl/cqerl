@@ -705,15 +705,6 @@ create_socket({Addr, Port}, Opts) ->
 
 
 
-
-close_socket(#client_state{trans=ssl, socket=Socket}) ->
-    ssl:close(Socket);
-close_socket(#client_state{trans=tcp, socket=Socket}) ->
-    gen_tcp:close(Socket).
-
-
-
-
 activate_socket(#client_state{socket=undefined}) ->
     ok;
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
@@ -815,6 +806,5 @@ get_sleep_duration(Opts) ->
     end).
 
 stop_during_startup(Reason, State = #client_state{users = Users}) ->
-    close_socket(State),
     lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
     {stop, normal, State#client_state{socket=undefined}}.
