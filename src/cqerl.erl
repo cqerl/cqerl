@@ -259,7 +259,6 @@ start_link() ->
 init([]) ->
     random:seed(?SEED),
     process_flag(trap_exit, true),
-    io:format("== Starting CQErl frontend. ==~n", []),
     BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
         client_stats = [],
         named_nodes = []
