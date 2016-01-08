@@ -264,9 +264,8 @@ handle_info({preparation_failed, {_Inet, Statement}, Reason}, live,
             {next_state, live, State}
     end;
 
-handle_info({ tcp_closed, _Socket }, starting, State = #client_state{users=Users}) ->
-    [ gen_server:reply(From, {error, connection_closed}) || From <- Users],
-    {stop, connection_closed, State};
+handle_info({ tcp_closed, _Socket }, starting, State) ->
+    stop_during_startup({error, connection_closed}, State);
 
 handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
     [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
@@ -299,8 +298,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
             #client_state{ authmod=AuthMod, authargs=AuthArgs, inet=Inet } = State,
             case AuthMod:auth_init(AuthArgs, Body, Inet) of
                 {close, Reason} ->
-                    close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
+                    stop_during_startup({auth_client_closed, Reason}, State);
 
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
@@ -313,9 +311,7 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             case AuthMod:auth_handle_challenge(Body, AuthState) of
                 {close, Reason} ->
-                    close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
-
+                    stop_during_startup({auth_client_closed, Reason}, State);
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
                     send_to_db(State, AuthFrame),
@@ -326,21 +322,18 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR}, {16#0100, AuthErrorDescription, _}, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
-            close_socket(State),
-            {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{socket=undefined}};
+            stop_during_startup({auth_server_refused, AuthErrorDescription}, State);
 
         %% Server tells us something an error occured
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR}, {ErrorCode, ErrorMessage, _}, Delayed} ->
-            close_socket(State),
-            {stop, {server_error, ErrorCode, ErrorMessage}, State#client_state{socket=undefined}};
+            stop_during_startup({server_error, ErrorCode, ErrorMessage}, State);
 
         %% Server tells us the authentication went well, we can start shooting queries
         {ok, #cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState} = State,
             case AuthMod:auth_handle_success(Body, AuthState) of
                 {close, Reason} ->
-                    close_socket(State),
-                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
+                    stop_during_startup({auth_client_closed, Reason}, State);
 
                 ok ->
                     {StateName, FinalState} = maybe_set_keyspace(State),
@@ -476,10 +469,8 @@ terminate(Reason, live, #client_state{queries=Queries}) ->
         ({_I, _}) -> ok
     end, Queries);
 
-terminate(Reason, starting, #client_state{users=Users}) ->
-    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
-    timer:sleep(500).
-
+terminate(_Reason, starting, _State) ->
+    ok.
 
 
 
@@ -822,3 +813,8 @@ get_sleep_duration(Opts) ->
         {Amount, hour} -> Amount * 1000 * 60 * 60;
         Amount when is_integer(Amount) -> Amount
     end).
+
+stop_during_startup(Reason, State = #client_state{users = Users}) ->
+    close_socket(State),
+    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
+    {stop, normal, State#client_state{socket=undefined}}.
