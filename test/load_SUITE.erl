@@ -20,7 +20,7 @@
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
 suite() -> 
-  [{timetrap, {seconds, 20}},
+  [{timetrap, {seconds, 30}},
    {require, ssl, cqerl_test_ssl},
    {require, auth, cqerl_test_auth},
    % {require, keyspace, cqerl_test_keyspace},

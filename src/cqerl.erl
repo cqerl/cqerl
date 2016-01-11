@@ -287,7 +287,7 @@ handle_call(get_any_client, From, State=#cqerl_state{clients=Clients, retrying=R
     end;
 
 handle_call(Req={get_client, Node, Opts}, From,
-            State=#cqerl_state{clients=Clients, client_stats=Stats, retrying=Retrying, globalopts=GlobalOpts, named_nodes=NamedNodes}) ->
+            State=#cqerl_state{client_stats=Stats, globalopts=GlobalOpts, named_nodes=NamedNodes}) ->
 
     NodeKey = if
         is_atom(Node) ->
@@ -300,28 +300,16 @@ handle_call(Req={get_client, Node, Opts}, From,
         error ->
             State2 = new_pool(NodeKey, Opts, GlobalOpts, State),
             case orddict:find(NodeKey, State2#cqerl_state.client_stats) of
+                error ->
+                    {reply, {closed, process_died}, State2#cqerl_state{retrying=false}};
                 {ok, #cql_client_stats{count=0}} ->
                     {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
                 _ ->
-                    select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State),
-                    {noreply, State2#cqerl_state{retrying=false}}
+                    try_select_client(#cql_client{node=NodeKey, busy=false, pid='_'}, Req, From, State2)
             end;
 
         _ ->
-            case select_client(Clients, #cql_client{node=NodeKey, busy=false, pid='_'}, From, State) of
-                no_available_clients when Retrying ->
-                    retry;
-
-                no_available_clients ->
-                    erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, Req, From, ?RETRY_INITIAL_DELAY}),
-                    {noreply, State#cqerl_state{retrying=false}};
-
-                {existing, _, _} ->
-                    {noreply, State#cqerl_state{retrying=false}};
-
-                {new, _Pid} ->
-                    {noreply, State#cqerl_state{retrying=false}}
-            end
+            try_select_client(#cql_client{node=NodeKey, busy=false, pid='_'}, Req, From, State)
     end;
 
 handle_call(_Msg, _From, State) ->
@@ -392,12 +380,12 @@ handle_cast({client_asleep, Pid}, State=#cqerl_state{clients=Clients, client_sta
             case orddict:find(NodeKey, Stats) of
                 {ok, #cql_client_stats{min_count=Min, count=Count}} when Count =< Min ->
                     {noreply, State};
-                {ok, CStats=#cql_client_stats{count=Count}} ->
+                {ok, #cql_client_stats{}} ->
                     Pool = pool_from_node(NodeKey),
                     pooler:return_member(Pool, Pid, ok),
                     unlink(Pid),
                     ets:delete(Clients, Pid),
-                    Stats1 = orddict:store(NodeKey, CStats#cql_client_stats{count=Count-1}, Stats),
+                    Stats1 = dec_stats_count(NodeKey, Stats),
                     {noreply, State#cqerl_state{client_stats=Stats1}};
                 error ->
                     {noreply, State}
@@ -416,8 +404,7 @@ handle_info({'EXIT', From, Reason}, State=#cqerl_state{clients=Clients, client_s
     case ets:lookup(Clients, From) of
         [#cql_client{node=NodeKey}] ->
             ets:delete(Clients, From),
-            {ok, CStats=#cql_client_stats{count=Count}} = orddict:find(NodeKey, Stats),
-            {noreply, State#cqerl_state{client_stats = orddict:store(NodeKey, CStats#cql_client_stats{count = Count-1}, Stats)}};
+            {noreply, State#cqerl_state{client_stats = dec_stats_count(NodeKey, Stats)}};
         [] ->
             {stop, Reason, State}
     end;
@@ -585,12 +572,9 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
         AvailableClients when length(AvailableClients) > 0 ->
             RandIdx = random:uniform(length(AvailableClients)),
             #cql_client{pid=Pid, node=NodeKey} = lists:nth(RandIdx, AvailableClients),
-            case is_process_alive(Pid) of
-                true ->
-                    cqerl_client:new_user(Pid, User),
-                    {existing, Pid, NodeKey};
-                false ->
-                    no_available_clients
+            case cqerl_client:new_user(Pid, User) of
+                ok -> {existing, Pid, NodeKey};
+                {error, _E} -> no_available_clients
             end;
 
         [] ->
@@ -603,10 +587,13 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
                     no_available_clients;
 
                 Pid ->
-                    link(Pid),
                     ets:insert(Clients, #cql_client{node=Node, busy=false, pid=Pid}),
-                    cqerl_client:new_user(Pid, User),
-                    {new, Pid}
+                    case cqerl_client:new_user(Pid, User) of
+                        ok ->
+                            link(Pid),
+                            {new, Pid};
+                        {error, _E} -> no_available_clients
+                    end
             end
     end.
 
@@ -649,3 +636,27 @@ pool_from_node({ Addr, Port, Keyspace }) when is_binary(Port) ->
     pool_from_node({ Addr, binary_to_list(Port), Keyspace });
 pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).
+
+dec_stats_count(NodeKey, Stats) ->
+    case orddict:find(NodeKey, Stats) of
+        {ok, #cql_client_stats{count = 1}} -> orddict:erase(NodeKey, Stats);
+        {ok, Stat = #cql_client_stats{count = Count}} -> orddict:store(NodeKey, Stat#cql_client_stats{count=Count-1}, Stats);
+        error -> Stats
+    end.
+
+try_select_client(Client, Req, From, State = #cqerl_state{clients = Clients, retrying = Retrying}) ->
+    case select_client(Clients, Client, From, State) of
+        no_available_clients when Retrying ->
+            retry;
+
+        no_available_clients ->
+            erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, Req, From, ?RETRY_INITIAL_DELAY}),
+            {noreply, State#cqerl_state{retrying=false}};
+
+        {existing, _, _} ->
+            {noreply, State#cqerl_state{retrying=false}};
+
+        {new, _Pid} ->
+            {noreply, State#cqerl_state{retrying=false}}
+    end.
+
