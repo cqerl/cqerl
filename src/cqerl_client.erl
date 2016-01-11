@@ -70,7 +70,11 @@ start_link(Inet, Opts) ->
     gen_fsm:start_link(?MODULE, [Inet, Opts], []).
 
 new_user(Pid, From) ->
-    gen_fsm:send_event(Pid, {new_user, From}).
+    try
+        gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
+    catch
+        exit:_ -> {error, {closed, process_died}}
+    end.
 
 remove_user({ClientPid, ClientRef}) ->
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
@@ -133,11 +137,11 @@ init([Inet, Opts]) ->
 
 
 
-starting({new_user, From}, State=#client_state{users=Users}) ->
-    {next_state, starting, State#client_state{users=[From | Users]}};
-
 starting(_Event, State) ->
     {next_state, starting, State}.
+
+starting({new_user, User}, _From, State=#client_state{users=Users}) ->
+    {reply, ok, starting, State#client_state{users=[User | Users]}};
 
 starting(_Event, _From, State) ->
     {reply, unexpected_msg, starting, State}.
@@ -154,10 +158,6 @@ live({batch_ready, Call, QueryBatch}, State=#client_state{available_slots=[], qu
 
 live({batch_ready, Call, QueryBatch}, State) ->
     {next_state, live, process_outgoing_query(Call, QueryBatch, State)};
-
-live({new_user, From}, State=#client_state{users=Users}) ->
-    add_user(From, Users),
-    {next_state, live, State};
 
 live({remove_user, Ref}, State) ->
     {next_state, live, remove_user(Ref, State)};
@@ -185,6 +185,9 @@ live(_Event, State) ->
     {next_state, live, State}.
 
 
+live({new_user, User}, _From, State=#client_state{users=Users}) ->
+    add_user(User, Users),
+    {reply, ok, live, State};
 
 live({send_query, Ref, Batch=#cql_query_batch{}}, From, State=#client_state{inet=Inet}) ->
     cqerl_batch_sup:new_batch_coordinator(#cql_call{type=sync, caller=From, client=Ref}, Inet, Batch),
@@ -211,16 +214,16 @@ live(_Event, _From, State) ->
 
 
 
-sleep({new_user, From}, State=#client_state{users=Users}) ->
-    add_user(From, Users),
-    {next_state, live, State};
-
 sleep(timeout, State) ->
     signal_asleep(),
     {next_state, sleep, State};
 
 sleep(_Event, State=#client_state{sleep=Duration}) ->
     {next_state, sleep, State, Duration}.
+
+sleep({new_user, User}, _From, State=#client_state{users=Users}) ->
+    add_user(User, Users),
+    {reply, ok, live, State};
 
 sleep(_Event, _From, State) ->
     {reply, ok, sleep, State}.
