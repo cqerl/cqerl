@@ -270,21 +270,8 @@ init([]) ->
 handle_call(get_any_client, _From, State=#cqerl_state{client_stats=[]}) ->
     {reply, {error, no_configured_node}, State#cqerl_state{retrying=false}};
 
-handle_call(get_any_client, From, State=#cqerl_state{clients=Clients, retrying=Retrying}) ->
-    case select_client(Clients, #cql_client{busy=false, _ = '_'}, From, State) of
-        no_available_clients when Retrying ->
-            retry;
-
-        no_available_clients ->
-            erlang:send_after(?RETRY_INITIAL_DELAY, self(), {retry, get_any_client, From, ?RETRY_INITIAL_DELAY}),
-            {noreply, State#cqerl_state{retrying=false}};
-
-        {existing, _, _} ->
-            {noreply, State#cqerl_state{retrying=false}};
-
-        {new, _Pid} ->
-            {noreply, State#cqerl_state{retrying=false}}
-    end;
+handle_call(get_any_client, From, State) ->
+    try_select_client(#cql_client{busy=false, _ = '_'}, get_any_client, From, State);
 
 handle_call(Req={get_client, Node, Opts}, From,
             State=#cqerl_state{client_stats=Stats, globalopts=GlobalOpts, named_nodes=NamedNodes}) ->
@@ -303,7 +290,7 @@ handle_call(Req={get_client, Node, Opts}, From,
                 error ->
                     {reply, {closed, process_died}, State2#cqerl_state{retrying=false}};
                 {ok, #cql_client_stats{count=0}} ->
-                    {reply, {error, no_available_clients}, State2#cqerl_state{retrying=false}};
+                    {reply, {closed, process_died}, State2#cqerl_state{retrying=false}};
                 _ ->
                     try_select_client(#cql_client{node=NodeKey, busy=false, pid='_'}, Req, From, State2)
             end;
@@ -574,6 +561,7 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
             #cql_client{pid=Pid, node=NodeKey} = lists:nth(RandIdx, AvailableClients),
             case cqerl_client:new_user(Pid, User) of
                 ok -> {existing, Pid, NodeKey};
+                {error, {closed, Reason}} -> {closed, Reason};
                 {error, _E} -> no_available_clients
             end;
 
@@ -646,6 +634,9 @@ dec_stats_count(NodeKey, Stats) ->
 
 try_select_client(Client, Req, From, State = #cqerl_state{clients = Clients, retrying = Retrying}) ->
     case select_client(Clients, Client, From, State) of
+        {closed, Reason} ->
+            {reply, {closed, Reason}, State#cqerl_state{retrying=false}};
+
         no_available_clients when Retrying ->
             retry;
 
