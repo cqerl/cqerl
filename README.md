@@ -203,6 +203,7 @@ Special cases include:
 - `UPDATE keyspace SET map[?] = 1 WHERE id = 1;`. The name for this variable binding is `key(map)`, where `map` is the name of the column.
 - `UPDATE keyspace SET map['key'] = ? WHERE id = 1;`. The name for this variable binding is `value(map)`, where `map` is the name of the column.
 - `UPDATE keyspace SET list[?] = 1 WHERE id = 1;`. The name for this variable binding is `idx(list)`, where `list` is the name of the column.
+- `SELECT * FROM keyspace LIMIT ?`. The name for the `LIMIT` variable is `[limit]`.
 
     Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
     
