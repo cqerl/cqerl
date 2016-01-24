@@ -419,7 +419,7 @@ encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == se
     Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
     << Length:?INT, Entries/binary >>;
 
-encode_data({{map, KeyType, ValType}, List}, _Query) ->
+encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
     Length = length(List),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
@@ -428,6 +428,17 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
+    << Length:?INT, Entries/binary >>;
+
+encode_data({{map, KeyType, ValType}, List}, _Query) ->
+    Length = map_size(List),
+    GetElementBinary = fun(Type, Value) ->
+        Bin = encode_data({Type, Value}, _Query),
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
+    end,
+    Entries = << << (GetElementBinary(KeyType, Key))/binary,
+                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(List) >>,
     << Length:?INT, Entries/binary >>;
 
 encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
