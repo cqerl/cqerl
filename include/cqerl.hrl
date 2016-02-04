@@ -53,7 +53,7 @@
 
 -record(cql_query, {
     statement   = <<>>      :: iodata(),
-    values      = []        :: [ parameter() | named_parameter() ] | maps:map(),
+    values      = []        :: [ parameter() | named_parameter() ] | map(),
 
     reusable    = undefined :: undefined | boolean(),
     named       = false     :: boolean(),
