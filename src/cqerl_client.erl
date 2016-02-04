@@ -42,7 +42,9 @@ end).
     %% Information about the connection
     inet :: any(),
     trans :: atom(),
-    socket :: gen_tcp:socket() | ssl:sslsocket(),
+    socket :: port() | ssl:sslsocket(), % The port() is actually a
+                                        % gen_tcp:socket(), but that type isn't
+                                        % currently exported (as of 18.2)
     compression_type :: undefined | snappy | lz4,
     keyspace :: atom(),
 

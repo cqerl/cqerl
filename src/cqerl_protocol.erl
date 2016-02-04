@@ -669,8 +669,10 @@ decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQER
 
 
 
-encode_query_values(Values, Query) ->
-    [cqerl_datatypes:encode_data(Value, Query) || Value <- Values].
+encode_query_values(Values, Query) when is_list(Values) ->
+    [cqerl_datatypes:encode_data(Value, Query) || Value <- Values];
+encode_query_values(ValueMap, Query) ->
+    encode_query_values(safe_map_to_list(ValueMap), Query).
 
 encode_query_values(Values, Query, []) ->
     encode_query_values(Values, Query);
@@ -688,13 +690,16 @@ encode_query_values(Values, Query, ColumnSpecs) when is_list(Values) ->
     end, ColumnSpecs);
 
 encode_query_values(ValueMap, Query, ColumnSpecs) ->
+    encode_query_values(safe_map_to_list(ValueMap), Query, ColumnSpecs).
+
+safe_map_to_list(ValueMap) ->
     case code:which(maps) of
         non_existing ->
             throw(invalid_valuelist);
         _ ->
             case erlang:is_map(ValueMap) of
                 true ->
-                    encode_query_values(maps:to_list(ValueMap), Query, ColumnSpecs);
+                    maps:to_list(ValueMap);
                 _ ->
                     throw(invalid_valuelist)
             end
