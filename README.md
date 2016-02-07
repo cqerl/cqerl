@@ -43,7 +43,7 @@ And close the connection like this
 cqerl:close_client(Client).
 ```
 
-1. The first argument to `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
+1. The first argument to `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{{127,0,0,1}, 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
 2. The second possible argument (when using `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size` and `pool_cull_interval`, which are used to configure [pooler][1] (see its documentation to understand those options).
 
@@ -62,7 +62,7 @@ All the options given above can be provided as environment variables, in which c
 ```erlang
 [
   {cqerl, [
-            {cassandra_nodes, [ { "127.0.0.1", 9042 } ]},
+            {cassandra_nodes, [ { {127,0,0,1}, 9042 } ]},
             {ssl, [ {cacertfile, "cassandra.pem"} ]},
             {auth, {cqerl_auth_plain_handler, [ {"test", "aaa"} ]}}
           ]},
