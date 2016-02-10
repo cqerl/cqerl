@@ -587,7 +587,7 @@ decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
         << KSize:?INT, KeyBin:KSize/binary, VSize:?INT, ValueBin:VSize/binary >> <= EntriesBin ],
 
     case proplists:lookup(maps, Opts) of
-        {maps, trus} ->
+        {maps, true} ->
             {maps:from_list(List), Rest};
         _ ->
             {List, Rest}
