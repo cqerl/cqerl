@@ -6,10 +6,6 @@ Native Erlang client for CQL3 over Cassandra's binary protocol v4 (a.k.a. what y
 
 [**Installation**](#installation) &middot; [**Compatibility**](#compatibility) &middot; [**Tests**](#tests) &middot; [**License**](#license)
 
----
-
-*This project is still relatively new, so you are welcome to contribute to it with improvements, suggestions and any issues you encounter.*
-
 ### At a glance
 
 CQErl offers a simple Erlang interface to Cassandra using the latest CQL version (v3). The main features include:
