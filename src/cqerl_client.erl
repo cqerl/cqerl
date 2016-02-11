@@ -236,6 +236,24 @@ handle_event(_Event, StateName, State) ->
 handle_sync_event(_Event, _From, StateName, State) ->
     {reply, ok, StateName, State}.
 
+handle_info({processor_threw, {Error, {Query, Call}}}, live,
+            State=#client_state{queries=Queries0}) ->
+    case Call of
+        {send, #cqerl_frame{stream_id=I}, _, _, _} ->
+            case orddict:find(I, Queries0) of
+                {ok, {UserCall, _}} ->
+                    respond_to_user(UserCall, {error, Error});
+                error ->
+                    ok
+            end,
+            {next_state, live, release_stream_id(I, State)};
+
+        {rows, _} ->
+            {UserCall, _} = Query,
+            respond_to_user(UserCall, {error, Error}),
+            {next_state, live, State}
+    end;
+
 handle_info({prepared, CachedQuery=#cqerl_cached_query{key={_Inet, Statement}}}, live,
             State=#client_state{waiting_preparation=Waiting}) ->
     case orddict:find(Statement, Waiting) of
@@ -460,9 +478,8 @@ handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, live, State=#client_stat
     end;
 
 handle_info(Info, StateName, State) ->
-    io:format("Received message ~w~n", [{StateName, Info, State#client_state.trans, State#client_state.socket}]),
+    io:format("Received message ~w while in state ~w~n", [StateName, Info]),
     {next_state, StateName, State}.
-
 
 
 
@@ -605,7 +622,10 @@ process_outgoing_query(Call,
         #cqerl_cached_query{result_metadata=#cqerl_result_metadata{columns=CachedColumnSpecs}} ->
             orddict:store(I, {Call, {Query, CachedColumnSpecs}}, Queries0)
     end,
-    cqerl_processor_sup:new_processor({ State#client_state.trans, State#client_state.socket, CachedResult }, {send, BaseFrame, Values, Query, SkipMetadata}),
+    cqerl_processor_sup:new_processor(
+        { State#client_state.trans, State#client_state.socket, CachedResult },
+        { send, BaseFrame, Values, Query, SkipMetadata }
+    ),
     maybe_signal_busy(State2 = State1#client_state{queries=Queries1}),
     State2.
 
