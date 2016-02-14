@@ -1,7 +1,7 @@
 {application, cqerl,
  [
   {description, "CQErl client for Cassandra"},
-  {vsn, "0.9.0"},
+  {vsn, "0.8.2"},
 
   {registered, [cqerl,
                 cqerl_sup,
