@@ -72,11 +72,7 @@ start_link(Inet, Opts) ->
     gen_fsm:start_link(?MODULE, [Inet, Opts], []).
 
 new_user(Pid, From) ->
-    try
-        gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
-    catch
-        exit:_ -> {error, {closed, process_died}}
-    end.
+    gen_fsm:send_event(Pid, {new_user, From}).
 
 remove_user({ClientPid, ClientRef}) ->
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
@@ -139,11 +135,11 @@ init([Inet, Opts]) ->
 
 
 
+starting({new_user, From}, State=#client_state{users=Users}) ->
+    {next_state, starting, State#client_state{users=[From | Users]}};
+
 starting(_Event, State) ->
     {next_state, starting, State}.
-
-starting({new_user, User}, _From, State=#client_state{users=Users}) ->
-    {reply, ok, starting, State#client_state{users=[User | Users]}};
 
 starting(_Event, _From, State) ->
     {reply, unexpected_msg, starting, State}.
@@ -160,6 +156,10 @@ live({batch_ready, Call, QueryBatch}, State=#client_state{available_slots=[], qu
 
 live({batch_ready, Call, QueryBatch}, State) ->
     {next_state, live, process_outgoing_query(Call, QueryBatch, State)};
+
+live({new_user, From}, State=#client_state{users=Users}) ->
+    add_user(From, Users),
+    {next_state, live, State};
 
 live({remove_user, Ref}, State) ->
     {next_state, live, remove_user(Ref, State)};
@@ -187,9 +187,6 @@ live(_Event, State) ->
     {next_state, live, State}.
 
 
-live({new_user, User}, _From, State=#client_state{users=Users}) ->
-    add_user(User, Users),
-    {reply, ok, live, State};
 
 live({send_query, Ref, Batch=#cql_query_batch{}}, From, State=#client_state{inet=Inet}) ->
     cqerl_batch_sup:new_batch_coordinator(#cql_call{type=sync, caller=From, client=Ref}, Inet, Batch),
@@ -216,16 +213,16 @@ live(_Event, _From, State) ->
 
 
 
+sleep({new_user, From}, State=#client_state{users=Users}) ->
+    add_user(From, Users),
+    {next_state, live, State};
+
 sleep(timeout, State) ->
     signal_asleep(),
     {next_state, sleep, State};
 
 sleep(_Event, State=#client_state{sleep=Duration}) ->
     {next_state, sleep, State, Duration}.
-
-sleep({new_user, User}, _From, State=#client_state{users=Users}) ->
-    add_user(User, Users),
-    {reply, ok, live, State};
 
 sleep(_Event, _From, State) ->
     {reply, ok, sleep, State}.
@@ -287,8 +284,9 @@ handle_info({preparation_failed, {_Inet, Statement}, Reason}, live,
             {next_state, live, State}
     end;
 
-handle_info({ tcp_closed, _Socket }, starting, State) ->
-    stop_during_startup({error, connection_closed}, State);
+handle_info({ tcp_closed, _Socket }, starting, State = #client_state{users=Users}) ->
+    [ gen_server:reply(From, {error, connection_closed}) || From <- Users],
+    {stop, connection_closed, State};
 
 handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
     [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
@@ -321,7 +319,8 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
             #client_state{ authmod=AuthMod, authargs=AuthArgs, inet=Inet } = State,
             case AuthMod:auth_init(AuthArgs, Body, Inet) of
                 {close, Reason} ->
-                    stop_during_startup({auth_client_closed, Reason}, State);
+                    close_socket(State),
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
 
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
@@ -334,7 +333,9 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             case AuthMod:auth_handle_challenge(Body, AuthState) of
                 {close, Reason} ->
-                    stop_during_startup({auth_client_closed, Reason}, State);
+                    close_socket(State),
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
+
                 {reply, Reply, AuthState} ->
                     {ok, AuthFrame} = cqerl_protocol:auth_frame(base_frame(State), Reply),
                     send_to_db(State, AuthFrame),
@@ -345,18 +346,21 @@ handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ s
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR}, {16#0100, AuthErrorDescription, _}, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState } = State,
             AuthMod:auth_handle_error(AuthErrorDescription, AuthState),
-            stop_during_startup({auth_server_refused, AuthErrorDescription}, State);
+            close_socket(State),
+            {stop, {auth_server_refused, AuthErrorDescription}, State#client_state{socket=undefined}};
 
         %% Server tells us something an error occured
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR}, {ErrorCode, ErrorMessage, _}, Delayed} ->
-            stop_during_startup({server_error, ErrorCode, ErrorMessage}, State);
+            close_socket(State),
+            {stop, {server_error, ErrorCode, ErrorMessage}, State#client_state{socket=undefined}};
 
         %% Server tells us the authentication went well, we can start shooting queries
         {ok, #cqerl_frame{opcode=?CQERL_OP_AUTH_SUCCESS}, Body, Delayed} ->
             #client_state{ authmod=AuthMod, authstate=AuthState} = State,
             case AuthMod:auth_handle_success(Body, AuthState) of
                 {close, Reason} ->
-                    stop_during_startup({auth_client_closed, Reason}, State);
+                    close_socket(State),
+                    {stop, {auth_client_closed, Reason}, State#client_state{socket=undefined}};
 
                 ok ->
                     {StateName, FinalState} = maybe_set_keyspace(State),
@@ -491,8 +495,10 @@ terminate(Reason, live, #client_state{queries=Queries}) ->
         ({_I, _}) -> ok
     end, Queries);
 
-terminate(_Reason, starting, _State) ->
-    ok.
+terminate(Reason, starting, #client_state{users=Users}) ->
+    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
+    timer:sleep(500).
+
 
 
 
@@ -730,6 +736,15 @@ create_socket({Addr, Port}, Opts) ->
 
 
 
+
+close_socket(#client_state{trans=ssl, socket=Socket}) ->
+    ssl:close(Socket);
+close_socket(#client_state{trans=tcp, socket=Socket}) ->
+    gen_tcp:close(Socket).
+
+
+
+
 activate_socket(#client_state{socket=undefined}) ->
     ok;
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
@@ -829,7 +844,3 @@ get_sleep_duration(Opts) ->
         {Amount, hour} -> Amount * 1000 * 60 * 60;
         Amount when is_integer(Amount) -> Amount
     end).
-
-stop_during_startup(Reason, State = #client_state{users = Users}) ->
-    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
-    {stop, normal, State#client_state{socket=undefined}}.

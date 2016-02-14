@@ -51,8 +51,7 @@ suite() ->
 %%--------------------------------------------------------------------
 groups() -> [
     {connection, [sequence], [
-        random_selection,
-        failed_connection
+        random_selection
     ]},
     {database, [sequence], [ 
         {initial, [sequence], [connect, create_keyspace]}, 
@@ -255,13 +254,6 @@ random_selection(Config) ->
     MaxSize = proplists:get_value(pool_min_size, Config),
     MaxSize = length(DistinctPids),
     lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
-
-failed_connection(Config) ->
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
-    {closed, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
-    % A previous bug would cause timeouts on subsequent calls with an already
-    % used invalid keyspace. Test that case here.
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
 
 connect(Config) ->
     {Pid, Ref} = get_client(Config),
@@ -625,25 +617,19 @@ batches_and_pages(Config) ->
     ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms", [N, Bsz, round(timer:now_diff(now(), T1)/1000)]),
     cqerl:close_client(Client).
 
-% Call when you're expecting a valid client
 get_client(Config) ->
-    {ok, Client} = maybe_get_client(Config),
-    Client.
-
-% Call to test new_client error cases
-maybe_get_client(Config) ->
     Host = proplists:get_value(host, Config),
     SSL = proplists:get_value(prepared_ssl, Config),
     Auth = proplists:get_value(auth, Config, undefined),
     Keyspace = proplists:get_value(keyspace, Config),
     PoolMinSize = proplists:get_value(pool_min_size, Config),
     PoolMaxSize = proplists:get_value(pool_max_size, Config),
-
+    
     io:format("Options : ~w~n", [[
         {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
         {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}
         ]]),
-
-    cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                            {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]).
-
+        
+    {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
+                                           {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]),
+    Client.
