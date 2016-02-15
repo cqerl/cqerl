@@ -374,11 +374,7 @@ encode_data({timestamp, now}, _Query) ->
     encode_data({timestamp, MlS}, _Query);
 
 encode_data({varint, Val}, _Query) when is_integer(Val) ->
-    ByteCountF = math:log(Val) / math:log(2) / 8,
-    ByteCount0 = trunc(ByteCountF),
-    ByteCount = if  ByteCount0 == ByteCountF -> ByteCount0;
-                    true -> ByteCount0 + 1
-                end,
+    ByteCount = count_bytes(Val, 0),
     << Val:ByteCount/big-signed-integer-unit:8 >>;
 
 encode_data({inet, Addr}, _Query) when is_tuple(Addr) ->
@@ -596,3 +592,17 @@ decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
 decode_data({_, Size, << Size:?INT, Data/binary >>}, _Opts) ->
     << Data:Size/binary, Rest/binary >> = Data,
     {{unknown_type, Data}, Rest}.
+
+% The first inclination here would be to use math:log2(X), but there's a good
+% reason not to: It's implemented as a IEEE floating point operation and so,
+% while it would work just fine for "small" values (for some value of "small"),
+% it won't continue to be accurate for Erlang's (and Cassandra's) entire range
+% of possible arbitrary precision integers. This method, while it's a bit
+% clunky, will work for all values.
+count_bytes(X, Acc) when X =< 127, X >=    0 -> Acc + 1;
+count_bytes(X, Acc) when X >  127, X <   256 -> Acc + 2;
+count_bytes(X, Acc) when X <  0,   X >= -128 -> Acc + 1;
+count_bytes(X, Acc) when X < -128, X >= -256 -> Acc + 2;
+count_bytes(X, Acc) ->
+    count_bytes(X bsr 8, Acc + 1).
+

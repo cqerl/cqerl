@@ -65,7 +65,9 @@ groups() -> [
                 all_datatypes, 
                 % custom_encoders, 
                 collection_types, 
-                counter_type
+                counter_type,
+                varint_type,
+                decimal_type
             ]},
             batches_and_pages
         ]}
@@ -363,13 +365,19 @@ datatypes_columns(I, [ColumnType|Rest], Bin) ->
 
 all_datatypes(Config) ->
     Client = get_client(Config),
-    Cols = datatypes_columns([ascii, bigint, blob, boolean, decimal, double, float, int, timestamp, uuid, varchar, tinyint, smallint, timeuuid, inet, date, time]),
+    Cols = datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
+                              float, int, timestamp, uuid, varchar, tinyint,
+                              smallint, timeuuid, inet, date, time, varint]),
     CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
         cqerl:run_query(Client, CreationQ),
     
-    InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14, col15, col16, col17) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
+                                    col4, col5, col6, col7, col8, col9, col10,
+                                    col11, col12, col13, col14, col15, col16,
+                                    col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
+                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
     
     Time = {23, 4, 123},
     Date = {1970, 1, 1},
@@ -392,7 +400,8 @@ all_datatypes(Config) ->
         {col14, now},
         {col15, {127, 0, 0, 1}},
         {col16, Date},
-        {col17, Time}
+        {col17, Time},
+        {col18, 666}
     ]}),
     {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
         {col1, <<"foobar">>},
@@ -411,7 +420,8 @@ all_datatypes(Config) ->
         {col14, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
         {col15, {0,0,0,0,0,0,0,0}},
         {col16, Date},
-        {col17, AbsTime}
+        {col17, AbsTime},
+        {col18, 666}
     ]}),
     {ok, void} = cqerl:run_query(Client, InsQ#cql_query{
         statement="INSERT INTO entries2(col1, col11) values (?, ?);",
@@ -574,6 +584,125 @@ counter_type(Config) ->
     cqerl:close_client(Client),
     Row.
 
+
+varint_type(Config) ->
+    Client = get_client(Config),
+
+    CreationQ = "CREATE TABLE varint_test (key varint PRIMARY KEY, sval text)",
+    ct:log("Executing : ~s~n", [CreationQ]),
+
+    {ok, #cql_schema_changed{change_type=created,
+                             keyspace = <<"test_keyspace_2">>,
+                             name = <<"varint_test">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    Statement = "INSERT INTO varint_test(key, sval) VALUES (?, ?)",
+
+    TestVals = varint_test_ranges(),
+    lists:foreach(fun(K) ->
+      {ok, void} =
+      cqerl:run_query(Client,
+                      #cql_query{statement = Statement,
+                                 values = [{key, K},
+                                           {sval,
+                                            integer_to_list(K)}
+                                          ]})
+      end,
+      TestVals),
+
+    Statement2 = "SELECT * FROM varint_test",
+    {ok, Result} = cqerl:run_query(Client, #cql_query{statement =
+                                                      Statement2,
+                                                     page_size = 2000}),
+    Rows = cqerl:all_rows(Result),
+    Vals = lists:sort(check_extract_varints(Rows)),
+    ct:log("Vals ~p ~p: ~p", [length(Rows), length(Vals), Vals]),
+    Vals = lists:sort(TestVals).
+
+varint_test_ranges() ->
+    Ranges = [
+              % Small ints:
+              {0, 300},
+              % Signed 16-bit:
+              {32700, 32800},
+              % Unsigned 16-bit:
+              {65530, 65540},
+              % Huge ints:
+              {100000000000000000000000, 100000000000000000000099},
+              % Super Huge ints - way more than 2^64: 
+              {100000000000000000000000000000000000000000000000,
+               100000000000000000000000000000000000000000000099},
+              % Small negative:
+              {-5, -1},
+              {-133, -125},
+              % Signed 16-bit
+              {-32780, -32760},
+              % Signed 32-bit
+              {-65544, -65531},
+              {-100000000000000000000099, -100000000000000000000000},
+              % Super Huge -ve ints - way more than 2^64:
+              {-100000000000000000000000000000000000000000000111,
+               -100000000000000000000000000000000000000000000005}
+             ],
+    lists:flatten([lists:seq(L, H) || {L, H} <- Ranges]).
+
+check_extract_varints(Rows) ->
+    Ints = [proplists:get_value(key, Row) || Row <- Rows],
+    CheckInts = [binary_to_integer(proplists:get_value(sval, Row))
+                 || Row <- Rows],
+    Ints = CheckInts,
+    Ints.
+
+decimal_type(Config) ->
+    Client = get_client(Config),
+
+    CreationQ = "CREATE TABLE decimal_test (key decimal PRIMARY KEY,
+                 scale int, unscaled varint)",
+    ct:log("Executing : ~s~n", [CreationQ]),
+
+    {ok, #cql_schema_changed{change_type=created,
+                             keyspace = <<"test_keyspace_2">>,
+                             name = <<"decimal_test">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    Statement = "INSERT INTO decimal_test(key, scale, unscaled)
+                 VALUES (?, ?, ?)",
+
+    TestVals = decimal_test_ranges(),
+    lists:foreach(fun({U, S}) ->
+      {ok, void} =
+      cqerl:run_query(Client,
+                      #cql_query{statement = Statement,
+                                 values = [{key, {U, S}},
+                                           {unscaled, U},
+                                           {scale, S}
+                                          ]})
+      end,
+      TestVals),
+
+    Statement2 = "SELECT * FROM decimal_test",
+    {ok, Result} = cqerl:run_query(Client, #cql_query{statement =
+                                                      Statement2,
+                                                     page_size = 20000}),
+    Rows = cqerl:all_rows(Result),
+    Vals = lists:sort(check_extract_decimals(Rows)),
+    ct:log("Vals ~p ~p: ~p", [length(TestVals), length(Vals), Vals]),
+    Vals = lists:sort(TestVals).
+
+decimal_test_ranges() ->
+    [{U, S} || U <- varint_test_ranges(),
+               S <- lists:seq(-5, 5) ++ [2147483647, -2147483648]].
+
+check_extract_decimals(Rows) ->
+    Decimals = [proplists:get_value(key, Row) || Row <- Rows],
+    CheckUnScales = [proplists:get_value(unscaled, Row) || Row <- Rows],
+    CheckScales = [proplists:get_value(scale, Row) || Row <- Rows],
+    {Unscales, Scales} = lists:unzip(Decimals),
+    ct:log("Unscales: ~p~n", [Unscales]),
+    Unscales = CheckUnScales,
+    ct:log("Scales: ~p~n", [Scales]),
+    Scales = CheckScales,
+    Decimals.
 
 inserted_rows(0, Q, Acc) ->
     lists:reverse(Acc);
