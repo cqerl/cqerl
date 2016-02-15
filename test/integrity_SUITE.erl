@@ -65,7 +65,8 @@ groups() -> [
                 % custom_encoders, 
                 collection_types, 
                 counter_type,
-                varint_type
+                varint_type,
+                decimal_type
             ]},
             batches_and_pages
         ]}
@@ -606,7 +607,7 @@ varint_type(Config) ->
                                                       Statement2,
                                                      page_size = 2000}),
     Rows = cqerl:all_rows(Result),
-    Vals = lists:sort(check_extract_vals(Rows)),
+    Vals = lists:sort(check_extract_varints(Rows)),
     ct:log("Vals ~p ~p: ~p", [length(Rows), length(Vals), Vals]),
     Vals = lists:sort(TestVals).
 
@@ -637,12 +638,63 @@ varint_test_ranges() ->
              ],
     lists:flatten([lists:seq(L, H) || {L, H} <- Ranges]).
 
-check_extract_vals(Rows) ->
+check_extract_varints(Rows) ->
     Ints = [proplists:get_value(key, Row) || Row <- Rows],
     CheckInts = [binary_to_integer(proplists:get_value(sval, Row))
                  || Row <- Rows],
     Ints = CheckInts,
     Ints.
+
+decimal_type(Config) ->
+    Client = get_client(Config),
+
+    CreationQ = "CREATE TABLE decimal_test (key decimal PRIMARY KEY,
+                 scale int, unscaled varint)",
+    ct:log("Executing : ~s~n", [CreationQ]),
+
+    {ok, #cql_schema_changed{change_type=created,
+                             keyspace = <<"test_keyspace_2">>,
+                             name = <<"decimal_test">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    Statement = "INSERT INTO decimal_test(key, scale, unscaled)
+                 VALUES (?, ?, ?)",
+
+    TestVals = decimal_test_ranges(),
+    lists:foreach(fun({U, S}) ->
+      {ok, void} =
+      cqerl:run_query(Client,
+                      #cql_query{statement = Statement,
+                                 values = [{key, {U, S}},
+                                           {unscaled, U},
+                                           {scale, S}
+                                          ]})
+      end,
+      TestVals),
+
+    Statement2 = "SELECT * FROM decimal_test",
+    {ok, Result} = cqerl:run_query(Client, #cql_query{statement =
+                                                      Statement2,
+                                                     page_size = 20000}),
+    Rows = cqerl:all_rows(Result),
+    Vals = lists:sort(check_extract_decimals(Rows)),
+    ct:log("Vals ~p ~p: ~p", [length(TestVals), length(Vals), Vals]),
+    Vals = lists:sort(TestVals).
+
+decimal_test_ranges() ->
+    [{U, S} || U <- varint_test_ranges(),
+               S <- lists:seq(-5, 5) ++ [2147483647, -2147483648]].
+
+check_extract_decimals(Rows) ->
+    Decimals = [proplists:get_value(key, Row) || Row <- Rows],
+    CheckUnScales = [proplists:get_value(unscaled, Row) || Row <- Rows],
+    CheckScales = [proplists:get_value(scale, Row) || Row <- Rows],
+    {Unscales, Scales} = lists:unzip(Decimals),
+    ct:log("Unscales: ~p~n", [Unscales]),
+    Unscales = CheckUnScales,
+    ct:log("Scales: ~p~n", [Scales]),
+    Scales = CheckScales,
+    Decimals.
 
 inserted_rows(0, Q, Acc) ->
     lists:reverse(Acc);
