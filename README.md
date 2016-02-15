@@ -189,7 +189,17 @@ When performing queries, you can provide more information than just the query st
     
 ##### Variable bindings
 
-In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**. 
+In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**.
+
+Example:
+
+```erlang
+% Deriving the value key from the column name
+#cql_query{statement="SELECT * FROM table1 WHERE id = ?", values=[{id, SomeId}]},
+
+% Explicitly providing a binding variable name
+#cql_query{statement="SELECT * FROM table1 WHERE id = :id_value", values=[{id_value, SomeId}]},
+```
 
 Special cases include: 
 
