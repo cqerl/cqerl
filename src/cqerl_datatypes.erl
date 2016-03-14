@@ -557,14 +557,14 @@ decode_data({{ColType, ValueType}, Size, Bin}, Opts) when ColType == set; ColTyp
 
 decode_data({{tuple, ValueTypes}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
-    List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
+    List0 = decode_column_collection_content(CollectionBin),
     List1 = [ decode_data({ValueType, Size2, ValueBin}, Opts) || {ValueType, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ Value || {Value, _Rest} <- List1 ],
     {List2, Rest};
 
 decode_data({{udt, ValueTypes}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
-    List0 = [ {Size1, ValueBin} || << Size1:?INT, ValueBin:Size1/binary >> <= CollectionBin ],
+    List0 = decode_column_collection_content(CollectionBin),
     List1 = [ {Name, decode_data({ValueType, Size2, ValueBin}, Opts)} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
 
@@ -593,6 +593,18 @@ decode_data({_, Size, << Size:?INT, Data/binary >>}, _Opts) ->
     << Data:Size/binary, Rest/binary >> = Data,
     {{unknown_type, Data}, Rest}.
 
+decode_column_collection_content(Binary) ->
+    lists:reverse(decode_column_collection_content(Binary, [])).
+
+decode_column_collection_content(<< 255, 255, 255, 255, Rest/binary >>, Acc) ->
+    decode_column_collection_content(Rest, [ {-1, <<255, 255, 255, 255 >>} | Acc ]);
+
+decode_column_collection_content(<< Size1:?INT, ValueBin:Size1/binary, Rest/binary >>, Acc) ->
+    decode_column_collection_content(Rest, [ {Size1, ValueBin} | Acc ]);
+
+decode_column_collection_content(<< >>, Acc) ->
+    Acc.
+
 % The first inclination here would be to use math:log2(X), but there's a good
 % reason not to: It's implemented as a IEEE floating point operation and so,
 % while it would work just fine for "small" values (for some value of "small"),
@@ -605,4 +617,3 @@ count_bytes(X, Acc) when X <  0,   X >= -128 -> Acc + 1;
 count_bytes(X, Acc) when X < -128, X >= -256 -> Acc + 2;
 count_bytes(X, Acc) ->
     count_bytes(X bsr 8, Acc + 1).
-
