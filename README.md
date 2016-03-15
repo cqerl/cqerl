@@ -67,6 +67,13 @@ All the options given above can be provided as environment variables, in which c
 
 Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:new_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:new_client/0`, which chooses an available client at random.
 
+##### Options
+
+There are two application environment variables that may be set to change query behaviour:
+
+* `{maps, true}` will cause query result rows to be returned as maps instead of proplists
+* `{text_uuids, true}` will cause `timeuuid` and `uuid` fields to be returned as binary strings in canonical form (eg `<<"5620c844-e98d-11e5-b97b-08002719e96e">>`) rather than pure binary.
+
 ##### Performing queries
 
 Performing a query can be as simple as this:
