@@ -807,5 +807,5 @@ maybe_get_client(Config) ->
         ]]),
 
     cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                            {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}]).
+                            {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]).
 
