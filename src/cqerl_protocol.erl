@@ -707,38 +707,31 @@ safe_map_to_list(ValueMap) ->
 
 
 
-decode_row(Row, ColumnSpecs, []) ->
-    decode_proplist_row(Row, ColumnSpecs);
-
-decode_row(Row, ColumnSpecs, [{maps, true}]) ->
-    case code:which(maps) of
-        non_existing -> decode_proplist_row(Row, ColumnSpecs);
-        _ -> decode_map_row(Row, ColumnSpecs)
-    end;
 decode_row(Row, ColumnSpecs, Opts) ->
-    try code:which(maps) of
-        non_existing -> throw(non_map);
-        _ ->
-            case proplists:lookup(maps, Opts) of
-                {maps, true} -> decode_map_row(Row, ColumnSpecs);
-                _ -> throw(non_map)
-            end
-    catch
-        throw:non_map ->
-            decode_proplist_row(Row, ColumnSpecs)
+    case proplists:get_bool(maps, Opts) of
+        true ->
+            try_decode_map_row(Row, ColumnSpecs, Opts);
+        false ->
+            decode_proplist_row(Row, ColumnSpecs, Opts)
     end.
 
-decode_proplist_row(Row, ColumnSpecs) ->
+try_decode_map_row(Row, ColumnSpecs, Opts) ->
+    case code:which(maps) of
+        non_existing -> decode_proplist_row(Row, ColumnSpecs, Opts);
+        _ -> decode_map_row(Row, ColumnSpecs, Opts)
+    end.
+
+decode_proplist_row(Row, ColumnSpecs, Opts) ->
     lists:map(fun
         ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
-            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}),
+            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, Opts),
             {Name, Data}
     end, lists:zip(Row, ColumnSpecs)).
 
-decode_map_row(Row, ColumnSpecs) ->
+decode_map_row(Row, ColumnSpecs, Opts) ->
     maps:from_list(lists:map(fun
         ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
-            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, [ maps ]),
+            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, Opts),
             {Name, Data}
     end, lists:zip(Row, ColumnSpecs))).
 

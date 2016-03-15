@@ -18,7 +18,6 @@
          encode_data/2,
 
          decode_data/2,
-         decode_data/1,
 
          decode_string/1,
          decode_long_string/1,
@@ -461,19 +460,19 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 
 encode_data({Type, Rest}, _Query) -> throw({bad_param_type, Type, Rest}).
 
-
--spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}) -> {Value :: term(), Rest :: binary()}.
-
-decode_data(R) -> decode_data(R, []).
-
 -spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
 
 decode_data({_Type, NullSize, Bin}, _Opts) when NullSize < 0 ->
     {null, Bin};
 
-decode_data({UuidType, 16, Bin}, _Opts) when UuidType == uuid orelse UuidType == timeuuid ->
+decode_data({UuidType, 16, Bin}, Opts) when UuidType == uuid orelse UuidType == timeuuid ->
     << Uuid:16/binary, Rest/binary >> = Bin,
-    {Uuid, Rest};
+    case proplists:get_bool(text_uuids, Opts) of
+        true ->
+            {uuid:uuid_to_string(Uuid, binary_standard), Rest};
+        false ->
+            {Uuid, Rest}
+    end;
 
 decode_data({BigIntType, 8, Bin}, _Opts) when BigIntType == bigint orelse
                                        BigIntType == counter orelse
@@ -568,10 +567,10 @@ decode_data({{udt, ValueTypes}, Size, Bin}, Opts) ->
     List1 = [ {Name, decode_data({ValueType, Size2, ValueBin}, Opts)} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
 
-    case proplists:lookup(maps, Opts) of
-        {maps, true} ->
+    case proplists:get_bool(maps, Opts) of
+        true ->
             {maps:from_list(List2), Rest};
-        _ ->
+        false ->
             {List2, Rest}
     end;
 
@@ -582,10 +581,10 @@ decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
                element(1, decode_data({ValueType, VSize, ValueBin}, Opts)) } ||
         << KSize:?INT, KeyBin:KSize/binary, VSize:?INT, ValueBin:VSize/binary >> <= EntriesBin ],
 
-    case proplists:lookup(maps, Opts) of
-        {maps, true} ->
+    case proplists:get_bool(maps, Opts) of
+        true ->
             {maps:from_list(List), Rest};
-        _ ->
+        false ->
             {List, Rest}
     end;
 

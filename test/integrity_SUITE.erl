@@ -60,6 +60,7 @@ groups() -> [
         simple_insertion_roundtrip, 
         async_insertion_roundtrip, 
         emptiness,
+        options,
         {transactions, [parallel], [
             {types, [parallel], [
                 all_datatypes, 
@@ -515,6 +516,38 @@ custom_encoders(Config) ->
 
     cqerl:close_client(Client),
     ok.
+
+options(Config) ->
+    application:set_env(cqerl, maps, true),
+    application:set_env(cqerl, text_uuids, true),
+    Client = get_client(Config),
+    Cols = datatypes_columns([timeuuid, uuid]),
+    CreationQ = <<"CREATE TABLE entries2_2(",  Cols/binary, " PRIMARY KEY(col1));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2_2">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    UUIDState = uuid:new(self()),
+    {TimeUUID, _} = uuid:get_v1(UUIDState),
+    UUID = uuid:get_v4(),
+
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2_2(col1, col2) VALUES (?, ?)">>},
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
+        {col1, TimeUUID},
+        {col2, UUID}
+    ]}),
+
+    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2_2;">>}),
+
+    TextTimeUUID = uuid:uuid_to_string(TimeUUID, binary_standard),
+    TextUUID = uuid:uuid_to_string(UUID, binary_standard),
+
+    [#{col1 := TextTimeUUID,
+       col2 := TextUUID}] = cqerl:all_rows(Result),
+
+    cqerl:close_client(Client),
+    application:unset_env(cqerl, maps),
+    application:unset_env(cqerl, text_uuids).
 
 collection_types(Config) ->
     Client = get_client(Config),
