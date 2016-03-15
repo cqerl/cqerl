@@ -212,10 +212,7 @@ size(#cql_result{dataset=Dataset}) -> length(Dataset).
 
 head(#cql_result{dataset=[]}) -> empty_dataset;
 head(Result) ->
-    case application:get_env(cqerl, maps) of
-        {ok, true} -> head(Result, [{maps, true}]);
-        _ -> head(Result, [])
-    end.
+    head(Result, get_options_list()).
 
 head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}, Opts) ->
     cqerl_protocol:decode_row(Row, ColumnSpecs, Opts).
@@ -239,14 +236,20 @@ next(Result) -> {head(Result), tail(Result)}.
 
 all_rows(#cql_result{dataset=[]}) -> [];
 all_rows(Result) ->
-    case application:get_env(cqerl, maps) of
-        {ok, true} -> all_rows(Result, [{maps, true}]);
-        _ -> all_rows(Result, [])
-    end.
+    all_rows(Result, get_options_list()).
 
 all_rows(#cql_result{dataset=Rows, columns=ColumnSpecs}, Opts) when is_list(Opts) ->
     [ cqerl_protocol:decode_row(Row, ColumnSpecs, Opts) || Row <- Rows ].
 
+get_options_list() ->
+    lists:foldl(fun(Option, Acc) ->
+                        case application:get_env(cqerl, Option) of
+                            {ok, true} -> [Option | Acc];
+                            _ -> Acc
+                        end
+                end,
+                [],
+                [maps, text_uuids]).
 
 %% ====================
 %% Gen_Server Callbacks
