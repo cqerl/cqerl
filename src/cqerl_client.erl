@@ -164,8 +164,8 @@ live({batch_ready, Call, QueryBatch}, State) ->
 live({remove_user, Ref}, State) ->
     {next_state, live, remove_user(Ref, State)};
 
-live({send_query, Tag, Ref, Batch=#cql_query_batch{}}, State=#client_state{inet=Inet}) ->
-    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=async, caller=Tag, client=Ref}, Inet, Batch),
+live({send_query, Tag, Ref, Batch=#cql_query_batch{}}, State) ->
+    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=async, caller=Tag, client=Ref}, Batch),
     {next_state, live, State};
 
 live({Msg, Tag, Ref, Query}, State=#client_state{available_slots=[], queued=Queue0}) when Msg == send_query orelse
@@ -191,8 +191,8 @@ live({new_user, User}, _From, State=#client_state{users=Users}) ->
     add_user(User, Users),
     {reply, ok, live, State};
 
-live({send_query, Ref, Batch=#cql_query_batch{}}, From, State=#client_state{inet=Inet}) ->
-    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=sync, caller=From, client=Ref}, Inet, Batch),
+live({send_query, Ref, Batch=#cql_query_batch{}}, From, State) ->
+    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=sync, caller=From, client=Ref}, Batch),
     {next_state, live, State};
 
 
@@ -416,6 +416,29 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             end,
             {next_state, live, release_stream_id(StreamID, State)};
 
+        %% Previously prepared query is absent from server's cache. We need to re-prepare and re-submit it:
+        {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, {16#2500, _ErrString, _QueryID}, Delayed} when StreamID >= 0 ->
+            NewState = release_stream_id(StreamID, State),
+            FinalState = case orddict:find(StreamID, State#client_state.queries) of
+                %% For single queries, just remove from our cache and re-issue it
+                {ok, {Call, {Query = #cql_query{}, _ColumnSpecs}}} ->
+                    cqerl_cache:remove(Query),
+                    CacheResult = cqerl_cache:lookup(Query),
+                    process_outgoing_query(Call, {CacheResult, Query}, NewState);
+                %% For batch queries, don't bother trying to parse out and match the ID, just
+                %% treat all queries as uncached and re-prepare them. This should happen
+                %% rarely enough that it shouldn't be a performance issue.
+                {ok, {Call, Batch = #cql_query_batch{queries = Queries}}} ->
+                    SourceQueries = [Q || #cqerl_query{source_query = Q} <- Queries],
+                    cqerl_cache:remove(SourceQueries),
+                    RestartedBatch = Batch#cql_query_batch{queries = SourceQueries},
+                    cqerl_batch_sup:new_batch_coordinator(Call, RestartedBatch),
+                    NewState;
+                {ok, undefined} ->
+                    NewState
+            end,
+            {next_state, live, FinalState};
+
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, ErrorTerm, Delayed} when StreamID >= 0 ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
@@ -576,7 +599,7 @@ process_outgoing_query(Call=#cql_call{}, Batch=#cql_query_batch{}, State=#client
     {ok, BatchFrame} = cqerl_protocol:batch_frame(BaseFrame, Batch),
     send_to_db(State1, BatchFrame),
     maybe_signal_busy(State1),
-    Queries1 = orddict:store(BaseFrame#cqerl_frame.stream_id, {Call, void}, Queries0),
+    Queries1 = orddict:store(BaseFrame#cqerl_frame.stream_id, {Call, Batch}, Queries0),
     State1#client_state{queries=Queries1};
 
 process_outgoing_query(Call,

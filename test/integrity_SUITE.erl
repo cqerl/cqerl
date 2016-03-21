@@ -60,6 +60,8 @@ groups() -> [
         simple_insertion_roundtrip, 
         async_insertion_roundtrip, 
         emptiness,
+        missing_prepared_query,
+        missing_prepared_batch,
         options,
         {transactions, [parallel], [
             {types, [parallel], [
@@ -321,7 +323,34 @@ emptiness(Config) ->
     Row2 = cqerl:head(Result2),
     null = proplists:get_value(age, Row2),
     cqerl:close_client(Client).
-    
+
+missing_prepared_query(Config) ->
+    Client = get_client(Config),
+    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
+    {ok, _Result} = cqerl:run_query(Client, #cql_query{statement = Q, values =
+                                                       [{id, "abc"}, {age, 22}, {email, "me@here.com"}]}),
+    %% This query causes prepared queries on the table to be invalidated:
+    {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol int"),
+    %% This query will attempt to use the prepared query and fail, falling back to re-preparing it:
+    {ok, _Result2} = cqerl:run_query(Client, #cql_query{statement = Q, values =
+                                                       [{id, "def"}, {age, 22}, {email, "me@here.com"}]}).
+
+missing_prepared_batch(Config) ->
+    Client = get_client(Config),
+    S1 = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
+    V1 = [{id, "abc"}, {age, 22}, {email, "me@here.com"}],
+    Q1 = #cql_query{statement = S1, values = V1},
+
+
+    S2 = "INSERT INTO entries1(id, age) VALUES (?, ?)",
+    V2 = [ {id, "fff"}, {age, 66} ],
+    Q2 = #cql_query{statement = S2, values = V2},
+
+    {ok, _Result} = cqerl:run_query(Client, #cql_query_batch{queries = [Q1, Q2]}),
+    %% This query causes prepared queries on the table to be invalidated:
+    {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol2 int"),
+    %% This query will attempt to use the prepared queries and fail, falling back to re-preparing them:
+    {ok, _Result} = cqerl:run_query(Client, #cql_query_batch{queries = [Q1, Q2]}).
 
 async_insertion_roundtrip(Config) ->
     Client = get_client(Config),

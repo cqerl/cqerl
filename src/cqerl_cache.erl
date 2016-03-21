@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/1, lookup/2, lookup_many/2,
+-export([start_link/0, lookup/1, lookup/2, lookup_many/2, remove/1,
          query_was_prepared/2, query_preparation_failed/2]).
 
 %% ------------------------------------------------------------------
@@ -92,6 +92,12 @@ lookup_many(ClientPid, Queries) ->
     end, {[], orddict:new()}, Queries),
     States.
 
+-spec remove(#cql_query{} | [#cql_query{}]) -> ok.
+remove(Q = #cql_query{}) ->
+    remove([Q]);
+remove(Queries) ->
+    Statements = [S || #cql_query{statement = S} <- Queries],
+    gen_server:call(?SERVER, {remove, self(), Statements}).
 
 query_was_prepared({Pid, _Query}=Key, Result) when is_pid(Pid) ->
     gen_server:cast(?SERVER, {query_prepared, Key, Result});
@@ -115,6 +121,10 @@ init(_Args) ->
                                               {keypos, #cqerl_cached_query.key}
                                               ])
     }}.
+
+handle_call({remove, ClientPid, Statements}, _From, State = #state{cached_queries = Cache}) ->
+    lists:foreach(fun(Statement) -> ets:delete(Cache, {ClientPid, Statement}) end, Statements),
+    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

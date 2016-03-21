@@ -47,8 +47,9 @@
 
 -record(cqerl_query, {
     kind                = normal :: normal | prepared,
-    statement           = <<>> :: binary(),
-    values              = [] :: list(binary())
+    statement           = <<>>   :: binary(),
+    values              = []     :: list(binary()),
+    source_query                 :: #cql_query{}
 }).
 
 -record(cqerl_result_column_spec, {
@@ -66,8 +67,7 @@
 }).
 
 -record(cqerl_cached_query, {
-    key :: term(),
-    inet :: term(),
+    key :: {pid(), binary()},
     query_ref = <<>> :: binary(),
     params_metadata :: #cqerl_result_metadata{},
     result_metadata :: #cqerl_result_metadata{}
