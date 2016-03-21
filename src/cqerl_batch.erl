@@ -1,13 +1,13 @@
 -module(cqerl_batch).
 -include("cqerl_protocol.hrl").
 
--export([start_link/3, init/4]).
+-export([start_link/2, init/3]).
 -export([system_continue/3, system_terminate/4]).
 
-start_link(Call, Inet, Batch=#cql_query_batch{}) ->
-    proc_lib:start_link(?MODULE, init, [Call, Inet, Batch, self()]).
+start_link(Call, Batch=#cql_query_batch{}) ->
+    proc_lib:start_link(?MODULE, init, [Call, Batch, self()]).
 
-init(Call={ClientPid, _}, _Inet, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
+init(Call={ClientPid, _}, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
     Debug = sys:debug_options([]),
     proc_lib:init_ack(Parent, {ok, self()}),
     Queries = lists:map(fun
@@ -51,12 +51,12 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
 terminate(Call, Batch) ->
     Queries = lists:map(fun
         ({Query = #cql_query{statement=Statement, values=Values}, uncached}) ->
-            #cqerl_query{statement=Statement, kind=normal,
+            #cqerl_query{statement=Statement, kind=normal, source_query = Query,
                          values=cqerl_protocol:encode_query_values(Values, Query)};
 
         ({Query = #cql_query{values=Values},
           #cqerl_cached_query{query_ref=Ref, params_metadata=Metadata}}) ->
-            #cqerl_query{statement=Ref, kind=prepared,
+            #cqerl_query{statement=Ref, kind=prepared, source_query = Query,
                          values=cqerl_protocol:encode_query_values(Values, Query, Metadata#cqerl_result_metadata.columns)}
 
     end, Batch#cql_query_batch.queries),
