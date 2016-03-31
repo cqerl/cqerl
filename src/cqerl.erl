@@ -425,6 +425,7 @@ handle_info(_Msg, State) ->
 
 
 terminate(_Reason, _State) ->
+    pooler:rm_group(cqerl),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
