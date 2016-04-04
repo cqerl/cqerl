@@ -220,7 +220,7 @@ end_per_group(_group, Config) ->
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
-init_per_testcase(TestCase, Config) ->
+init_per_testcase(_TestCase, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -236,7 +236,7 @@ init_per_testcase(TestCase, Config) ->
 %%
 %% Description: Cleanup after each test case.
 %%--------------------------------------------------------------------
-end_per_testcase(TestCase, Config) ->
+end_per_testcase(_TestCase, Config) ->
     Config.
 
 datatypes_test(_Config) ->
@@ -245,7 +245,7 @@ datatypes_test(_Config) ->
 protocol_test(_Config) ->
     ok = eunit:test(cqerl_protocol).
 
-get_multiple_clients(Config, 0, Acc) -> Acc;
+get_multiple_clients(_Config, 0, Acc) -> Acc;
 get_multiple_clients(Config, N, Acc) ->
     get_multiple_clients(Config, N-1, [get_client(Config) | Acc]).
 
@@ -461,7 +461,7 @@ all_datatypes(Config) ->
     {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2;">>}),
     {Row1, Result1} = cqerl:next(Result),
     {Row2, Result2} = cqerl:next(Result1),
-    {Row3, Result3} = cqerl:next(Result2),
+    {Row3, _Result3} = cqerl:next(Result2),
     lists:foreach(fun
         (Row) -> 
             ReferenceRow = case proplists:get_value(col1, Row) of
@@ -530,7 +530,7 @@ custom_encoders(Config) ->
         ],
 
         % provide custom encoder for TupleType
-        value_encode_handler = fun({Type={custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, Tuple}, Query) ->
+        value_encode_handler = fun({{custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, Tuple}, Query) ->
             GetElementBinary = fun(Value) -> 
                 Bin = cqerl_datatypes:encode_data({text, Value}, Query),
                 Size = size(Bin),
@@ -561,7 +561,7 @@ options(Config) ->
     UUID = uuid:get_v4(),
 
     InsQ = #cql_query{statement = <<"INSERT INTO entries2_2(col1, col2) VALUES (?, ?)">>},
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=[
         {col1, TimeUUID},
         {col2, UUID}
     ]}),
@@ -766,7 +766,7 @@ check_extract_decimals(Rows) ->
     Scales = CheckScales,
     Decimals.
 
-inserted_rows(0, Q, Acc) ->
+inserted_rows(0, _Q, Acc) ->
     lists:reverse(Acc);
 inserted_rows(N, Q, Acc) ->
     ID = list_to_binary(io_lib:format("~B", [N])),
@@ -778,7 +778,7 @@ inserted_rows(N, Q, Acc) ->
 
 batches_and_pages(Config) ->
     Client = get_client(Config),
-    T1 = now(),
+    T1 = os:timestamp(),
     N = 100,
     Bsz = 25,
     {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
@@ -803,17 +803,19 @@ batches_and_pages(Config) ->
     {ok, Result2} = cqerl:fetch_more(Result),
     Ref1 = cqerl:fetch_more_async(Result2),
     IDs2 = AddIDs(Result2, IDs1),
-    receive
+    FetchMoreRef = receive
         {result, Ref1, Result3} ->
             Ref2 = cqerl:fetch_more_async(Result3),
-            IDs3 = AddIDs(Result3, IDs2)
+            IDs3 = AddIDs(Result3, IDs2),
+            Ref2
     end,
     receive
-        {result, Ref2, Result4} ->
+        {result, FetchMoreRef, Result4} ->
             IDs4 = AddIDs(Result4, IDs3),
             N = gb_sets:size(IDs4)
     end,
-    ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms", [N, Bsz, round(timer:now_diff(now(), T1)/1000)]),
+    ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms",
+           [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]),
     cqerl:close_client(Client).
 
 % Call when you're expecting a valid client

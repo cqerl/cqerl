@@ -199,7 +199,7 @@ end_per_group(_group, Config) ->
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
-init_per_testcase(TestCase, Config) ->
+init_per_testcase(_TestCase, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -215,12 +215,12 @@ init_per_testcase(TestCase, Config) ->
 %%
 %% Description: Cleanup after each test case.
 %%--------------------------------------------------------------------
-end_per_testcase(TestCase, Config) ->
+end_per_testcase(_TestCase, Config) ->
     Config.
 
 single_client(Config) ->
   Client = get_client(Config),
-  N = 500,    % # of requests
+  Num = 500,    % # of requests
   Dt = 2,    % in ms, yielding (1000/Dt) req/s
   
   Iterator = fun
@@ -229,22 +229,22 @@ single_client(Config) ->
       erlang:send_after(Dt*M, self(), send_request),
       F(F, N-1, M+1)
   end,
-  Iterator(Iterator, N, 0),
+  Iterator(Iterator, Num, 0),
   
   Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
   
-  T1 = erlang:now(),
+  T1 = os:timestamp(),
   DelayLooper = fun
     (_F, 0, 0, Acc) -> Acc;
     (F, N, M, Acc) ->
       receive
-        Msg = {result, Tag, void} -> 
+        {result, Tag, void} -> 
           {ok, T} = orddict:find(Tag, Acc),
-          F(F, N, M-1, orddict:store(Tag, timer:now_diff(erlang:now(), T), Acc));
+          F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
           
         send_request -> 
           Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, orddict:store(Tag, erlang:now(), Acc));
+          F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
           
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
@@ -253,11 +253,11 @@ single_client(Config) ->
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
-  Deltas = DelayLooper(DelayLooper, N, N, []),
+  Deltas = DelayLooper(DelayLooper, Num, Num, []),
   
-  Sum = lists:foldr(fun ({Tag, T}, Acc) -> Acc + T end, 0, Deltas),
+  Sum = lists:foldr(fun ({_Tag, T}, Acc) -> Acc + T end, 0, Deltas),
   ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
-    [N, (timer:now_diff(erlang:now(), T1))/1.0e6, Sum/N]).
+    [Num, (timer:now_diff(os:timestamp(), T1))/1.0e6, Sum/Num]).
   
 
 get_n_clients(_Config, 0, Acc) -> Acc;
@@ -268,7 +268,7 @@ n_clients(Config) ->
   NC = 10,
   Clients = get_n_clients(Config, NC, []),
   
-  N = 1500,    % # of requests
+  Num = 1500,    % # of requests
   Dt = 2,    % in ms, yielding (1000/Dt) req/s
   
   Iterator = fun
@@ -277,23 +277,23 @@ n_clients(Config) ->
       erlang:send_after(Dt*M, self(), send_request),
       F(F, N-1, M+1)
   end,
-  Iterator(Iterator, N, 0),
+  Iterator(Iterator, Num, 0),
   
   Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
   
-  T1 = erlang:now(),
+  T1 = os:timestamp(),
   DelayLooper = fun
     (_F, 0, 0, Acc) -> Acc;
     (F, N, M, Acc) ->
       receive
-        Msg = {result, Tag, void} -> 
+        {result, Tag, void} -> 
           {ok, T} = orddict:find(Tag, Acc),
-          F(F, N, M-1, orddict:store(Tag, timer:now_diff(erlang:now(), T), Acc));
+          F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
           
         send_request ->
           Client = lists:nth((N rem 5) + 1, Clients),
           Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, orddict:store(Tag, erlang:now(), Acc));
+          F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
           
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
@@ -302,14 +302,14 @@ n_clients(Config) ->
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
-  Deltas = DelayLooper(DelayLooper, N, N, []),
+  Deltas = DelayLooper(DelayLooper, Num, Num, []),
   
-  Sum = lists:foldr(fun ({Tag, T}, Acc) -> Acc + T end, 0, Deltas),
+  Sum = lists:foldr(fun ({_Tag, T}, Acc) -> Acc + T end, 0, Deltas),
   ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
-    [N, (timer:now_diff(erlang:now(), T1))/1.0e6, Sum/N]).
+    [Num, (timer:now_diff(os:timestamp(), T1))/1.0e6, Sum/Num]).
 
 many_clients(Config) ->
-  N = 75000,    % # of requests
+  Num = 75000,    % # of requests
   Dt = 0.1,    % in ms, yielding (1000/Dt) req/s
   
   Iterator = fun
@@ -318,25 +318,25 @@ many_clients(Config) ->
       erlang:send_after(trunc(Dt*M), self(), send_request),
       F(F, N-1, M+1)
   end,
-  Iterator(Iterator, N, 0),
+  Iterator(Iterator, Num, 0),
   
   Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
   
-  T1 = erlang:now(),
+  T1 = os:timestamp(),
   DelayLooper = fun
     (_F, 0, 0, Acc) -> Acc;
     (F, N, M, Acc) ->
       receive
-        Msg = {result, Tag, void} -> 
+        {result, Tag, void} -> 
           {T, Client} = gb_trees:get(Tag, Acc),
           cqerl:close_client(Client),
           {Pid, _} = Client,
-          F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(erlang:now(), T)}, Acc));
+          F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
           
         send_request ->
           Client = get_client(Config),
           Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, gb_trees:insert(Tag, {erlang:now(), Client}, Acc));
+          F(F, N-1, M, gb_trees:insert(Tag, {os:timestamp(), Client}, Acc));
           
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
@@ -345,7 +345,7 @@ many_clients(Config) ->
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
-  Deltas = gb_trees:to_list(DelayLooper(DelayLooper, N, N, gb_trees:empty())),
+  Deltas = gb_trees:to_list(DelayLooper(DelayLooper, Num, Num, gb_trees:empty())),
   Pids = lists:foldr(fun
       ({_, {Pid, _}}, Acc) ->
           case lists:member(Pid, Acc) of
@@ -355,9 +355,9 @@ many_clients(Config) ->
   end, [], Deltas),
     
   DistinctPids = length(Pids),
-  Sum = lists:foldr(fun ({Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
+  Sum = lists:foldr(fun ({_Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
   ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds", 
-    [N, DistinctPids, (timer:now_diff(erlang:now(), T1))/1.0e6, (Sum/N)/1.0e6]).
+    [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
 
 sync_insert() ->
     receive
@@ -379,7 +379,7 @@ sync_insert() ->
     end.
 
 many_sync_clients(Config) ->
-    N = 75000,
+    Num = 75000,
     Dt = 0.01,
     Iterator = fun
         (_F, 0, _M) -> ok;
@@ -388,9 +388,9 @@ many_sync_clients(Config) ->
             erlang:send_after(trunc(Dt*N), self(), {sync_request, self(),Client}),
             F(F, N-1, M+1)
         end,
-    Iterator(Iterator, N, 0),
+    Iterator(Iterator, Num, 0),
 
-    T1 = erlang:now(),
+    T1 = os:timestamp(),
     Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
     DelayLooper = fun
         (_F, 0, 0, Acc) ->
@@ -401,10 +401,10 @@ many_sync_clients(Config) ->
                     {T, Client} = gb_trees:get(Tag, Acc),
                     {Pid, _} = Client,
                     cqerl:close_client(Client),
-                    F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(erlang:now(), T)}, Acc));
+                    F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
                 {sync_request, P, Client} ->
                     Tag = make_ref(),
-                    Now = erlang:now(),
+                    Now = os:timestamp(),
                     Pid = spawn(fun sync_insert/0),
                     Pid ! {P, {Client, Q}, Tag, N},
                     F(F, N-1, M, gb_trees:insert(Tag, {Now, Client}, Acc));
@@ -414,7 +414,7 @@ many_sync_clients(Config) ->
                 ct:fail("All delayed messages did not arrive in time~n")
             end
     end,
-    Deltas = gb_trees:to_list(DelayLooper(DelayLooper, N, N, gb_trees:empty())),
+    Deltas = gb_trees:to_list(DelayLooper(DelayLooper, Num, Num, gb_trees:empty())),
     Pids = lists:foldr(fun
         ({_, {Pid, _}}, Acc) ->
             case lists:member(Pid, Acc) of
@@ -426,7 +426,7 @@ many_sync_clients(Config) ->
     DistinctPids = length(Pids),
     Sum = lists:foldr(fun ({_Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
     ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds --~n",
-    [N, DistinctPids, (timer:now_diff(erlang:now(), T1))/1.0e6, (Sum/N)/1.0e6]).
+    [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
 
 get_client(Config) ->
     Host = proplists:get_value(host, Config),
