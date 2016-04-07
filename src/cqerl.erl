@@ -32,7 +32,11 @@
     all_rows/1,
     all_rows/2,
 
-    start_link/0
+    start_link/0,
+
+    get_client/2,
+    get_global_opts/0,
+    make_option_getter/2
 ]).
 
 -export([
@@ -491,9 +495,8 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
     end,
     State#cqerl_state{client_stats=orddict:store(NodeKey, ClientStats, ClientsStats), named_nodes=NamedNodes}.
 
-
-prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
-    GlobalOpts = lists:map(
+get_global_opts() ->
+    lists:map(
         fun (Key) ->
             case application:get_env(cqerl, Key) of
                 undefined -> {Key, undefined};
@@ -501,7 +504,10 @@ prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
             end
         end,
         [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
-    ),
+    ).
+
+prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
+    GlobalOpts = get_global_opts(),
     Nodes = case application:get_env(cqerl, cassandra_nodes) of
         undefined -> [];
         {ok, N} -> N
@@ -565,7 +571,7 @@ select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
             #cql_client{pid=Pid, node=NodeKey} = lists:nth(RandIdx, AvailableClients),
             case cqerl_client:new_user(Pid, User) of
                 ok -> {existing, Pid, NodeKey};
-                {error, {closed, Reason}} -> {closed, Reason};
+                {error, {closed, Reason}} -> {error, {closed, Reason}};
                 {error, _E} -> no_available_clients
             end;
 
@@ -638,8 +644,8 @@ dec_stats_count(NodeKey, Stats) ->
 
 try_select_client(Client, Req, From, State = #cqerl_state{clients = Clients, retrying = Retrying}) ->
     case select_client(Clients, Client, From, State) of
-        {closed, Reason} ->
-            {reply, {closed, Reason}, State#cqerl_state{retrying=false}};
+        {error, {closed, Reason}} ->
+            {reply, {error, {closed, Reason}}, State#cqerl_state{retrying=false}};
 
         no_available_clients when Retrying ->
             retry;
@@ -655,3 +661,5 @@ try_select_client(Client, Req, From, State = #cqerl_state{clients = Clients, ret
             {noreply, State#cqerl_state{retrying=false}}
     end.
 
+get_client(Spec, Opts) ->
+    cqerl_hash:get_client({Spec, Opts}).

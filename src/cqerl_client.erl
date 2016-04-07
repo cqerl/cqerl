@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/2, new_user/2, remove_user/1,
+-export([start_link/2, start_link/3, new_user/2, remove_user/1,
          run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
          prepare_query/2,
          batch_ready/2]).
@@ -55,7 +55,9 @@ end).
     queries = [] :: list({integer(), term()}),
     queued,
     available_slots = [] :: list(integer()),
-    waiting_preparation = []
+    waiting_preparation = [],
+    mode :: hash | pooler,
+    key :: {term(), term()}
 }).
 
 -record(client_user, {
@@ -69,16 +71,25 @@ end).
 %% ------------------------------------------------------------------
 
 start_link(Inet, Opts) ->
-    gen_fsm:start_link(?MODULE, [Inet, Opts], []).
+    gen_fsm:start_link(?MODULE, [Inet, Opts, undefined], []).
+
+start_link(Inet, Opts, Key) ->
+    gen_fsm:start_link(?MODULE, [Inet, Opts, Key], []).
 
 new_user(Pid, From) ->
-    try
-        gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
-    catch
-        exit:_ -> {error, {closed, process_died}}
+    case cqerl_app:mode() of
+        pooler ->
+            try
+                gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
+            catch
+                exit:_ -> {error, {closed, process_died}}
+            end;
+        hash ->
+            ok
     end.
 
 remove_user({ClientPid, ClientRef}) ->
+    cqerl_app:mode() =:= pooler andalso
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
 
 run_query(Client, Query) when ?IS_IOLIST(Query) ->
@@ -115,7 +126,7 @@ batch_ready({ClientPid, Call}, QueryBatch) ->
 %% gen_fsm Function Definitions
 %% ------------------------------------------------------------------
 
-init([Inet, Opts]) ->
+init([Inet, Opts, Key]) ->
     case create_socket(Inet, Opts) of
         {ok, Socket, Transport} ->
             {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
@@ -126,7 +137,9 @@ init([Inet, Opts]) ->
                 authmod=AuthHandler, authargs=AuthArgs,
                 users=[],
                 sleep=get_sleep_duration(Opts),
-                keyspace=proplists:get_value(keyspace, Opts)
+                keyspace=proplists:get_value(keyspace, Opts),
+                key=Key,
+                mode=cqerl_app:mode()
             },
             send_to_db(State, OptionsFrame),
             activate_socket(State),
@@ -292,7 +305,7 @@ handle_info({ tcp_closed, _Socket }, starting, State) ->
 
 handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
     [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
-    {stop, connection_closed, State};
+    {stop, normal, State};
 
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
@@ -703,10 +716,19 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     send_to_db(State, Frame),
     {starting, State}.
 
-switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=Inet}) ->
+switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
+                                         inet=Inet, key=Key, mode=Mode}) ->
     signal_alive(Inet, Keyspace),
-    UsersTab = ets:new(users, [set, private, {keypos, #client_user.ref}]),
-    lists:foreach(fun(From) -> add_user(From, UsersTab) end, Users),
+    UsersTab =
+    case Mode of
+        hash ->
+            cqerl_hash:client_started(Key),
+            undefined;
+        pooler ->
+            T = ets:new(users, [set, private, {keypos, #client_user.ref}]),
+            lists:foreach(fun(From) -> add_user(From, T) end, Users),
+            T
+    end,
     Queries = create_queries_dict(),
     State1 = State#client_state{
         authstate=undefined, authargs=undefined, delayed = <<>>,
@@ -756,9 +778,9 @@ create_socket({Addr, Port}, Opts) ->
 activate_socket(#client_state{socket=undefined}) ->
     ok;
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
-    ssl:setopts(Socket, [{active, once}, {mode, binary}, {packet, raw}]);
+    ssl:setopts(Socket, [{active, once}]);
 activate_socket(#client_state{trans=tcp, socket=Socket}) ->
-    inet:setopts(Socket, [{active, once}, {packet, raw}]).
+    inet:setopts(Socket, [{active, once}]).
 
 
 
@@ -846,13 +868,23 @@ create_queries_dict(N, Acc) ->
 
 
 get_sleep_duration(Opts) ->
-    round(case proplists:get_value(sleep_duration, Opts) of
-        {Amount, sec} -> Amount * 1000;
-        {Amount, min} -> Amount * 1000 * 60;
-        {Amount, hour} -> Amount * 1000 * 60 * 60;
-        Amount when is_integer(Amount) -> Amount
-    end).
+    case cqerl_app:mode() of
+        hash -> infinity;
+        _ ->
+            round(case proplists:get_value(sleep_duration, Opts) of
+                      {Amount, sec} -> Amount * 1000;
+                      {Amount, min} -> Amount * 1000 * 60;
+                      {Amount, hour} -> Amount * 1000 * 60 * 60;
+                      Amount when is_integer(Amount) -> Amount
+                  end)
+    end.
 
 stop_during_startup(Reason, State = #client_state{users = Users}) ->
-    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
+    lists:foreach(fun (From) -> gen_server:reply(From, {error, Reason}) end, Users),
+    % In pooler mode, do a short sleep here before dying - pooler immediately (and
+    % continiously) restarts the process, and in failure states such as setting an
+    % invalid keyspace this leads very quickly to use of all the local ports and
+    % eaddrinuse errors on further attempts (including valid ones) by clients to
+    % connect.
+    cqerl_app:mode() =:= pooler andalso timer:sleep(200),
     {stop, normal, State#client_state{socket=undefined}}.
