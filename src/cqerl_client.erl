@@ -305,7 +305,7 @@ handle_info({ tcp_closed, _Socket }, starting, State) ->
 
 handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
     [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
-    {stop, normal, State};
+    {stop, connection_closed, State};
 
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
