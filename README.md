@@ -25,6 +25,12 @@ CQErl was designed to be as simple as possible on your side. You just provide th
 
 ### Usage
 
+#### Pooler Mode
+This is the default/original mode. It uses [pooler][1] to manage connections, and
+has been around for quite a while, so is reasonably well tested. It does,
+however, have a couple of performance bottlenecks that may limit scalability on
+larger or more heaviliy loaded systems.
+
 ##### Connecting
 
 If you installed cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
@@ -32,23 +38,40 @@ If you installed cassandra and didn't change any configuration related to authen
 ```erlang
 {ok, Client} = cqerl:new_client({}).
 ```
-    
+
 And close the connection like this
 
 ```erlang
 cqerl:close_client(Client).
 ```
 
-1. The first argument to `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
+#### Hash Mode
+Hash mode is a new mode which uses a hash of the user process's PID to allocate
+clients, in a similar way to the system used by [dispcount][9]. To enable this
+mode, set
 
-2. The second possible argument (when using `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size` and `pool_cull_interval`, which are used to configure [pooler][1] (see its documentation to understand those options).
+```erlang
+{mode, hash}
+```
+
+in your application config (see below). In this mode, rather than calling
+`cqerl:new_client/1`, call `cqerl:get_client/2` with the same arguments.
+Calling `cqerl:close_client/1` is *not* required in hash mode. See the comments
+at the top of `cqerl_hash.erl` for a full description of the behaviour of this
+mode.
+
+#### All modes
+
+1. The first argument to `cqerl:get_client/2`, `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
+
+2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size` and `pool_cull_interval`, which are used to configure [pooler][1] (see its documentation to understand those options).
 
 If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
 ```erlang
 {ok, Client} = cqerl:new_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
 ```
-    
+
 Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
 
 ###### Using environment variables
@@ -325,3 +348,4 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 [6]: http://www.datastax.com/documentation/cql/3.0/webhelp/index.html#cql/cql_reference/cql_data_types_c.html#reference_ds_dsf_555_yj
 [7]: http://www.datastax.com/dev/blog/client-side-improvements-in-cassandra-2-0
 [8]: http://www.datastax.com/documentation/cassandra/2.0/cassandra/configuration/configCassandra_yaml_r.html
+[9]: https://github.com/ferd/dispcount
