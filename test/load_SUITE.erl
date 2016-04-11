@@ -21,14 +21,8 @@
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
-suite() -> 
-  [{timetrap, {seconds, 30}},
-   {require, ssl, cqerl_test_ssl},
-   {require, auth, cqerl_test_auth},
-   % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host},
-   {require, pool_min_size, pool_min_size},
-   {require, pool_max_size, pool_max_size}].
+suite() ->
+  [{timetrap, {seconds, 30}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -98,22 +92,16 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
+    test_helper:set_mode(pooler, Config),
     Config1 = test_helper:standard_setup("test_keyspace_1", Config),
-    
-    Client = get_client([{keyspace, undefined}|Config1]),
-    Q = <<"CREATE KEYSPACE test_keyspace_1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace_1;">>,
-    case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace_1">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:run_query(Client, "USE test_keyspace_1;"),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>, name = <<"entries1">>}} =
-      cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
+    test_helper:create_keyspace(<<"test_keyspace_1">>, Config1),
+
+    Client = get_client(Config1),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
+                             name = <<"entries1">>}} =
+    cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
     cqerl:close_client(Client),
-    
+
     [{pool_min_size, 10}, {pool_max_size, 100} | Config1].
 
 %%--------------------------------------------------------------------
@@ -140,11 +128,10 @@ end_per_suite(_Config) ->
 %%
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
+init_per_group(pooler, Config) ->
+    test_helper:set_mode(pooler, Config);
 init_per_group(hash, Config) ->
-    application:stop(cqerl),
-    application:set_env(cqerl, mode, hash),
-    application:start(cqerl),
-    [{mode, hash} | Config];
+    test_helper:set_mode(hash, Config);
 
 init_per_group(_, Config) ->
     Config.

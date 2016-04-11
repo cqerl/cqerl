@@ -21,14 +21,8 @@
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
-suite() -> 
-  [{timetrap, {seconds, 20}},
-   {require, ssl, cqerl_test_ssl},
-   {require, auth, cqerl_test_auth},
-   % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host},
-   {require, pool_min_size, pool_min_size},
-   {require, pool_max_size, pool_max_size}].
+suite() ->
+  [{timetrap, {seconds, 20}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -144,11 +138,8 @@ init_per_suite(Config) ->
 %%
 %% Description: Cleanup after the suite.
 %%--------------------------------------------------------------------
-end_per_suite(Config) ->
-    Client = get_client([{keyspace, undefined}|Config]),
-    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
-    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
-    cqerl:close_client(Client).
+end_per_suite(_Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_group(GroupName, Config0) ->
@@ -170,12 +161,11 @@ init_per_group(NoKeyspace, Config) when NoKeyspace == connection_pooler;
     %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
     [{keyspace, undefined} | proplists:delete(keyspace, Config)];
 
-% Move from pooler to hash mode:
+% Set mode:
+init_per_group(pooler, Config) ->
+    test_helper:set_mode(pooler, Config);
 init_per_group(hash, Config) ->
-    application:stop(cqerl),
-    application:set_env(cqerl, mode, hash),
-    application:start(cqerl),
-    [{mode, hash} | Config];
+    test_helper:set_mode(hash, Config);
 
 init_per_group(_Group, Config) ->
     Config.
@@ -191,8 +181,13 @@ init_per_group(_Group, Config) ->
 %%
 %% Description: Cleanup after each test case group.
 %%--------------------------------------------------------------------
-end_per_group(_group, Config) ->
-    Config.
+end_per_group(pooler, Config) ->
+    Client = get_client([{keyspace, undefined}|Config]),
+    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
+    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
+    cqerl:close_client(Client);
+end_per_group(_, Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_testcase(TestCase, Config0) ->
@@ -266,16 +261,7 @@ connect(Config) ->
     ok.
 
 create_keyspace(Config) ->
-    Client = get_client(Config),
-    Q = <<"CREATE KEYSPACE test_keyspace_2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace_2;">>,
-    case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace_2">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:close_client(Client).
+    test_helper:create_keyspace(<<"test_keyspace_2">>, Config).
 
 create_table(Config) ->
     Client = get_client(Config),

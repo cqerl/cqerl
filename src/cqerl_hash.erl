@@ -52,15 +52,12 @@ client_started(Key) ->
 handle_call({start_clients, Key}, From, State = #state{pending = Pending}) ->
     case ets:lookup(cqerl_client_tables, Key) of
         [#client_table{}] ->
-            ct:log("BJD Found existing table ~p", [Key]),
             {reply, ok, State};
         [] ->
             case lists:keytake(Key, #pending.key, Pending) of
                 false ->
-                    ct:log("BJD No existing table - starting clients ~p", [Key]),
                     start_clients_impl(Key, From, State);
                 {value, PendingItem, OtherPending} ->
-                    ct:log("BJD No existing table but pending request - adding to queue ~p", [Key]),
                     NewPending = PendingItem#pending{reply_to = [From | PendingItem#pending.reply_to]},
                     {noreply, State#state{pending = [NewPending | OtherPending]}}
             end
@@ -71,7 +68,6 @@ handle_call(_, _, State) ->
     {noreply, State}.
 
 handle_cast({add_client, Key, Pid}, State = #state{pending = Pending}) ->
-    ct:log("BJD Got add_client for ~p / ~p", [Key, Pending]),
     NewState =
     case lists:keytake(Key, #pending.key, Pending) of
         {value, PendingItem, OtherPending} ->
@@ -136,7 +132,6 @@ add_new_client(Pid, PendingItem = #pending{reply_to = ReplyTo, key = Key, table 
     add_client(Pid, Table),
     NewPending = case Remaining of
         1 ->
-                         ct:log("BJD final client started for ~p", [Key]),
             ets:insert(cqerl_client_tables,
                        #client_table{
                           key = Key,
@@ -145,7 +140,6 @@ add_new_client(Pid, PendingItem = #pending{reply_to = ReplyTo, key = Key, table 
             lists:foreach(fun(R) -> gen_server:reply(R, ok) end, ReplyTo),
             OtherPending;
         N ->
-                         ct:log("BJD client ~p started for ~p", [N, Key]),
             [PendingItem#pending{remaining = N-1} | OtherPending]
     end,
     State#state{pending = NewPending}.
