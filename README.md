@@ -55,10 +55,10 @@ mode, set
 ```
 
 in your application config (see below). In this mode, rather than calling
-`cqerl:new_client/1`, call `cqerl:get_client/2` with the same arguments.
-Calling `cqerl:close_client/1` is *not* required in hash mode. See the comments
-at the top of `cqerl_hash.erl` for a full description of the behaviour of this
-mode.
+`cqerl:new_client/2`, call `cqerl:get_client/2` with the same arguments.
+Calling `cqerl:close_client/1` is *not* required in hash mode (but will do no
+harm). See the comments at the top of `cqerl_hash.erl` for a full description
+of the behaviour of this mode.
 
 #### All modes
 
