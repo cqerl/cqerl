@@ -38,7 +38,7 @@ init(main) ->
       }]
      }};
 
-init(Args = [key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
+init([key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
     {ok,
      {
       #{
