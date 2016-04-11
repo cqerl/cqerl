@@ -2,6 +2,84 @@
 
 -behaviour(gen_server).
 
+%% This module performs the heavy lifting for the 'hash' application mode.
+%% Below is some background behind the creation of this mode as well as an
+%% overview of its operation.
+%%
+%% A note on terminology: When I say "client" I mean a cqerl_client process.
+%% When I say "user" I mean any process in an application that calls
+%% cqerl:get_client or cqerl:new_client to get a client to use to make a query.
+%%
+%% So - we've been having a few intermittent problems with the existing
+%% pooler-based implementation. Fundamentally, it doesn't seem to be an ideal
+%% choice for managing a pool of clients where each client can have multiple
+%% users, as is the case with cqerl clients. Additionally, as has been noted in
+%% #49, it has scalability issues with bottlenecks (that may not be endemic to
+%% pooler per se, but are certainly present in our use of it). I looked over
+%% dispcount as an alternative, but as I explained in my comment on #49, that
+%% doesn't seem ideal either.
+%%
+%% What I've ended up doing, then, is to invent my own solution (which steals a
+%% couple of dispcount's neat ideas that fit our problem). Basically, for each
+%% "key" (see below), we have a set of client processes started on the first
+%% attempt to get a client using that key. Those clients, once started, are
+%% available to all users, and are allocated from a pool using a
+%% dispcount-style hash of the user's PID. Because they're multi-user clients,
+%% however, we don't need dispcount's exclusivity guarantees and so can
+%% allocate multiple users to each client.
+%%
+%% The "key" is essentially the NodeKey used by the pooler implementation - a
+%% tuple of the Node and Opts used to originally set up the clients. I think
+%% this could probably stand to be simplified a bit, but for now it's what I've
+%% got. Every unique key currently starts num_clients (default 20) client
+%% processes - I'd also like to make that configurable on a per-keyspace basis.
+%%
+%% Each set of clients is monitored by a one_for_one supervisor (call it the
+%% "set supervisor"). And these set supervisors are, in turn, monitored under a
+%% simple_one_for_one supervisor called cqerl_client_sup. What this means is
+%% that individual failures/crashes amongst a set of clients will be restarted
+%% by their set supervisor and only cause transient error conditions for any
+%% user trying to access them. If, on the other hand, the whole Cassandra
+%% server goes down (or something else equally catastrophic happens) then the
+%% clients retrying will quickly hit the set supervisor's restart intensity and
+%% cause it to shutdown too. Since cqerl_client_sup is a simple_one_for_one,
+%% however, the failure won't cascade any further upwards. Further, the next
+%% attempt by a user to access a client for that key will create a new set of
+%% clients. If they connect successfully, everything is good and we keep going.
+%% If they don't, the user (and any other uses waiting on their creation) will
+%% again receive error responses.
+%%
+%% In addition to the set supervisor, each key has its own ets table which is
+%% used to map the hash values to a client PID. These tables are maintained by
+%% the cqerl_hash module/process (registered as cqerl) which monitors all the
+%% client processes and their immediate supervisors. They are further indexed
+%% by a "root" ets table named cqerl_client_tables which maps keys to their
+%% respective tables. Thus in the normal course of events, any request for a
+%% client requires two ets lookups to read-optimised tables (in much the same
+%% manner as dispcount): First to get the client table for a key, then to get
+%% the client allocated to the hash of the user process pid.
+%%
+%% I've tried, as far as possible, to make this change backwards compatible. If
+%% you change nothing, the behaviour still uses the existing pooler system.
+%% Adding {mode, hash} to the cqerl app config enables the new system.
+%%
+%% The other change required is to call cqerl:get_client/2 rather than
+%% cqerl:new_client. I made that distinction mostly so that users would not
+%% accidentally end up using the wrong mode, but also because it would have
+%% required fiddly and otherwise unnecessary checks in new_client to have it
+%% work for both.
+%%
+%% Calling cqerl:close_client/1 in hash mode is not necessary, but nor is it
+%% harmful.
+%%
+%% I've changed the integration and load tests to run in both modes, and
+%% everything seems to work okay. Load tests for hash mode are marginally
+%% (maybe ~20%) faster on my system, but it's a VM with only 2 cores - I hope
+%% on beefier machines that the improvement will be more pronounced, but I've
+%% yet to have a chance to test that.
+
+
+
 -export([
     start_link/0,
     client_started/1,

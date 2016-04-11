@@ -39,7 +39,6 @@ init(main) ->
      }};
 
 init(Args = [key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
-    ct:log("BJD Got start ~p", [Args]),
     {ok,
      {
       #{

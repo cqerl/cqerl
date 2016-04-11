@@ -192,11 +192,28 @@ crash_recovery(Config) ->
     {ClientPid, _} = get_client(Config),
     % Let's crash one:
     exit(ClientPid, kill),
-    % Give it a second to get itself together:
+    % Give it a moment to get itself together:
     timer:sleep(500),
     {ClientPid2, _} = get_client(Config),
     ?assertNotEqual(ClientPid, ClientPid2),
     ?assert(is_process_alive(ClientPid2)).
 
-outage_recovery(_Config) ->
+outage_recovery(Config) ->
+    {ClientPid, _} = get_client(Config),
+    ClientTables = ets:tab2list(cqerl_client_tables),
+    lists:foreach(fun({client_table, _, Sup, _}) ->
+                          kill_children(Sup)
+                  end, ClientTables),
+    timer:sleep(500),
+    % Everything should have died and been cleaned up:
+    ?assertEqual([], ets:tab2list(cqerl_client_tables)),
+
+    % Fire up some new clients:
+    {ClientPid2, _} = get_client(Config),
+    ?assertNotEqual(ClientPid, ClientPid2),
+    ?assertEqual(1, length(ets:tab2list(cqerl_client_tables))),
     ok.
+
+kill_children(Sup) ->
+    lists:foreach(fun({_, Child, _, _}) -> exit(Child, kill) end,
+                  supervisor:which_children(Sup)).
