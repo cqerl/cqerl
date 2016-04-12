@@ -95,24 +95,28 @@ prepare_client(Inet, Opts) ->
 prepare_client(Inet) -> prepare_client(Inet, []).
 
 
-
--spec new_client() -> {ok, client()} | {error, no_available_clients | no_configured_node}.
+% Use in `pooler' mode
+-spec new_client() -> {ok, client()} | {error, term()}.
 new_client() ->
     gen_server:call(?MODULE, get_any_client).
 
--spec new_client(Inet :: inet() | {}) -> {ok, client()}.
+-spec new_client(Inet :: inet() | {}) -> {ok, client()} | {error, term()}.
 new_client({}) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, []);
 new_client(Inet) ->
     new_client(Inet, []).
 
--spec new_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, no_available_clients} | {closed, term()}.
+-spec new_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
 new_client({}, Opts) ->
     new_client({{127, 0, 0, 1}, ?DEFAULT_PORT}, Opts);
 new_client(Inet, Opts) ->
     gen_server:call(?MODULE, {get_client, prepare_node_info(Inet), Opts}).
 
 
+% Use in `hash' mode
+-spec get_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
+get_client(Spec, Opts) ->
+    cqerl_hash:get_client({Spec, Opts}).
 
 
 %% @doc Close a client that was previously allocated with {@link new_client/0} or {@link new_client/1}.
@@ -660,6 +664,3 @@ try_select_client(Client, Req, From, State = #cqerl_state{clients = Clients, ret
         {new, _Pid} ->
             {noreply, State#cqerl_state{retrying=false}}
     end.
-
-get_client(Spec, Opts) ->
-    cqerl_hash:get_client({Spec, Opts}).
