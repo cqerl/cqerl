@@ -7,6 +7,8 @@
 
 -compile(export_all).
 
+-import(test_helper, [maybe_get_client/1, get_client/1]).
+
 %%--------------------------------------------------------------------
 %% Function: suite() -> Info
 %%
@@ -19,14 +21,8 @@
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
-suite() -> 
-  [{timetrap, {seconds, 20}},
-   {require, ssl, cqerl_test_ssl},
-   {require, auth, cqerl_test_auth},
-   % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host},
-   {require, pool_min_size, pool_min_size},
-   {require, pool_max_size, pool_max_size}].
+suite() ->
+  [{timetrap, {seconds, 20}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -49,33 +45,52 @@ suite() ->
 %%
 %% Description: Returns a list of test case group definitions.
 %%--------------------------------------------------------------------
-groups() -> [
-    {connection, [sequence], [
-        random_selection,
-        failed_connection
-    ]},
-    {database, [sequence], [ 
-        {initial, [sequence], [connect, create_keyspace]}, 
-        create_table,
-        simple_insertion_roundtrip, 
-        async_insertion_roundtrip, 
-        emptiness,
-        missing_prepared_query,
-        missing_prepared_batch,
-        options,
-        {transactions, [parallel], [
-            {types, [parallel], [
-                all_datatypes, 
-                % custom_encoders, 
-                collection_types, 
-                counter_type,
-                varint_type,
-                decimal_type
-            ]},
-            batches_and_pages
-        ]}
-    ]}
-].
+
+connection_tests() ->
+    [
+     random_selection,
+     failed_connection
+    ].
+
+database_tests() ->
+    [
+     {initial, [sequence], [connect, create_keyspace]},
+     create_table,
+     simple_insertion_roundtrip,
+     async_insertion_roundtrip,
+     emptiness,
+     missing_prepared_query,
+     missing_prepared_batch,
+     options,
+     {transactions, [parallel],
+      [
+       {types, [parallel],
+        [
+         all_datatypes, 
+         % custom_encoders,
+         collection_types,
+         counter_type,
+         varint_type,
+         decimal_type
+        ]},
+       batches_and_pages
+      ]}
+    ].
+
+
+groups() ->
+    [
+     {pooler,
+      [
+       {connection_pooler, [sequence], connection_tests()},
+       {database_pooler, [sequence], database_tests()}
+      ]},
+     {hash,
+      [
+       {connection_hash, [sequence], connection_tests() -- [random_selection]},
+       {database_hash, [sequence], database_tests()}
+      ]}
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: all() -> GroupsAndTestCases
@@ -94,8 +109,8 @@ groups() -> [
 all() ->
     [datatypes_test,
      protocol_test,
-     {group, connection},
-     {group, database}
+     {group, pooler},
+     {group, hash}
     ].
 
 %%--------------------------------------------------------------------
@@ -113,46 +128,7 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    case erlang:function_exported(application, ensure_all_started, 1) of
-      true -> application:ensure_all_started(cqerl);
-      false ->
-        application:start(crypto),
-        application:start(asn1),
-        application:start(public_key),
-        application:start(ssl),
-        application:start(pooler),
-        application:start(cqerl)
-    end,
-    
-    application:start(sasl),
-    RawSSL = ct:get_config(ssl),
-    DataDir = proplists:get_value(data_dir, Config),
-    SSL = case RawSSL of
-        undefined -> false;
-        false -> false;
-        _ ->
-            %% To relative file paths for SSL, prepend the path of
-            %% the test data directory. To bypass this behavior, provide
-            %% an absolute path.
-            lists:map(fun
-                ({FileOpt, Path}) when FileOpt == cacertfile;
-                                       FileOpt == certfile;
-                                       FileOpt == keyfile ->
-                    case Path of
-                        [$/ | _Rest] -> {FileOpt, Path};
-                        _ -> {FileOpt, filename:join([DataDir, Path])}
-                    end;
-
-                (Opt) -> Opt
-            end, RawSSL)
-    end,
-    [ {auth, ct:get_config(auth)}, 
-      {ssl, RawSSL},
-      {prepared_ssl, SSL},
-      {keyspace, "test_keyspace_2"},
-      {host, ct:get_config(host)},
-      {pool_min_size, ct:get_config(pool_min_size)},
-      {pool_max_size, ct:get_config(pool_max_size)} ] ++ Config.
+    test_helper:standard_setup("test_keyspace_2", Config).
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -162,11 +138,8 @@ init_per_suite(Config) ->
 %%
 %% Description: Cleanup after the suite.
 %%--------------------------------------------------------------------
-end_per_suite(Config) ->
-    Client = get_client([{keyspace, undefined}|Config]),
-    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
-    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
-    cqerl:close_client(Client).
+end_per_suite(_Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_group(GroupName, Config0) ->
@@ -182,12 +155,19 @@ end_per_suite(Config) ->
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
 
-init_per_group(NoKeyspace, Config) when NoKeyspace == connection;
+init_per_group(NoKeyspace, Config) when NoKeyspace == connection_pooler;
                                         NoKeyspace == initial ->
     %% Here we remove the keyspace configuration, since we're going to drop it
     %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
-    [{keyspace, undefined} | Config];
-init_per_group(_group, Config) ->
+    [{keyspace, undefined} | proplists:delete(keyspace, Config)];
+
+% Set mode:
+init_per_group(pooler, Config) ->
+    test_helper:set_mode(pooler, Config);
+init_per_group(hash, Config) ->
+    test_helper:set_mode(hash, Config);
+
+init_per_group(_Group, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -201,8 +181,13 @@ init_per_group(_group, Config) ->
 %%
 %% Description: Cleanup after each test case group.
 %%--------------------------------------------------------------------
-end_per_group(_group, Config) ->
-    Config.
+end_per_group(pooler, Config) ->
+    Client = get_client([{keyspace, undefined}|Config]),
+    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
+    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
+    cqerl:close_client(Client);
+end_per_group(_, Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_testcase(TestCase, Config0) ->
@@ -262,11 +247,11 @@ random_selection(Config) ->
     lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
 
 failed_connection(Config) ->
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
-    {closed, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
+    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
+    {error, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
     % A previous bug would cause timeouts on subsequent calls with an already
     % used invalid keyspace. Test that case here.
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
+    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
 
 connect(Config) ->
     {Pid, Ref} = get_client(Config),
@@ -276,17 +261,8 @@ connect(Config) ->
     ok.
 
 create_keyspace(Config) ->
-    Client = get_client(Config),
-    Q = <<"CREATE KEYSPACE test_keyspace_2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace_2;">>,
-    case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace_2">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:close_client(Client).
-        
+    test_helper:create_keyspace(<<"test_keyspace_2">>, Config).
+
 create_table(Config) ->
     Client = get_client(Config),
     ct:log("Got client ~w~n", [Client]),
@@ -817,26 +793,3 @@ batches_and_pages(Config) ->
     ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms",
            [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]),
     cqerl:close_client(Client).
-
-% Call when you're expecting a valid client
-get_client(Config) ->
-    {ok, Client} = maybe_get_client(Config),
-    Client.
-
-% Call to test new_client error cases
-maybe_get_client(Config) ->
-    Host = proplists:get_value(host, Config),
-    SSL = proplists:get_value(prepared_ssl, Config),
-    Auth = proplists:get_value(auth, Config, undefined),
-    Keyspace = proplists:get_value(keyspace, Config),
-    PoolMinSize = proplists:get_value(pool_min_size, Config),
-    PoolMaxSize = proplists:get_value(pool_max_size, Config),
-
-    io:format("Options : ~w~n", [[
-        {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-        {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}
-        ]]),
-
-    cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                            {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]).
-

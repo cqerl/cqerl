@@ -7,6 +7,8 @@
 
 -compile(export_all).
 
+-import(test_helper, [get_client/1]).
+
 %%--------------------------------------------------------------------
 %% Function: suite() -> Info
 %%
@@ -19,14 +21,8 @@
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
-suite() -> 
-  [{timetrap, {seconds, 30}},
-   {require, ssl, cqerl_test_ssl},
-   {require, auth, cqerl_test_auth},
-   % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host},
-   {require, pool_min_size, pool_min_size},
-   {require, pool_max_size, pool_max_size}].
+suite() ->
+  [{timetrap, {seconds, 30}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -49,7 +45,16 @@ suite() ->
 %%
 %% Description: Returns a list of test case group definitions.
 %%--------------------------------------------------------------------
-groups() -> [].
+tests() ->
+    [
+     single_client, n_clients, many_clients, many_sync_clients, many_concurrent_clients
+    ].
+
+groups() ->
+    [
+     {pooler, [sequence], tests()},
+     {hash, [sequence], tests()}
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: all() -> GroupsAndTestCases
@@ -65,9 +70,11 @@ groups() -> [].
 %%
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
+
 all() ->
     [
-    single_client, n_clients, many_clients, many_sync_clients
+     {group, pooler},
+     {group, hash}
     ].
 
 %%--------------------------------------------------------------------
@@ -85,61 +92,16 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    case erlang:function_exported(application, ensure_all_started, 1) of
-      true -> application:ensure_all_started(cqerl);
-      false ->
-        application:start(crypto),
-        application:start(asn1),
-        application:start(public_key),
-        application:start(ssl),
-        application:start(pooler),
-        application:start(cqerl)
-    end,
-    
-    application:start(sasl),
-    RawSSL = ct:get_config(ssl),
-    DataDir = proplists:get_value(data_dir, Config),
-    SSL = case RawSSL of
-        undefined -> false;
-        false -> false;
-        _ ->
-            %% To relative file paths for SSL, prepend the path of
-            %% the test data directory. To bypass this behavior, provide
-            %% an absolute path.
-            lists:map(fun
-                ({FileOpt, Path}) when FileOpt == cacertfile;
-                                       FileOpt == certfile;
-                                       FileOpt == keyfile ->
-                    case Path of
-                        [$/ | _Rest] -> {FileOpt, Path};
-                        _ -> {FileOpt, filename:join([DataDir, Path])}
-                    end;
+    test_helper:set_mode(pooler, Config),
+    Config1 = test_helper:standard_setup("test_keyspace_1", Config),
+    test_helper:create_keyspace(<<"test_keyspace_1">>, Config1),
 
-                (Opt) -> Opt
-            end, RawSSL)
-    end,
-    Config1 = [ {auth, ct:get_config(auth)}, 
-      {ssl, RawSSL},
-      {prepared_ssl, SSL},
-      {keyspace, "test_keyspace_1"},
-      {host, ct:get_config(host)},
-      {pool_min_size, ct:get_config(pool_min_size)},
-      {pool_max_size, ct:get_config(pool_max_size)} ] ++ Config,
-    
-    Client = get_client([{keyspace, undefined}|Config1]),
-    Q = <<"CREATE KEYSPACE test_keyspace_1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace_1;">>,
-    case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace_1">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:run_query(Client, "USE test_keyspace_1;"),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>, name = <<"entries1">>}} =
-      cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
+    Client = get_client(Config1),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
+                             name = <<"entries1">>}} =
+    cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
     cqerl:close_client(Client),
-    
+
     [{pool_min_size, 10}, {pool_max_size, 100} | Config1].
 
 %%--------------------------------------------------------------------
@@ -166,7 +128,12 @@ end_per_suite(_Config) ->
 %%
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
-init_per_group(_group, Config) ->
+init_per_group(pooler, Config) ->
+    test_helper:set_mode(pooler, Config);
+init_per_group(hash, Config) ->
+    test_helper:set_mode(hash, Config);
+
+init_per_group(_, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -428,19 +395,27 @@ many_sync_clients(Config) ->
     ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds --~n",
     [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
 
-get_client(Config) ->
-    Host = proplists:get_value(host, Config),
-    SSL = proplists:get_value(prepared_ssl, Config),
-    Auth = proplists:get_value(auth, Config, undefined),
-    Keyspace = proplists:get_value(keyspace, Config),
-    PoolMinSize = proplists:get_value(pool_min_size, Config),
-    PoolMaxSize = proplists:get_value(pool_max_size, Config),
-    
-    % io:format("Options : ~w~n", [[
-    %     {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-    %     {pool_min_size, 5}, {pool_max_size, 5}
-    %     ]]),
-    
-    {ok, Client} = cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                                           {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]),
-    Client.
+many_concurrent_clients(Config) ->
+    Procs = 200,
+    Count = lists:seq(1, Procs),
+    Me = self(),
+    lists:foreach(fun(I) ->
+                          spawn_link(fun() -> concurrent_client(Me, I, Config) end)
+                  end,
+                  Count),
+    lists:foreach(fun(_) ->
+                          receive
+                              done -> ok
+                          end
+                  end,
+                  Count).
+
+concurrent_client(ReportTo, ID, Config) ->
+    Iters = 500,
+    Client = get_client(Config),
+    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
+    lists:foreach(fun(I) ->
+                          {ok, void} = cqerl:run_query(Client, Q#cql_query{values=[{id, ID}, {name, integer_to_list(I)}]})
+                  end,
+                  lists:seq(1, Iters)),
+    ReportTo ! done.
