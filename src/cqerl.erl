@@ -46,7 +46,10 @@
 
     handle_call/3,
     handle_cast/2,
-    handle_info/2
+    handle_info/2,
+
+    get_protocol_version/0,
+    put_protocol_version/1
 ]).
 
 
@@ -483,7 +486,8 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
                                            [  {auth, OptGetter(auth)},
                                               {ssl, OptGetter(ssl)},
                                               {sleep_duration, {Amount/2, Unit}},
-                                              {keyspace, Keyspace} ]
+                                              {keyspace, Keyspace},
+                                              {protocol_version, OptGetter(protocol_version)} ]
                                         ]}
                      }
                    ]),
@@ -507,7 +511,7 @@ get_global_opts() ->
                 {ok, V} -> {Key, V}
             end
         end,
-        [ssl, auth, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
+        [ssl, auth, protocol_version, pool_min_size, pool_max_size, pool_cull_interval, client_max_age, keyspace, name]
     ).
 
 prepare_configured_pools(State=#cqerl_state{checked_env=false}) ->
@@ -559,7 +563,8 @@ make_option_getter(Local, Global) ->
                             auth -> {cqerl_auth_plain_handler, []};
                             ssl -> false;
                             keyspace -> undefined;
-                            name -> undefined
+                            name -> undefined;
+                            protocol_version -> ?DEFAULT_PROTOCOL_VERSION
                         end;
                     GlobalVal -> GlobalVal
                 end;
@@ -638,6 +643,24 @@ pool_from_node({ Addr, Port, Keyspace }) when is_binary(Port) ->
     pool_from_node({ Addr, binary_to_list(Port), Keyspace });
 pool_from_node(Node = { Addr, Port, Keyspace }) when is_tuple(Addr) orelse is_list(Addr), is_integer(Port), is_atom(Keyspace) ->
     binary_to_atom(base64:encode(term_to_binary(Node)), latin1).
+
+
+-spec get_protocol_version() -> integer().
+
+get_protocol_version() ->
+    case get(protocol_version) of
+        undefined ->
+            ProtocolVersion0 = application:get_env(cqerl, protocol_version, ?DEFAULT_PROTOCOL_VERSION),
+            put(protocol_version, ProtocolVersion0),
+            ProtocolVersion0;
+        ProtocolVersion0 -> 
+            ProtocolVersion0
+    end.
+
+-spec put_protocol_version(integer()) -> ok.
+
+put_protocol_version(Val) when is_integer(Val) ->
+    put(protocol_version, Val).
 
 dec_stats_count(NodeKey, Stats) ->
     case orddict:find(NodeKey, Stats) of

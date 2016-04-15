@@ -246,12 +246,19 @@ decode_udt_type(Size, Acc, Rest) ->
     decode_udt_type(Size-1, [{ColName, ColType} | Acc], Rest2).
 
 
-decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, PKCount:?INT, Rest/binary >>) ->
+decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec]} = decode_flags(Flags, [0]),
 
-    % TODO: Take the following into account.
-    % Currently, we ignore the pk indices. We're not going eager routing yet.
-    {ok, _PKIndices, Rest1} = decode_primarykey_indices(Rest, PKCount),
+    Rest1 = case get(protocol_version) of
+        3 -> 
+            Rest;
+        4 ->
+            % TODO: Take the following into account.
+            % Currently, we ignore the pk indices. We're not going eager routing yet.
+            << PKCount:?INT, Rest0/binary >> = Rest,
+            {ok, _PKIndices, Rest5} = decode_primarykey_indices(Rest0, PKCount),
+            Rest5
+    end,
 
     case GlobalTableSpec of
         true ->
@@ -260,7 +267,7 @@ decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, PKCount:?INT, Rest/bin
             GlobalSpec = {KeySpaceName, TableName};
         false ->
             GlobalSpec = undefined,
-            Rest3 = Rest
+            Rest3 = Rest1
     end,
 
     {ok, Columns, Rest4} = decode_columns_metadata(GlobalSpec, Rest3, ColumnCount, []),
@@ -367,7 +374,8 @@ request_frame(#cqerl_frame{tracing=Tracing,
     FrameFlags = encode_frame_flags(Compression, Tracing),
     {ok, MaybeCompressedBody} = maybe_compress_body(Compression, CompressionType, Body),
     Size = size(MaybeCompressedBody),
-    {ok, iolist_to_binary([ << ?CQERL_FRAME_REQ:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR >>,
+    Req = ?CQERL_FRAME_REQ + cqerl:get_protocol_version(),
+    {ok, iolist_to_binary([ << Req:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR >>,
                             << Size:?INT >>,
                             MaybeCompressedBody ])}.
 
@@ -528,8 +536,10 @@ response_frame(_Response, Binary = << _:5/binary, Size:?INT, Body/binary >>) whe
     {delay, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
-               << ?CQERL_FRAME_RESP:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
-                                     when is_binary(Body0) ->
+               << Resp:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
+                                     when is_binary(Body0),
+                                          Resp >= ?MIN_CQERL_FRAME_RESP,
+                                          Resp =< ?MAX_CQERL_FRAME_RESP ->
 
     {ok, [Compression, Tracing, HasWarnings]} = decode_flags(FrameFlags, [0, 1, 3]),
     Response = Response0#cqerl_frame{opcode=OpCode, stream_id=ID, compression=Compression, tracing=Tracing},

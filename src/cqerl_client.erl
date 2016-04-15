@@ -136,6 +136,7 @@ init([Inet, Opts, Key]) ->
     case create_socket(Inet, Opts) of
         {ok, Socket, Transport} ->
             {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
+            cqerl:put_protocol_version(proplists:get_value(protocol_version, Opts, cqerl:get_protocol_version())),
             {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
             put(uuidstate, uuid:new(self())),
             State = #client_state{
@@ -273,6 +274,9 @@ handle_info({processor_threw, {Error, {Query, Call}}}, live,
         {rows, _} ->
             {UserCall, _} = Query,
             respond_to_user(UserCall, {error, Error}),
+            {next_state, live, State};
+
+        {prepared, _rest} ->
             {next_state, live, State}
     end;
 
@@ -409,7 +413,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, undefined} -> ok;
                 {ok, UserQuery} ->
-                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg})
+                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg}, cqerl:get_protocol_version())
             end,
             {next_state, live, release_stream_id(StreamID, State)};
 
@@ -423,7 +427,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, RawMsg}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg});
+                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg}, cqerl:get_protocol_version());
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
@@ -660,7 +664,8 @@ process_outgoing_query(Call,
     end,
     cqerl_processor_sup:new_processor(
         { State#client_state.trans, State#client_state.socket, CachedResult },
-        { send, BaseFrame, Values, Query, SkipMetadata }
+        { send, BaseFrame, Values, Query, SkipMetadata },
+        cqerl:get_protocol_version()
     ),
     maybe_signal_busy(State2 = State1#client_state{queries=Queries1}),
     State2.
@@ -833,7 +838,6 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
     case application:get_env(cqerl, preferred_cql_version, undefined) of
         undefined ->
             [GreaterVersion|_] = SemVersions;
-
         Version1 ->
             [GreaterVersion|_] = lists:dropwhile(fun (SemVersion) ->
                 case semver:compare(SemVersion, Version1) of
@@ -841,7 +845,6 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
                     _ -> false
                 end
             end, SemVersions)
-
     end,
     [_v | Version] = semver:vsn_string(GreaterVersion),
     list_to_binary(Version).
