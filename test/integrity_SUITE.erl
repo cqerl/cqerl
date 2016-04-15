@@ -2,8 +2,10 @@
 
 -module(integrity_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include("cqerl.hrl").
+-include("cqerl_protocol.hrl").
 
 -compile(export_all).
 
@@ -62,6 +64,7 @@ database_tests() ->
      missing_prepared_query,
      missing_prepared_batch,
      options,
+     cache_cleanup,
      {transactions, [parallel],
       [
        {types, [parallel],
@@ -186,7 +189,7 @@ end_per_group(pooler, Config) ->
     % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
     %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
     cqerl:close_client(Client);
-end_per_group(_, Config) ->
+end_per_group(_, _Config) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -360,6 +363,17 @@ async_insertion_roundtrip(Config) ->
     cqerl:close_client(Client),
     Res.
 
+cache_cleanup(Config) ->
+    Client = get_client(Config),
+    {ClientPID, _} = Client,
+    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
+    CQLQuery = #cql_query{statement = Q, values = [{id, "abc"}, {age, 22}, {email, "me@here.com"}]},
+    {ok, _Result} = cqerl:run_query(Client, CQLQuery),
+    % Query should now be cached:
+    ?assertMatch(#cqerl_cached_query{}, cqerl_cache:lookup(ClientPID, CQLQuery)),
+    exit(ClientPID, crash),
+    timer:sleep(250),
+    ?assertEqual(queued, cqerl_cache:lookup(ClientPID, CQLQuery)).
 
 datatypes_columns(Cols) ->
     datatypes_columns(1, Cols, <<>>).

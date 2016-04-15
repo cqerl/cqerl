@@ -1,3 +1,6 @@
+-ifndef(_CQERL_HRL_).
+-define(_CQERL_HRL_, 1).
+
 -define(CQERL_CONSISTENCY_ANY,          0).
 -define(CQERL_CONSISTENCY_ONE,          1).
 -define(CQERL_CONSISTENCY_TWO,          2).
@@ -93,3 +96,5 @@
     name        :: binary(),
     args        :: [ binary() ]
 }).
+
+-endif. % _CQERL_HRL_

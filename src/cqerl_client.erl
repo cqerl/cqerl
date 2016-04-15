@@ -117,7 +117,13 @@ fetch_more_async(Continuation=#cql_result{client={ClientPid, ClientRef}}) ->
     QueryRef.
 
 prepare_query(ClientPid, Query) ->
-    gen_fsm:send_event(ClientPid, {prepare_query, Query}).
+    % We don't want the cqerl_cache process to crash if our client has gone away,
+    % so wrap in a try-catch
+    try
+        gen_fsm:send_event(ClientPid, {prepare_query, Query})
+    catch
+        _:_ -> ok
+    end.
 
 batch_ready({ClientPid, Call}, QueryBatch) ->
     gen_fsm:send_event(ClientPid, {batch_ready, Call, QueryBatch}).
