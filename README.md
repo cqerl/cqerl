@@ -64,7 +64,7 @@ of the behaviour of this mode.
 
 1. The first argument to `cqerl:get_client/2`, `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
-2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size` and `pool_cull_interval`, which are used to configure [pooler][1] (see its documentation to understand those options).
+2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options), and `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
 
 If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
@@ -298,6 +298,25 @@ varchar               | **binary**, string
 varint                | **integer** (arbitrary precision)
 timeuuid              | **binary**, `now`
 inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
+
+### Connecting to older Cassandra instances
+
+By default, this client library assumes we're talking to a 2.2+ or 3+ instance of Cassandra. 2.1.x the latest native protocol (v4) which is required to use some of the newest datatypes and optimizations. To tell CQErl to use the older protocol version (v3), which is required to connect to a 2.1.x instance of Cassandra, you can set the `protocol_version` option to the integer `3`, in your configuration file, i.e.
+
+```erlang
+[
+  {cqerl, [
+            {cassandra_nodes, [ { "127.0.0.1", 9042 } ]},
+            {protocol_version, 3}
+          ]},
+]
+```
+
+or in a `cqerl:new_client/2` or `cqerl:get_client/2` call
+
+```erlang
+{ok, Client} = cqerl:new_client("127.0.0.1:9042", [{protocol_version, 3}, {keyspace, oper}]).
+```
 
 ### Installation
 
