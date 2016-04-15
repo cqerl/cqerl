@@ -8,7 +8,7 @@ Native Erlang client for CQL3 over Cassandra's binary protocol v4 (a.k.a. what y
 
 ### At a glance
 
-CQErl offers a simple Erlang interface to Cassandra using the latest CQL version (v3). The main features include:
+CQErl offers a simple Erlang interface to Cassandra using the latest CQL version. The main features include:
 
 * Automatic (and configurable) connection pools using [pooler][1]
 * Batched queries
@@ -324,9 +324,9 @@ Just include this repository in your project's `rebar.config` file and run `./re
 
 ### Compatibility
 
-As said earlier, this library uses Cassandra's newest native protocol version (2), which is said to perform better than the older Thrift-based interface. It also speaks CQL version 3, and uses new features available in Cassandra 2.X, such as paging, parametrization, query preparation and so on.
+As said earlier, this library uses Cassandra's newest native protocol versions (v4, or v3 [optionally](#connecting-to-older-cassandra-instances)), which is said to perform better than the older Thrift-based interface. It also speaks CQL version 3, and uses new features available in Cassandra 2.X, such as paging, parametrization, query preparation and so on.
 
-All this means is that this library works with Cassandra 2.X, configured to enable the native protocol. [This documentation page][8] gives details about the how to configure this protocol. In the `cassandra.yaml` configuration file of your Cassandra installation, the `start_native_transport` need to be set to true and you need to take note of the value for `native_transport_port`, which is the port used by this library.
+All this means is that this library works with Cassandra 2.1.x (2.2+ or 3+ recommended), configured to enable the native protocol. [This documentation page][8] gives details about the how to configure this protocol. In the `cassandra.yaml` configuration file of your Cassandra installation, the `start_native_transport` need to be set to true and you need to take note of the value for `native_transport_port`, which is the port used by this library.
 
 ### Tests
 
