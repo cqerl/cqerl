@@ -116,7 +116,8 @@ new_client(Inet, Opts) ->
 % Use in `hash' mode
 -spec get_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
 get_client(Spec, Opts) ->
-    cqerl_hash:get_client({Spec, Opts}).
+    cqerl_hash:get_client({prepare_node_info(Spec), Opts}).
+
 
 
 %% @doc Close a client that was previously allocated with {@link new_client/0} or {@link new_client/1}.
