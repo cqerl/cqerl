@@ -174,7 +174,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 get_client(Key) ->
-    NKey = normlaise_keyspace(Key),
+    NKey = normalise_keyspace(Key),
     case get_table(NKey) of
         {ok, T} ->
             N = erlang:phash2(self(), ets:info(T, size)),
@@ -240,7 +240,7 @@ find_empty_index(Table) ->
 find_empty([A|Tail], [A|Tail2]) -> find_empty(Tail, Tail2);
 find_empty(_, [A|_]) -> A.
 
-normlaise_keyspace({Node, Opts}) ->
+normalise_keyspace({Node, Opts}) ->
     KS = proplists:get_value(keyspace, Opts),
     NewOpts = [{keyspace, normalise_to_atom(KS)} | proplists:delete(keyspace, Opts)],
     {Node, NewOpts}.
