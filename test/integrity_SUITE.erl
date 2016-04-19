@@ -385,64 +385,118 @@ datatypes_columns(I, [ColumnType|Rest], Bin) ->
 
 all_datatypes(Config) ->
     Client = get_client(Config),
-    Cols = datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
-                              float, int, timestamp, uuid, varchar, tinyint,
-                              smallint, timeuuid, inet, date, time, varint]),
-    CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
-    ct:log("Executing : ~s~n", [CreationQ]),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
-        cqerl:run_query(Client, CreationQ),
-    
-    InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
-                                    col4, col5, col6, col7, col8, col9, col10,
-                                    col11, col12, col13, col14, col15, col16,
-                                    col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
-                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
-    
+
     Time = {23, 4, 123},
     Date = {1970, 1, 1},
     AbsTime = (12 * 3600 + 4 * 60 + 123) * math:pow(10, 9),
 
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
-        {col1, "hello"},
-        {col2, 9223372036854775807},
-        {col3, <<1,2,3,4,5,6,7,8,9,10>>},
-        {col4, true},
-        {col5, {1234, 5}},
-        {col6, 5.1235131241221e-6},
-        {col7, 5.12351e-6},
-        {col8, 2147483647},
-        {col9, now},
-        {col10, new},
-        {col11, <<"Юникод"/utf8>>},
-        {col12, 120},
-        {col13, 1200},
-        {col14, now},
-        {col15, {127, 0, 0, 1}},
-        {col16, Date},
-        {col17, Time},
-        {col18, 666}
-    ]}),
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
-        {col1, <<"foobar">>},
-        {col2, -9223372036854775806},
-        {col3, <<1,2,3,4,5,6,7,8,9,10>>},
-        {col4, false},
-        {col5, {1234, -5}},
-        {col6, -5.1235131241220e-6},
-        {col7, -5.12351e-6},
-        {col8, -2147483646},
-        {col9, 1984336643},
-        {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
-        {col11, <<"åäö"/utf8>>},
-        {col12, -120},
-        {col13, -1200},
-        {col14, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
-        {col15, {0,0,0,0,0,0,0,0}},
-        {col16, Date},
-        {col17, AbsTime},
-        {col18, 666}
-    ]}),
+    {Cols, InsQ, RRow1, RRow2} = case proplists:get_value(protocol_version, Config) of
+        3 ->
+            {
+                datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
+                                  float, int, timestamp, uuid, varchar,
+                                  timeuuid, inet, varint]),
+
+                #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
+                                    col4, col5, col6, col7, col8, col9, col10,
+                                    col11, col12, col13, col14
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?,
+                                    ?, ?, ?, ?, ?, ?, ?)">>},
+
+                [
+                    {col1, "hello"},
+                    {col2, 9223372036854775807},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, true},
+                    {col5, {1234, 5}},
+                    {col6, 5.1235131241221e-6},
+                    {col7, 5.12351e-6},
+                    {col8, 2147483647},
+                    {col9, now},
+                    {col10, new},
+                    {col11, <<"Юникод"/utf8>>},
+                    {col12, now},
+                    {col13, {127, 0, 0, 1}},
+                    {col14, 666}
+                ], [
+                    {col1, <<"foobar">>},
+                    {col2, -9223372036854775806},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, false},
+                    {col5, {1234, -5}},
+                    {col6, -5.1235131241220e-6},
+                    {col7, -5.12351e-6},
+                    {col8, -2147483646},
+                    {col9, 1984336643},
+                    {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
+                    {col11, <<"åäö"/utf8>>},
+                    {col12, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
+                    {col13, {0,0,0,0,0,0,0,0}},
+                    {col14, 666}
+                ]
+            };
+
+        _ ->
+            {
+                datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
+                                  float, int, timestamp, uuid, varchar, timeuuid, inet, varint, 
+                                  tinyint, smallint, date, time]),
+
+                #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
+                                        col4, col5, col6, col7, col8, col9, col10,
+                                        col11, col12, col13, col14, col15, col16,
+                                        col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
+                                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
+                [
+                    {col1, "hello"},
+                    {col2, 9223372036854775807},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, true},
+                    {col5, {1234, 5}},
+                    {col6, 5.1235131241221e-6},
+                    {col7, 5.12351e-6},
+                    {col8, 2147483647},
+                    {col9, now},
+                    {col10, new},
+                    {col11, <<"Юникод"/utf8>>},
+                    {col12, now},
+                    {col13, {127, 0, 0, 1}},
+                    {col14, 666},
+                    {col15, 120},
+                    {col16, 1200},
+                    {col17, Date},
+                    {col18, Time}
+                ],
+                [
+                    {col1, <<"foobar">>},
+                    {col2, -9223372036854775806},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, false},
+                    {col5, {1234, -5}},
+                    {col6, -5.1235131241220e-6},
+                    {col7, -5.12351e-6},
+                    {col8, -2147483646},
+                    {col9, 1984336643},
+                    {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
+                    {col11, <<"åäö"/utf8>>},
+                    {col12, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
+                    {col13, {0,0,0,0,0,0,0,0}},
+                    {col14, 666},
+                    {col15, -120},
+                    {col16, -1200},
+                    {col17, Date},
+                    {col18, AbsTime}
+                ]
+            }
+    end,
+
+    CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2}),
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1}),
     {ok, void} = cqerl:run_query(Client, InsQ#cql_query{
         statement="INSERT INTO entries2(col1, col11) values (?, ?);",
         values=RRow3=[ {col1, foobaz}, {col11, 'åäö'} ]
@@ -460,7 +514,7 @@ all_datatypes(Config) ->
                 <<"foobaz">> -> RRow3
             end,
             lists:foreach(fun
-                ({col14, _}) -> true = uuid:is_v1(proplists:get_value(col14, Row));
+                ({col12, _}) -> true = uuid:is_v1(proplists:get_value(col12, Row));
                 ({col10, _}) -> true = uuid:is_v4(proplists:get_value(col10, Row));
                 ({col9, _}) -> ok; %% Yeah, I know...
                 
@@ -480,6 +534,7 @@ all_datatypes(Config) ->
                 ({col7, Val0}) ->
                     Val = round(Val0 * 1.0e11),
                     Val = round(proplists:get_value(col7, Row) * 1.0e11);
+
                 ({Key, Val}) ->
                     Val = proplists:get_value(Key, Row, null)
             end, ReferenceRow)
