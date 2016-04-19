@@ -521,7 +521,7 @@ all_datatypes(Config) ->
                 ({col16, {Y, M, D}}) ->
                     {Y, M, D} = proplists:get_value(col16, Row);
 
-                ({col17, _}) -> proplists:get_value(col17, Row) == AbsTime;
+                ({col18, _}) -> proplists:get_value(col18, Row) == AbsTime;
 
                 ({col1, Key}) when is_list(Key) ->
                     Val = list_to_binary(Key),
