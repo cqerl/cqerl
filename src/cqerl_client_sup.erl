@@ -63,7 +63,7 @@ add_clients(Node, Opts) ->
     GlobalOpts = cqerl:get_global_opts(),
     OptGetter = cqerl:make_option_getter(Opts, GlobalOpts),
     FullOpts = [ {auth, OptGetter(auth)}, {ssl, OptGetter(ssl)},
-                 {keyspace, OptGetter(keyspace)} ],
+                 {keyspace, OptGetter(keyspace)}, {protocol_version, OptGetter(protocol_version)} ],
 
     case supervisor:start_child(?MODULE, [[key, Key, FullOpts, ChildCount]]) of
         {ok, SupPid} -> {ok, {ChildCount, SupPid}};
