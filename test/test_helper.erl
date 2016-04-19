@@ -41,7 +41,8 @@ standard_setup(Keyspace, Config) ->
       {keyspace, Keyspace},
       {host, ct:get_config(host)},
       {pool_min_size, ct:get_config(pool_min_size)},
-      {pool_max_size, ct:get_config(pool_max_size)} ] ++ Config.
+      {pool_max_size, ct:get_config(pool_max_size)},
+      {protocol_version, ct:get_config(protocol_version)} ] ++ Config.
 
 % Call when you're expecting a valid client
 get_client(Config) ->
@@ -56,6 +57,8 @@ maybe_get_client(Config) ->
     Keyspace = proplists:get_value(keyspace, Config),
     PoolMinSize = proplists:get_value(pool_min_size, Config),
     PoolMaxSize = proplists:get_value(pool_max_size, Config),
+    ProtocolVersion = proplists:get_value(protocol_version, Config),
+
 
 %    io:format("Options : ~w~n", [[
 %        {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
@@ -68,7 +71,8 @@ maybe_get_client(Config) ->
           end,
 
     Fun(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-               {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]).
+               {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}, 
+               {protocol_version, ProtocolVersion} ]).
 
 create_keyspace(KS, Config) ->
     Client = get_client([{keyspace, undefined} | Config]),
@@ -85,6 +89,7 @@ create_keyspace(KS, Config) ->
 requirements() ->
     [
      {require, ssl, cqerl_test_ssl},
+     {require, protocol_version, cqerl_protocol_version},
      {require, auth, cqerl_test_auth},
      % {require, keyspace, cqerl_test_keyspace},
      {require, host, cqerl_host},

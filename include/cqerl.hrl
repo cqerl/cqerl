@@ -28,6 +28,8 @@
     is_reference(element(2, Client))
 ).
 
+-define(DEFAULT_PROTOCOL_VERSION, 4).
+
 -define(CQERL_PARSE_ADDR (Addr), case erlang:function_exported(inet, parse_address, 1) of
     true -> inet:parse_address(Addr);
     false -> inet_parse:address(Addr)
