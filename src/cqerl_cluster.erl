@@ -14,6 +14,8 @@
 	start_link/0,
 	get_any_from_cluster/1,
 	get_any/0,
+    add_clients/1,
+    add_clients/2,
     add_clients_to_cluster/2,
     add_clients_to_cluster/3
 ]).
@@ -28,7 +30,13 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_clients_to_cluster(Key, ClientKeys) ->
+add_clients(ClientKeys) ->
+    gen_server:cast(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}).
+
+add_clients(ClientKeys, Opts) when is_list(ClientKeys) ->
+    add_clients_to_cluster(?PRIMARY_CLUSTER, ClientKeys, Opts).
+
+add_clients_to_cluster(Key, ClientKeys) when is_atom(Key) ->
     gen_server:cast(?MODULE, {add_to_cluster, Key, ClientKeys}).
 
 add_clients_to_cluster(Key, ClientKeys, Opts0) ->
