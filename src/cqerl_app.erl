@@ -12,11 +12,11 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    application:start(pooler),
+    application:start(hash),
     cqerl_sup:start_link().
 
 stop(_State) ->
     ok.
 
 mode() ->
-    application:get_env(cqerl, mode, pooler).
+    application:get_env(cqerl, mode, hash).
