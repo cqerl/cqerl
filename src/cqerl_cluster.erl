@@ -12,12 +12,13 @@
 
 -export([
 	start_link/0,
+
 	get_any_client/1,
 	get_any_client/0,
-    add_clients/1,
-    add_clients/2,
-    add_clients_to_cluster/2,
-    add_clients_to_cluster/3
+
+    add_nodes/1,
+    add_nodes/2,
+    add_nodes/3
 ]).
 
 -define (PRIMARY_CLUSTER, '$primary_cluster').
@@ -30,17 +31,17 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_clients(ClientKeys) ->
+add_nodes(ClientKeys) ->
     gen_server:cast(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}).
 
-add_clients(ClientKeys, Opts) when is_list(ClientKeys) ->
-    add_clients_to_cluster(?PRIMARY_CLUSTER, ClientKeys, Opts).
+add_nodes(ClientKeys, Opts) when is_list(ClientKeys) ->
+    add_nodes(?PRIMARY_CLUSTER, ClientKeys, Opts);
 
-add_clients_to_cluster(Key, ClientKeys) when is_atom(Key) ->
+add_nodes(Key, ClientKeys) when is_atom(Key) ->
     gen_server:cast(?MODULE, {add_to_cluster, Key, ClientKeys}).
 
-add_clients_to_cluster(Key, ClientKeys, Opts0) ->
-	add_clients_to_cluster(Key, lists:map(fun
+add_nodes(Key, ClientKeys, Opts0) ->
+	add_nodes(Key, lists:map(fun
 		({Inet, Opts}) when is_list(Opts) ->
 			{Inet, Opts ++ Opts0};
 		(Inet) ->
