@@ -64,7 +64,7 @@ init(_) ->
                              {keypos, #cluster_table.key}, bag]),
     {ok, undefined, 0}.
 
-handle_cast({add_to_cluster, ClusterKey, ClientKeys}, _State) ->
+handle_cast({add_to_cluster, ClusterKey, ClientKeys}, State) ->
 	Tables = ets:lookup(cqerl_clusters, ClusterKey),
     AlreadyStarted = sets:from_list(lists:map(fun
     	(#cluster_table{client_key=ClientKey}) -> ClientKey
@@ -79,9 +79,9 @@ handle_cast({add_to_cluster, ClusterKey, ClientKeys}, _State) ->
         			io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
         	end
     end, sets:to_list(NewClients)),
-    {noreply, undefined}.
+    {noreply, State}.
 
-handle_info(timeout, _State) ->
+handle_info(timeout, State) ->
 	case application:get_env(cqerl, cassandra_clusters, undefined) of
     	undefined ->
     		case application:get_env(cqerl, cassandra_nodes, undefined) of
@@ -104,13 +104,16 @@ handle_info(timeout, _State) ->
     				handle_cast({add_to_cluster, ClusterKey, ClientKeys}, undefined)
     		end, Clusters)
     end,
-    {noreply, undefined};
+    {noreply, State};
 
-handle_info(_Msg, _State) -> {noreply, undefined}.
+handle_info(_Msg, State) -> 
+    {noreply, State}.
 
-handle_call(_Msg, _From, _State) -> {reply, {error, unexpected_message}, undefined}.
+handle_call(_Msg, _From, State) -> 
+    {reply, {error, unexpected_message}, State}.
 
-code_change(_OldVsn, _State, _Extra) -> {ok, undefined}.
+code_change(_OldVsn, State, _Extra) -> 
+    {ok, State}.
 
 terminate(_Reason, _State) ->
 	ok.
