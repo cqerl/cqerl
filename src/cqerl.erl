@@ -34,7 +34,10 @@
 
     start_link/0,
 
+    get_client/0,
+    get_client/1,
     get_client/2,
+    
     get_global_opts/0,
     make_option_getter/2
 ]).
@@ -115,6 +118,18 @@ new_client({}, Opts) ->
 new_client(Inet, Opts) ->
     gen_server:call(?MODULE, {get_client, prepare_node_info(Inet), Opts}).
 
+
+
+
+% Use in `hash' mode
+
+-spec get_client() -> {ok, client()} | {error, term()}.
+get_client() ->
+    cqerl_cluster:get_any_client().
+
+-spec get_client(ClusterKey :: atom()) -> {ok, client()} | {error, term()}.
+get_client(ClusterKey) ->
+    cqerl_cluster:get_any_client(ClusterKey).
 
 % Use in `hash' mode
 -spec get_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
