@@ -12,8 +12,8 @@
 
 -export([
 	start_link/0,
-	get_any_from_cluster/1,
-	get_any/0,
+	get_any_client/1,
+	get_any_client/0,
     add_clients/1,
     add_clients/2,
     add_clients_to_cluster/2,
@@ -47,7 +47,7 @@ add_clients_to_cluster(Key, ClientKeys, Opts0) ->
 			{Inet, Opts0}
 	end, ClientKeys)).
 
-get_any_from_cluster(Key) ->
+get_any_client(Key) ->
 	case ets:lookup(cqerl_clusters, Key) of
 		[] -> {error, cluster_not_configured};
 		Nodes ->
@@ -55,8 +55,8 @@ get_any_from_cluster(Key) ->
 			cqerl_hash:get_client(Table#cluster_table.client_key)
 	end.
 
-get_any() ->
-	get_any_from_cluster(?PRIMARY_CLUSTER).
+get_any_client() ->
+	get_any_client(?PRIMARY_CLUSTER).
 
 init(_) ->
     ets:new(cqerl_clusters, [named_table, {read_concurrency, true}, protected, 
