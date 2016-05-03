@@ -66,18 +66,24 @@ init(_) ->
 
 handle_cast({add_to_cluster, ClusterKey, ClientKeys}, State) ->
 	Tables = ets:lookup(cqerl_clusters, ClusterKey),
+    GlobalOpts = application:get_all_env(cqerl),
     AlreadyStarted = sets:from_list(lists:map(fun
     	(#cluster_table{client_key=ClientKey}) -> ClientKey
     end, Tables)),
     NewClients = sets:subtract(sets:from_list(ClientKeys), AlreadyStarted),
+    GetClient = fun (Key) ->
+        case cqerl_hash:get_client(Key) of
+            {ok, _} ->
+                ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
+            {error, Reason} ->
+                io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
+        end
+    end,
     lists:map(fun
-        (Key) -> 
-        	case cqerl_hash:get_client(Key) of
-        		{ok, _} ->
-        			ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
-        		{error, Reason} ->
-        			io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
-        	end
+        ({Inet, Opts}) when is_list(Opts) ->
+            GetClient({Inet, Opts ++ GlobalOpts});
+        (Inet) ->
+            GetClient({Inet, GlobalOpts})
     end, sets:to_list(NewClients)),
     {noreply, State}.
 
@@ -90,7 +96,21 @@ handle_info(timeout, State) ->
     				handle_cast({add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}, undefined)
     		end;
 
-    	Clusters when is_map(Clusters) ->
+        Clusters when is_list(Clusters) ->
+            lists:foreach(fun
+                ({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
+                    handle_cast({add_to_cluster, ClusterKey, lists:map(fun
+                        ({Inet, Opts}) when is_list(Opts) ->
+                            {Inet, Opts ++ Opts0};
+                        (Inet) ->
+                            {Inet, Opts0}
+                    end, ClientKeys)}, undefined);
+
+                ({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
+                    handle_cast({add_to_cluster, ClusterKey, ClientKeys}, undefined)
+            end, Clusters);
+
+    	Clusters ->
     		maps:map(fun
     			({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
     				handle_cast({add_to_cluster, ClusterKey, lists:map(fun
