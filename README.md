@@ -58,9 +58,10 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
 #### All modes
 
-1. The first argument to `cqerl:get_client/2`, `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
+1. The first argument to `cqerl:get_client/2,1` or `cqerl:new_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
-    If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
+    - If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
+    - If both the default port and localhost are used, you can just provide an empty tuple as the first argument.
 
 2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include:
 
@@ -71,17 +72,24 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
     Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options)
 
-If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
-```erlang
-{ok, Client} = cqerl:new_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
-```
 
-Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
+    If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
+
+    ```erlang
+    {ok, Client} = cqerl:get_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
+    ```
+
+    Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
+
+3. You can leverage one or more clusters of cassandra nodes by setting up [clusters](#clusters). When set up, you can use 
+
+    1. `cqerl:get_client()` if you have just a single main cluster
+    2. `cqerl:get_client(ClusterKey)` if you want to get a client from a specific, identified cluster
 
 ###### Using environment variables
 
-All the options given above can be provided as environment variables, in which case they are used as default (and overridable) values to any `cqerl:new_client` calls. You can also provide a `cassandra_nodes` variable containing a list of the tuples used as the first argument to `cqerl:new_client`. So for example, in your `app.config` or `sys.config` file, you could have the following content:
+All the options given above can be provided as environment variables, in which case they are used as default (and overridable) values to any `cqerl:get_client` calls. You can also provide a `cassandra_nodes` variable containing a list of the tuples used as the first argument to `cqerl:get_client` (see [clusters](#clusters) for more explanations). So for example, in your `app.config` or `sys.config` file, you could have the following content:
 
 ```erlang
 [
@@ -93,7 +101,7 @@ All the options given above can be provided as environment variables, in which c
 ]
 ```
 
-Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:new_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:new_client/0`, which chooses an available client at random.
+Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:get_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:get_client/0`, which chooses an available client at random.
 
 ##### Options
 
@@ -129,7 +137,7 @@ end.
 In situations where you do not need to wait for the response at all, it's perfectly fine to produce this sort of pattern:
 
 ```erlang
-{ok, Client} = cqerl:new_client(),
+{ok, Client} = cqerl:get_client(),
 cqerl:send_query(Client, #cql_query{statement="UPDATE secrets SET value = null WHERE id = ?;",
                                     values=[{id, <<"42">>}]}),
 cqerl:close_client(Client).
@@ -304,6 +312,88 @@ varint                | **integer** (arbitrary precision)
 timeuuid              | **binary**, `now`
 inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
 
+### Clusters
+
+With CQErl clusters, you can configure either a single set of cassandra nodes from which you can draw a client at any time, or multiple sets that serve different purposes.
+
+##### Single cluster
+
+You can prepare a single cluster setup using this structure in your sys.config file:
+
+```erlang
+[
+  {cqerl, [ {cassandra_nodes, [ 
+                % You can use any of the forms below to specify a cassandra node
+                { "127.0.0.1", 9042 },
+                { {127, 0, 0, 2}, 9042 },
+                "127.0.0.3"
+            ]},
+            { keyspace, dev_keyspace }
+          ]},
+]
+```
+
+or, equivalently, there's an API you can use to add nodes to the single main cluster:
+
+```erlang
+cqerl_cluster:add_nodes([
+    { "127.0.0.1", 9042},
+    { {127, 0, 0, 2}, 9042 },
+    "127.0.0.3"
+]).
+```
+
+or, with connection options:
+
+```erlang
+cqerl_cluster:add_nodes([
+    { "127.0.0.1", 9042},
+    { {127, 0, 0, 2}, 9042 },
+    "127.0.0.3"
+], [
+    { keyspace, dev_keyspace }
+]).
+```
+
+When your main cluster is configured, you can just use `cqerl:get_client/0` to get a client random from the cluster.
+
+##### Multiple clusters
+
+You can prepare multiple clusters using this structure in your sys.config file:
+
+```erlang
+[
+  {cqerl, [ {cassandra_clusters, [
+                { config, 
+                    [ { "127.0.0.1", 9042 }, "127.0.0.3" ], 
+                    [ { keyspace, config } ] 
+                },
+                { operations, 
+                    [ { "127.0.0.1", 9042 }, "127.0.0.3" ], 
+                    [ { keyspace, operations } ] 
+                }
+            ]},
+          ]},
+]
+```
+
+or, equivalently, there's an API you can use to add nodes to particular clusters:
+
+```erlang
+cqerl_cluster:add_nodes(config, [
+    { "127.0.0.1", 9042},
+    "127.0.0.3"
+], [
+    { keyspace, config }
+]).
+cqerl_cluster:add_nodes(operations, [
+    { "127.0.0.1", 9042},
+    "127.0.0.3"
+], [
+    { keyspace, operations }
+]).
+```
+
 ### Connecting to older Cassandra instances
 
 By default, this client library assumes we're talking to a 2.2+ or 3+ instance of Cassandra. 2.1.x the latest native protocol (v4) which is required to use some of the newest datatypes and optimizations. To tell CQErl to use the older protocol version (v3), which is required to connect to a 2.1.x instance of Cassandra, you can set the `protocol_version` option to the integer `3`, in your configuration file, i.e.
@@ -317,10 +407,10 @@ By default, this client library assumes we're talking to a 2.2+ or 3+ instance o
 ]
 ```
 
-or in a `cqerl:new_client/2` or `cqerl:get_client/2` call
+or in a `cqerl:get_client/2` or `cqerl:get_client/2` call
 
 ```erlang
-{ok, Client} = cqerl:new_client("127.0.0.1:9042", [{protocol_version, 3}, {keyspace, oper}]).
+{ok, Client} = cqerl:get_client("127.0.0.1:9042", [{protocol_version, 3}, {keyspace, oper}]).
 ```
 
 ### Installation
