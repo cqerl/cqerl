@@ -71,20 +71,14 @@ handle_cast({add_to_cluster, ClusterKey, ClientKeys}, State) ->
     	(#cluster_table{client_key=ClientKey}) -> ClientKey
     end, Tables)),
     NewClients = sets:subtract(sets:from_list(ClientKeys), AlreadyStarted),
-    GetClient = fun (Key) ->
+    lists:map(fun (Key) ->
         case cqerl_hash:get_client(Key) of
             {ok, _} ->
                 ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
             {error, Reason} ->
                 io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
         end
-    end,
-    lists:map(fun
-        ({Inet, Opts}) when is_list(Opts) ->
-            GetClient({Inet, Opts ++ GlobalOpts});
-        (Inet) ->
-            GetClient({Inet, GlobalOpts})
-    end, sets:to_list(NewClients)),
+    end, prepare_client_keys(sets:to_list(NewClients), GlobalOpts)),
     {noreply, State}.
 
 handle_info(timeout, State) ->
@@ -93,35 +87,25 @@ handle_info(timeout, State) ->
     		case application:get_env(cqerl, cassandra_nodes, undefined) of
     			undefined -> ok;
     			ClientKeys when is_list(ClientKeys) ->
-    				handle_cast({add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}, undefined)
+    				handle_cast({add_to_cluster, ?PRIMARY_CLUSTER, prepare_client_keys(ClientKeys)}, undefined)
     		end;
 
         Clusters when is_list(Clusters) ->
             lists:foreach(fun
                 ({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
-                    handle_cast({add_to_cluster, ClusterKey, lists:map(fun
-                        ({Inet, Opts}) when is_list(Opts) ->
-                            {Inet, Opts ++ Opts0};
-                        (Inet) ->
-                            {Inet, Opts0}
-                    end, ClientKeys)}, undefined);
+                    handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined);
 
                 ({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
-                    handle_cast({add_to_cluster, ClusterKey, ClientKeys}, undefined)
+                    handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined)
             end, Clusters);
 
     	Clusters ->
     		maps:map(fun
     			({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
-    				handle_cast({add_to_cluster, ClusterKey, lists:map(fun
-						({Inet, Opts}) when is_list(Opts) ->
-							{Inet, Opts ++ Opts0};
-						(Inet) ->
-							{Inet, Opts0}
-					end, ClientKeys)}, undefined);
+    				handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined);
 
 				({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
-    				handle_cast({add_to_cluster, ClusterKey, ClientKeys}, undefined)
+    				handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined)
     		end, Clusters)
     end,
     {noreply, State};
@@ -137,3 +121,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
 	ok.
+
+prepare_client_keys(ClientKeys) ->
+    prepare_client_keys(ClientKeys, []).
+
+prepare_client_keys(ClientKeys, SharedOpts) ->
+    lists:map(fun
+        ({Inet, Opts}) when is_list(Opts) ->
+            {cqerl:prepare_node_info(Inet), Opts ++ SharedOpts};
+        (Inet) ->
+            {cqerl:prepare_node_info(Inet), SharedOpts}
+    end, ClientKeys).

@@ -364,14 +364,14 @@ You can prepare multiple clusters using this structure in your sys.config file:
 ```erlang
 [
   {cqerl, [ {cassandra_clusters, [
-                { config, 
-                    [ { "127.0.0.1", 9042 }, "127.0.0.3" ], 
+                { config, {
+                    [ "127.0.0.1", "127.0.0.3" ], 
                     [ { keyspace, config } ] 
-                },
-                { operations, 
-                    [ { "127.0.0.1", 9042 }, "127.0.0.3" ], 
+                }},
+                { operations, {
+                    [ "127.0.0.1:9042", {"127.0.0.1", 9042} ], 
                     [ { keyspace, operations } ] 
-                }
+                }}
             ]},
           ]},
 ]
