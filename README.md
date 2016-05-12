@@ -11,6 +11,7 @@ Native Erlang client for CQL3 over Cassandra's latest binary protocol v4.
 CQErl offers a simple Erlang interface to Cassandra using the latest CQL version. The main features include:
 
 * Automatic connection pooling, with hash-based allocation (a la [dispcount][9])
+* Single or multi-cluster support
 * Batched queries
 * Variable bindings in CQL queries (named or positional)
 * Automatic query reuse when including variable bindings
