@@ -60,7 +60,15 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
 1. The first argument to `cqerl:get_client/2`, `cqerl:new_client/2` or `cqerl_new_client/1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
-2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include `auth` (mentionned below), `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options), and `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
+    If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
+
+2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include:
+
+    - `auth` (mentionned below)
+    - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). 
+    - `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
+
+    Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options)
 
 If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
