@@ -25,40 +25,36 @@ CQErl was designed to be as simple as possible on your side. You just provide th
 
 ### Usage
 
-#### Pooler Mode
-This is the default/original mode. It uses [pooler][1] to manage connections, and
-has been around for quite a while, so is reasonably well tested. It does,
-however, have a couple of performance bottlenecks that may limit scalability on
-larger or more heaviliy loaded systems.
-
 ##### Connecting
 
 If you installed cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
 
 ```erlang
-{ok, Client} = cqerl:new_client({}).
+{ok, Client} = cqerl:get_client({}).
 ```
 
-And close the connection like this
+You do not need to close the connection after you've finished using it.
+
+#### Legacy Mode (pooler)
+
+The default mode of operation uses a hash of the user process's PID to allocate
+clients, in a similar way to the system used by [dispcount][9]. 
+
+The old mode used [pooler][1] to manage connections, and
+has been around for quite a while, so is reasonably well tested. It does,
+however, have a couple of performance bottlenecks that may limit scalability on
+larger or more heaviliy loaded systems.
+
+To use the old mode, and be able to use the legacy `new_client/0,1,2` API to get a hold of a
+client process, set
 
 ```erlang
-cqerl:close_client(Client).
-```
-
-#### Hash Mode
-Hash mode is a new mode which uses a hash of the user process's PID to allocate
-clients, in a similar way to the system used by [dispcount][9]. To enable this
-mode, set
-
-```erlang
-{mode, hash}
+{mode, pooler}
 ```
 
 in your application config (see below). In this mode, rather than calling
-`cqerl:new_client/2`, call `cqerl:get_client/2` with the same arguments.
-Calling `cqerl:close_client/1` is *not* required in hash mode (but will do no
-harm). See the comments at the top of `cqerl_hash.erl` for a full description
-of the behaviour of this mode.
+`cqerl:get_client/2`, call `cqerl:new_client/2` with the same arguments.
+Calling `cqerl:close_client/1` *is* required in legacy mode.
 
 #### All modes
 
