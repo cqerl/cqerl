@@ -137,14 +137,14 @@ get_client(ClusterKey) when is_atom(ClusterKey) ->
     cqerl_cluster:get_any_client(ClusterKey);
 
 get_client({}) ->
-    cqerl_hash:get_client({prepare_node_info({?LOCALHOST, ?DEFAULT_PORT}), []});
+    cqerl_hash:get_client(prepare_node_info({?LOCALHOST, ?DEFAULT_PORT}), []);
 
 get_client(Spec) ->
-    cqerl_hash:get_client({prepare_node_info(Spec), []}).
+    cqerl_hash:get_client(prepare_node_info(Spec), []).
 
 -spec get_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
 get_client(Spec, Opts) ->
-    cqerl_hash:get_client({prepare_node_info(Spec), Opts}).
+    cqerl_hash:get_client(prepare_node_info(Spec), Opts).
 
 
 
@@ -508,12 +508,13 @@ new_pool(NodeKey={Ip, Port, Keyspace}, LocalOpts, GlobalOpts, State=#cqerl_state
                      {max_count,       OptGetter(pool_max_size)},
                      {cull_interval,   OptGetter(pool_cull_interval)},
                      {max_age,         {Amount/2, Unit}},
-                     {start_mfa,       {cqerl_client, start_link, [{Ip, Port},
-                                           [  {auth, OptGetter(auth)},
-                                              {ssl, OptGetter(ssl)},
+                     {start_mfa,       {cqerl_client, start_link, [
+                                           {Ip, Port},
+                                           [  {ssl, OptGetter(ssl)},
                                               {sleep_duration, {Amount/2, Unit}},
-                                              {keyspace, Keyspace},
-                                              {protocol_version, OptGetter(protocol_version)} ]
+                                              {keyspace, Keyspace}
+                                           ],
+                                           OptGetter
                                         ]}
                      }
                    ]),

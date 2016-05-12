@@ -38,7 +38,7 @@ init(main) ->
       }]
      }};
 
-init([key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
+init([key, Key = {Node, _Opts}, FullOpts, OptGetter, ChildCount]) ->
     {ok,
      {
       #{
@@ -47,25 +47,24 @@ init([key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
        period => 10
       },
       [
-        client_spec(Key, Node, FullOpts, I) ||
+        client_spec(Key, Node, FullOpts, OptGetter, I) ||
         I <- lists:seq(1, ChildCount)
       ]}}.
 
-client_spec(Key, Node, FullOpts, I) ->
+client_spec(Key, Node, FullOpts, OptGetter, I) ->
     #{
        id => {cqerl_client, Key, I},
-       start => {cqerl_client, start_link, [Node, FullOpts, Key]}
+       start => {cqerl_client, start_link, [Node, FullOpts, OptGetter, Key]}
      }.
 
 add_clients(Node, Opts) ->
-    Key = {Node, Opts},
+    Key = cqerl_client:make_key(Node, Opts),
     ChildCount = child_count(Key),
     GlobalOpts = cqerl:get_global_opts(),
     OptGetter = cqerl:make_option_getter(Opts, GlobalOpts),
-    FullOpts = [ {auth, OptGetter(auth)}, {ssl, OptGetter(ssl)},
-                 {keyspace, OptGetter(keyspace)}, {protocol_version, OptGetter(protocol_version)} ],
+    FullOpts = [ {ssl, OptGetter(ssl)}, {keyspace, OptGetter(keyspace)} ],
 
-    case supervisor:start_child(?MODULE, [[key, Key, FullOpts, ChildCount]]) of
+    case supervisor:start_child(?MODULE, [[key, Key, FullOpts, OptGetter, ChildCount]]) of
         {ok, SupPid} -> {ok, {ChildCount, SupPid}};
         {error, E} -> {error, E}
     end.

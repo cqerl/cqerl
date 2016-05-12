@@ -52,8 +52,9 @@ get_any_client(Key) ->
 	case ets:lookup(cqerl_clusters, Key) of
 		[] -> {error, cluster_not_configured};
 		Nodes ->
-			Table = lists:nth(random:uniform(length(Nodes)), Nodes),
-			cqerl_hash:get_client(Table#cluster_table.client_key)
+            #cluster_table{client_key = {Node, Opts}} =
+                           lists:nth(random:uniform(length(Nodes)), Nodes),
+			cqerl_hash:get_client(Node, Opts)
 	end.
 
 get_any_client() ->
@@ -71,8 +72,8 @@ handle_cast({add_to_cluster, ClusterKey, ClientKeys}, State) ->
     	(#cluster_table{client_key=ClientKey}) -> ClientKey
     end, Tables)),
     NewClients = sets:subtract(sets:from_list(ClientKeys), AlreadyStarted),
-    lists:map(fun (Key) ->
-        case cqerl_hash:get_client(Key) of
+    lists:map(fun (Key = {Node, Opts}) ->
+        case cqerl_hash:get_client(Node, Opts) of
             {ok, _} ->
                 ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
             {error, Reason} ->
