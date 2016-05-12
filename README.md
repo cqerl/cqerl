@@ -64,6 +64,7 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
 2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include:
 
+    - `keyspace` which determines in which keyspace all subsequent requests operate, on that connection.
     - `auth` (mentionned below)
     - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). 
     - `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
