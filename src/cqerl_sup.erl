@@ -40,5 +40,6 @@ init(hash) ->
       ?CHILD(cqerl_batch_sup, supervisor),
       ?CHILD(cqerl_processor_sup, supervisor),
       ?CHILD(cqerl_client_sup, supervisor),
-      ?CHILD(cqerl_hash, worker)
+      ?CHILD(cqerl_hash, worker),
+      ?CHILD(cqerl_cluster, worker)
     ]}}.

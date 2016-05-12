@@ -34,9 +34,14 @@
 
     start_link/0,
 
+    get_client/0,
+    get_client/1,
     get_client/2,
+    
     get_global_opts/0,
-    make_option_getter/2
+    make_option_getter/2,
+
+    prepare_node_info/1
 ]).
 
 -export([
@@ -57,11 +62,12 @@
 
 -opaque client() :: {pid(), reference()}.
 
--type inet() :: { inet:ip_address() | string(), Port :: integer() }.
+-type inet() :: { inet:ip_address() | string(), Port :: integer() } | inet:ip_address() | string() | binary() | {}.
 
 -export_type([client/0, inet/0]).
 
 -define(SEED, {erlang:unique_integer([positive]), erlang:unique_integer([positive]), erlang:unique_integer([positive])}).
+-define(IPV4_RE, <<"^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$">>).
 
 -record(cql_client_stats, {
     min_count :: integer(),
@@ -89,6 +95,7 @@
 -define(RETRY_EXP_FACT, 1.15).
 
 -define(DEFAULT_PORT, 9042).
+-define(LOCALHOST, "127.0.0.1").
 
 -spec prepare_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> ok.
 prepare_client(Inet, Opts) ->
@@ -116,8 +123,26 @@ new_client(Inet, Opts) ->
     gen_server:call(?MODULE, {get_client, prepare_node_info(Inet), Opts}).
 
 
+
+
 % Use in `hash' mode
--spec get_client(Inet :: inet() | {}, Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
+
+-spec get_client() -> {ok, client()} | {error, term()}.
+get_client() ->
+    cqerl_cluster:get_any_client().
+
+-spec get_client(ClusterKeyOrInet :: atom() | inet()) -> {ok, client()} | {error, term()}.
+
+get_client(ClusterKey) when is_atom(ClusterKey) ->
+    cqerl_cluster:get_any_client(ClusterKey);
+
+get_client({}) ->
+    cqerl_hash:get_client({prepare_node_info({?LOCALHOST, ?DEFAULT_PORT}), []});
+
+get_client(Spec) ->
+    cqerl_hash:get_client({prepare_node_info(Spec), []}).
+
+-spec get_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> {ok, client()} | {error, term()}.
 get_client(Spec, Opts) ->
     cqerl_hash:get_client({prepare_node_info(Spec), Opts}).
 
@@ -630,10 +655,30 @@ prepare_node_info({TupleAddr, Port}) when is_tuple(TupleAddr) andalso erlang:siz
     {TupleAddr, Port};
 
 prepare_node_info(Addr) when is_atom(Addr);
-                             is_list(Addr);
                              is_tuple(Addr) andalso erlang:size(Addr) == 4;    % v4
                              is_tuple(Addr) andalso erlang:size(Addr) == 8 ->  % v6
-    prepare_node_info({Addr, ?DEFAULT_PORT}).
+    prepare_node_info({Addr, ?DEFAULT_PORT});
+
+prepare_node_info(Addr) when is_binary(Addr) ->
+    case re2:match(Addr, ?IPV4_RE) of
+        {match, [_, IP, <<>>]} ->
+            prepare_node_info({binary_to_list(IP), ?DEFAULT_PORT});
+        {match, [_, IP, Port]} ->
+            {PortInt, []} = string:to_integer(binary_to_list(Port)),
+            prepare_node_info({binary_to_list(IP), PortInt});
+        nomatch ->
+            prepare_node_info({binary_to_list(Addr), ?DEFAULT_PORT})
+    end;
+prepare_node_info(Addr) when is_list(Addr) ->
+    case re2:match(Addr, ?IPV4_RE) of
+        {match, [_, IP, <<>>]} ->
+            prepare_node_info({binary_to_list(IP), ?DEFAULT_PORT});
+        {match, [_, IP, Port]} ->
+            {PortInt, []} = string:to_integer(binary_to_list(Port)),
+            prepare_node_info({binary_to_list(IP), PortInt});
+        nomatch ->
+            prepare_node_info({Addr, ?DEFAULT_PORT})
+    end.
 
 -spec pool_from_node(Node :: {inet:ip_address() | string(), integer() | string() | binary(), atom()}) -> atom().
 
