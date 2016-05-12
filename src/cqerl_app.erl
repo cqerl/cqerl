@@ -12,7 +12,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    application:start(hash),
+    application:ensure_all_started(pooler),
     cqerl_sup:start_link().
 
 stop(_State) ->
