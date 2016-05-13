@@ -101,16 +101,16 @@ handle_info(timeout, State) ->
 
     	Clusters ->
     		maps:map(fun
-    			({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
+    			(ClusterKey, {ClientKeys, Opts0}) when is_list(ClientKeys) ->
     				handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined);
 
-				({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
+				(ClusterKey, ClientKeys) when is_list(ClientKeys) ->
     				handle_cast({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined)
     		end, Clusters)
     end,
     {noreply, State};
 
-handle_info(_Msg, State) -> 
+handle_info(_Msg, State) ->
     {noreply, State}.
 
 handle_call(_Msg, _From, State) -> 
