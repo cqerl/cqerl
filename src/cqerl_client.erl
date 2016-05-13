@@ -130,7 +130,7 @@ batch_ready({ClientPid, Call}, QueryBatch) ->
 make_key(Node, Opts) ->
     SafeOpts =
     case lists:keytake(auth, 1, Opts) of
-        {value, {auth, Auth}, Opts1} -> [{auth, erlang:phash2(Auth)} | Opts1];
+        {value, {auth, Auth}, Opts1} -> [{auth_hash, erlang:phash2(Auth)} | Opts1];
         false -> Opts
     end,
     NormalisedOpts = normalise_keyspace(SafeOpts),
