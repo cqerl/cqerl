@@ -35,13 +35,9 @@
 
 -module(cqerl_auth_handler).
 
--type inet() :: {{byte(), byte(), byte(), byte()}, integer()} | %% IPv4 address
-                {{byte(), byte(), byte(), byte(),               %% IPv6 address
-                  byte(), byte(), byte(), byte(),
-                  byte(), byte(), byte(), byte(),
-                  byte(), byte(), byte(), byte()}, integer()}.
+-include("cqerl.hrl").
 
--callback auth_init([any()], binary(), inet()) ->
+-callback auth_init([any()], binary(), cqerl_node()) ->
   {reply, Response :: binary(), State :: any()} | {close, Reason :: any()}.
 
 -callback auth_handle_challenge(binary(), State :: any()) ->

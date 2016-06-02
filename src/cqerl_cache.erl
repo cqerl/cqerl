@@ -53,13 +53,14 @@ lookup(ClientPid, Query = #cql_query{named=true}) ->
 lookup(_ClientPid, #cql_query{reusable=false}) ->
     uncached;
 lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
-    case get(?NAMED_BINDINGS_RE_KEY) of
+    RegEx = case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
             {ok, RE} = re2:compile(?NAMED_BINDINGS_RE),
-            put(?NAMED_BINDINGS_RE_KEY, RE);
-        RE -> ok
+            put(?NAMED_BINDINGS_RE_KEY, RE),
+            RE;
+        RE -> RE
     end,
-    case re2:match(Statement, RE) of
+    case re2:match(Statement, RegEx) of
         nomatch ->
             lookup(ClientPid, Query#cql_query{reusable=false, named=false});
 
@@ -115,25 +116,31 @@ query_preparation_failed(Query, Reason) ->
 %% ------------------------------------------------------------------
 
 init(_Args) ->
-    {ok, #state{
+    {ok,
+     #state{
         queued=[],
-        cached_queries=ets:new(?QUERIES_TAB, [set, named_table, protected,
-                                              {read_concurrency, true},
-                                              {keypos, #cqerl_cached_query.key}
-                                              ])
+        cached_queries = ets:new(?QUERIES_TAB,
+                                 [set, named_table, protected,
+                                  {read_concurrency, true},
+                                  {keypos, #cqerl_cached_query.key}
+                                 ])
     }}.
 
 handle_call({remove, ClientPid, Statements}, _From, State = #state{cached_queries = Cache}) ->
-    lists:foreach(fun(Statement) -> ets:delete(Cache, {ClientPid, Statement}) end, Statements),
+    lists:foreach(fun(Statement) ->
+                          ets:delete(Cache, {ClientPid, Statement})
+                  end, Statements),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    {reply, {error, bad_call}, State}.
 
 handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
-            lists:foreach(fun (Client) -> Client ! {preparation_failed, Key, Reason} end, Waiting),
+            lists:foreach(fun (Client) ->
+                                  Client ! {preparation_failed, Key, Reason}
+                          end, Waiting),
             {noreply, State#state{queued=orddict:erase(Key, Queue)}};
         error ->
             {noreply, State}
@@ -159,20 +166,20 @@ handle_cast({query_prepared, Key = {ClientPid, _Query},
 
 handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
     Key = {ClientPid, Query},
-    case orddict:find(Key, Queue) of
+    NewQueue = case orddict:find(Key, Queue) of
         {ok, _} ->
-            Queue2 = orddict:append(Key, Sender, Queue);
+            orddict:append(Key, Sender, Queue);
         error ->
             case ets:lookup(Cache, Key) of
                 [CachedQuery] ->
-                    Queue2 = Queue,
-                    Sender ! {prepared, CachedQuery};
+                    Sender ! {prepared, CachedQuery},
+                    Queue;
                 [] ->
-                    Queue2 = orddict:store(Key, [Sender], Queue),
-                    cqerl_client:prepare_query(ClientPid, Query)
+                    cqerl_client:prepare_query(ClientPid, Query),
+                    orddict:store(Key, [Sender], Queue)
             end
     end,
-    {noreply, State#state{queued=Queue2}};
+    {noreply, State#state{queued=NewQueue}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

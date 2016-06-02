@@ -21,12 +21,7 @@
 -define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
 -define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
 
--define(CQERL_IS_CLIENT(Client), 
-    is_tuple(Client) andalso 
-    tuple_size(Client) == 2 andalso 
-    is_pid(element(1, Client)) andalso 
-    is_reference(element(2, Client))
-).
+-define(DEFAULT_PORT, 9042).
 
 -define(DEFAULT_PROTOCOL_VERSION, 4).
 
@@ -51,21 +46,27 @@
 
 -type datatype() :: ascii | bigint | blob | boolean | counter | decimal | double | 
                     float | int | timestamp | uuid | varchar | varint | timeuuid | inet.
-  
+
 -type parameter_val() :: number() | binary() | list() | atom() | boolean().
 -type parameter() :: { datatype(), parameter_val() }.
 -type named_parameter() :: { atom(), parameter_val() }.
 
+-type cqerl_node() :: {inet:ip_address() | inet:hostname(), inet:port_number()}.
+-type host() :: cqerl_node() | inet:hostname().
+
+-type keyspace() :: binary() | atom() | string().
+
 -record(cql_query, {
     statement   = <<>>      :: iodata(),
+    keyspace    = undefined :: keyspace(),
     values      = []        :: [ parameter() | named_parameter() ] | map(),
 
     reusable    = undefined :: undefined | boolean(),
     named       = false     :: boolean(),
-    
+
     page_size   = 100       :: integer(),
     page_state              :: binary() | undefined,
-    
+
     consistency = one :: consistency_level() | consistency_level_int(),
     serial_consistency = undefined :: serial_consistency() | serial_consistency_int() | undefined,
 
@@ -79,9 +80,10 @@
 }).
 
 -record(cql_query_batch, {
-    consistency         = one :: consistency_level() | consistency_level_int(),
-    mode                = logged :: batch_mode() | batch_mode_int(),
-    queries             = [] :: list(tuple())
+    keyspace    = undefined :: keyspace(),
+    consistency = one       :: consistency_level() | consistency_level_int(),
+    mode        = logged    :: batch_mode() | batch_mode_int(),
+    queries     = []        :: list(tuple())
 }).
 
 -record(cql_result, {
@@ -94,7 +96,7 @@
 -record(cql_schema_changed, {
     change_type :: created | updated | dropped,
     target      :: atom(),
-    keyspace    :: binary(),
+    keyspace    :: keyspace(),
     name        :: binary(),
     args        :: [ binary() ]
 }).

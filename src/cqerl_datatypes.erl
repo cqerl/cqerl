@@ -31,7 +31,7 @@
 
 %% @doc Encode a UTF8 binary or string (max length of 2^16) into the wire format required by the protocol
 
--spec encode_string(String :: string() | binary()) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_string(string() | binary()) -> binary().
 
 encode_string(String) when is_list(String) ->
     Binary = list_to_binary(String),
@@ -39,14 +39,14 @@ encode_string(String) when is_list(String) ->
 
 encode_string(Binary) when is_binary(Binary), size(Binary) =< ?MAX_SHORT ->
     Size = size(Binary),
-    {ok, << Size:?SHORT, Binary/binary >>}.
+    << Size:?SHORT, Binary/binary >>.
 
 
 
 
 %% @doc Encode a long UTF8 binary or string (max length 2^32) into the wire format required by the protocol
 
--spec encode_long_string(String :: string() | binary()) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_long_string(String :: string() | binary()) -> binary().
 
 encode_long_string(String) when is_list(String) ->
     Binary = list_to_binary(String),
@@ -54,97 +54,88 @@ encode_long_string(String) when is_list(String) ->
 
 encode_long_string(Binary) when is_binary(Binary) ->
     Size = size(Binary),
-    {ok, << Size:?INT, Binary/binary >>}.
+    << Size:?INT, Binary/binary >>.
 
 
 
 
 %% @doc Encode a binary (max length 2^32) into the wire format required by the protocol
 
--spec encode_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_bytes(String :: binary()) -> binary().
 
 encode_bytes(null) ->
-    {ok, << 255, 255, 255, 255 >>};
+    << 255, 255, 255, 255 >>;
 encode_bytes(Bytes) when is_binary(Bytes) ->
     Size = size(Bytes),
-    {ok, << Size:?INT, Bytes/binary >>}.
+    << Size:?INT, Bytes/binary >>.
 
 
 
 
 %% @doc Encode a binary (max length 2^16) into the wire format required by the protocol
 
--spec encode_short_bytes(String :: binary()) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_short_bytes(String :: binary()) -> binary().
 
 encode_short_bytes(null) ->
-    {ok, << 0:?SHORT >> };
+    << 0:?SHORT >>;
 encode_short_bytes(Bytes) when is_binary(Bytes), size(Bytes) =< ?MAX_SHORT ->
     Size = size(Bytes),
-    {ok, << Size:?SHORT, Bytes/binary >>}.
+    << Size:?SHORT, Bytes/binary >>.
 
 
 
 
 %% @doc Encode a string list into the wire format required by the protocol.
 
--spec encode_string_list(StringList :: [binary() | string()]) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_string_list(StringList :: [string() | binary()]) -> binary().
 
 encode_string_list(StringList) when is_list(StringList) ->
-    {ok, EncodedStringList} = encode_string_list(StringList, []),
+    EncodedStringList = lists:map(fun encode_string/1, StringList),
     Length = length(StringList),
     Binary = iolist_to_binary(EncodedStringList),
-    {ok, << Length:?SHORT, Binary/binary >>}.
-
-encode_string_list([], Acc) ->
-    {ok, lists:reverse(Acc)};
-encode_string_list([String | Rest], Acc) when is_list(String); is_binary(String) ->
-    {ok, EncodedString} = encode_string(String),
-    encode_string_list(Rest, [ EncodedString | Acc ]).
-
-
-
+    << Length:?SHORT, Binary/binary >>.
 
 %% @doc Encode a proplist into a string map (<code>[string] -> [string]</code>), in the wire format required by the protocol.
 
--spec encode_proplist_to_map(PropList :: [{atom() | binary(), binary()}]) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_proplist_to_map(PropList :: [{atom() | binary(), atom() | list() | binary()}]) -> binary().
 
 encode_proplist_to_map(PropList) ->
-    {ok, IOList} = encode_proplist_to_map(PropList, []),
+    IOList = encode_proplist_to_map(PropList, []),
     Binary = iolist_to_binary(IOList),
     Length = length(IOList),
-    {ok, << Length:?SHORT, Binary/binary >>}.
+    << Length:?SHORT, Binary/binary >>.
 
 to_binary(Atom) when is_atom(Atom) -> atom_to_binary(Atom, latin1);
 to_binary(List) when is_list(List) -> list_to_binary(List);
 to_binary(Binary) when is_binary(Binary) -> Binary.
 
 encode_proplist_to_map([{Key, Value}|Rest], Acc) when is_binary(Value) ->
-    {ok, KeyBin} = encode_string(to_binary(Key)),
-    {ok, ValueBin} = encode_string(to_binary(Value)),
+    KeyBin = encode_string(to_binary(Key)),
+    ValueBin = encode_string(to_binary(Value)),
     encode_proplist_to_map(Rest, [[KeyBin, ValueBin] | Acc]);
 
 encode_proplist_to_map([_|Rest], Acc) ->
     encode_proplist_to_map(Rest, Acc);
 
 encode_proplist_to_map([], Acc) ->
-    {ok, lists:reverse(Acc)}.
+    lists:reverse(Acc).
 
 
 
 
 %% @doc Encode a proplist into a string multimap (<code>[string] -> { [string], [string], ... }</code>), in the wire format required by the protocol.
 
--spec encode_proplist_to_multimap(PropList :: [{atom() | binary(), [binary()]}]) -> {ok, bitstring()} | {error, badarg}.
+-spec encode_proplist_to_multimap(PropList :: [{atom() | binary(), [binary()]}]) -> binary().
 
 encode_proplist_to_multimap(PropList) ->
-    {ok, IOList} = encode_proplist_to_multimap(PropList, []),
+    IOList = encode_proplist_to_multimap(PropList, []),
     Binary = iolist_to_binary(IOList),
     Length = length(IOList),
-    {ok, << Length:?SHORT, Binary/binary >>}.
+    << Length:?SHORT, Binary/binary >>.
 
 
 encode_proplist_to_multimap([], Acc) ->
-    {ok, lists:reverse(Acc)};
+    lists:reverse(Acc);
 
 encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_list(Value) ->
     KeyBin0 = case Key of
@@ -152,8 +143,8 @@ encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_list(Value) ->
         String when is_list(String) -> list_to_binary(String);
         String when is_binary(String) -> String
     end,
-    {ok, KeyBin1} = encode_string(KeyBin0),
-    {ok, ValueBin} = encode_string_list(Value),
+    KeyBin1 = encode_string(KeyBin0),
+    ValueBin = encode_string_list(Value),
     encode_proplist_to_multimap(Rest, [[KeyBin1, ValueBin] | Acc]);
 
 encode_proplist_to_multimap([{Key, Value}|Rest], Acc) when is_binary(Value) ->
@@ -408,7 +399,7 @@ encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == se
     Length = length(List2),
     GetValueBinary = fun(Value) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, Bytes} = encode_bytes(Bin),
+        Bytes = encode_bytes(Bin),
         Bytes
     end,
     Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
@@ -418,7 +409,7 @@ encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
     Length = length(List),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, Bytes} = encode_bytes(Bin),
+        Bytes = encode_bytes(Bin),
         Bytes
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
@@ -429,8 +420,7 @@ encode_data({{map, KeyType, ValType}, List}, _Query) ->
     Length = map_size(List),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, Bytes} = encode_bytes(Bin),
-        Bytes
+        encode_bytes(Bin)
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(List) >>,
@@ -441,8 +431,7 @@ encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
 encode_data({{tuple, Types}, List}, _Query) when is_list(List) ->
     GetValueBinary = fun({Type, Value}) ->
         Bin = encode_data({Type, Value}, _Query),
-        {ok, Bytes} = encode_bytes(Bin),
-        Bytes
+        encode_bytes(Bin)
     end,
     << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- lists:zip(Types, List) >>;
 
@@ -450,8 +439,7 @@ encode_data({{udt, Types}, Values}, _Query) when is_list(Values) ->
     GetValueBinary = fun({Name, Type}) ->
         Value = proplists:get_value(binary_to_atom(Name, utf8), Values),
         Bin = encode_data({Type, Value}, _Query),
-        {ok, Bytes} = encode_bytes(Bin),
-        Bytes
+        encode_bytes(Bin)
     end,
     << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
 

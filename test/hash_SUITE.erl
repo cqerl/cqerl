@@ -1,4 +1,4 @@
-%% common_test suite for cqerl hash mode
+%% common_test suite for cqerl hash system
 
 -module(hash_SUITE).
 -include_lib("common_test/include/ct.hrl").
@@ -94,8 +94,7 @@ all() ->
 -define(KEYSPACE, "test_keyspace_3").
 
 init_per_suite(Config) ->
-    Config2 = test_helper:set_mode(hash, Config),
-    test_helper:standard_setup(?KEYSPACE, Config2).
+    test_helper:standard_setup(?KEYSPACE, Config).
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}

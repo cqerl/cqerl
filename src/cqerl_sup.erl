@@ -1,4 +1,3 @@
-
 -module(cqerl_sup).
 
 -behaviour(supervisor).
@@ -9,8 +8,6 @@
 %% Supervisor callbacks
 -export([init/1]).
 
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
 
 %% ===================================================================
 %% API functions
@@ -24,22 +21,23 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    init(cqerl_app:mode());
+    {ok,
+     {
+      #{strategy =>  one_for_all,
+        intensity => 5,
+        period =>    10},
+      [
+       child(cqerl_cache, worker),
+       child(cqerl_batch_sup, supervisor),
+       child(cqerl_processor_sup, supervisor),
+       child(cqerl_client_sup, supervisor),
+       child(cqerl_hash, worker)
+      ]}}.
 
-init(pooler) ->
-    {ok, { {one_for_one, 5, 10}, [
-      ?CHILD(cqerl, worker),
-      ?CHILD(cqerl_cache, worker),
-      ?CHILD(cqerl_batch_sup, supervisor),
-      ?CHILD(cqerl_processor_sup, supervisor)
-    ]}};
-
-init(hash) ->
-    {ok, { {one_for_all, 5, 10}, [
-      ?CHILD(cqerl_cache, worker),
-      ?CHILD(cqerl_batch_sup, supervisor),
-      ?CHILD(cqerl_processor_sup, supervisor),
-      ?CHILD(cqerl_client_sup, supervisor),
-      ?CHILD(cqerl_hash, worker),
-      ?CHILD(cqerl_cluster, worker)
-    ]}}.
+child(Module, Type) ->
+    #{id =>       Module,
+      start =>    {Module, start_link, []},
+      restart =>  permanent,
+      shutdown => 5000,
+      type =>     Type,
+      modules =>  [Module]}.

@@ -32,8 +32,8 @@
     compression = false           :: boolean(),
     compression_type = undefined  :: compression_type(),
     tracing = false               :: boolean(),
-    opcode                        :: integer(),
-    stream_id = 0                 :: integer()
+    opcode                        :: byte(),
+    stream_id = 0                 :: char()
 }).
 
 -record(cqerl_startup_options, {

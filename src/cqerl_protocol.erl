@@ -2,7 +2,6 @@
 
 -include("cqerl_protocol.hrl").
 
--define(DATA, cqerl_datatypes).
 -define(CHAR,  8/big-integer).
 -define(SHORT, 16/big-unsigned-integer).
 -define(INT,   32/big-signed-integer).
@@ -23,12 +22,12 @@
 
 %% @doc Encode request frames options for compression and tracing into a single byte integer.
 
--spec encode_frame_flags(Compression :: boolean(), Tracing :: boolean()) -> integer().
+-spec encode_frame_flags(Compression :: boolean(), Tracing :: boolean()) -> 0 .. 3.
 
-encode_frame_flags(true,     true) -> 3;
-encode_frame_flags(false,    true) -> 2;
-encode_frame_flags(true,     false) -> 1;
-encode_frame_flags(_,    _) -> 0.
+encode_frame_flags(true,  true)  -> 3;
+encode_frame_flags(false, true)  -> 2;
+encode_frame_flags(true,  false) -> 1;
+encode_frame_flags(_,     _)     -> 0.
 
 
 
@@ -37,7 +36,7 @@ encode_query_valuelist([]) ->
     {ok, << 0:?SHORT >>};
 
 encode_query_valuelist(Values) when is_list(Values) ->
-    BytesSequence = << <<(element(2, ?DATA:encode_bytes(Value)))/binary>> || Value <- Values >>,
+    BytesSequence = << <<(cqerl_datatypes:encode_bytes(Value))/binary>> || Value <- Values >>,
     ValuesLength = length(Values),
     {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
 
@@ -92,7 +91,7 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 
     case PageState of
         PageState when is_binary(PageState) ->
-            {ok, PageStateBin} = ?DATA:encode_bytes(PageState),
+            PageStateBin = cqerl_datatypes:encode_bytes(PageState),
             PageStateFlag = 1;
         _ ->
             PageStateBin = <<>>,
@@ -119,10 +118,10 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 encode_batch_queries([#cqerl_query{kind=Kind, statement=Statement, values=Values} | Rest], Acc) ->
     case Kind of
         prepared ->
-            {ok, QueryBin} = ?DATA:encode_short_bytes(Statement),
+            QueryBin = cqerl_datatypes:encode_short_bytes(Statement),
             KindNum = 1;
         _ ->
-            {ok, QueryBin} = ?DATA:encode_long_string(Statement),
+            QueryBin = cqerl_datatypes:encode_long_string(Statement),
             KindNum = 0
     end,
     {ok, ValueBin} = encode_query_valuelist(Values),
@@ -170,7 +169,7 @@ decode_flags(Flags, [Mask | Rest], Acc) ->
 
 
 decode_type(<< 0:?SHORT, Rest/binary >>) ->
-    {ok, CustomType, Rest1} = ?DATA:decode_string(Rest),
+    {ok, CustomType, Rest1} = cqerl_datatypes:decode_string(Rest),
     {ok, {custom, CustomType}, Rest1};
 
 decode_type(<< 16#20:?SHORT, Rest/binary >>) ->
@@ -187,8 +186,8 @@ decode_type(<< 16#22:?SHORT, Rest/binary >>) ->
     {ok, {set, Type}, Rest1};
 
 decode_type(<< 16#30:?SHORT, Rest/binary >>) ->
-    {ok, _KeyspaceName, Rest1} = ?DATA:decode_string(Rest),
-    {ok, _TypeName, Rest2} = ?DATA:decode_string(Rest1),
+    {ok, _KeyspaceName, Rest1} = cqerl_datatypes:decode_string(Rest),
+    {ok, _TypeName, Rest2} = cqerl_datatypes:decode_string(Rest1),
     <<Size:?SHORT, Rest3/binary>> = Rest2,
     {ok, Types, Rest4} = decode_udt_type(Size, Rest3),
     {ok, {udt, Types}, Rest4};
@@ -241,7 +240,7 @@ decode_udt_type(Size, Rest) ->
 decode_udt_type(0, Acc, Rest) ->
     {ok, Acc, Rest};
 decode_udt_type(Size, Acc, Rest) ->
-    {ok, ColName, Rest1} = ?DATA:decode_string(Rest),
+    {ok, ColName, Rest1} = cqerl_datatypes:decode_string(Rest),
     {ok, ColType, Rest2} = decode_type(Rest1),
     decode_udt_type(Size-1, [{ColName, ColType} | Acc], Rest2).
 
@@ -262,8 +261,8 @@ decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
 
     case GlobalTableSpec of
         true ->
-            {ok, KeySpaceName, Rest2} = ?DATA:decode_string(Rest1),
-            {ok, TableName, Rest3} = ?DATA:decode_string(Rest2),
+            {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
+            {ok, TableName, Rest3} = cqerl_datatypes:decode_string(Rest2),
             GlobalSpec = {KeySpaceName, TableName};
         false ->
             GlobalSpec = undefined,
@@ -287,7 +286,7 @@ decode_result_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
 
     case HasMorePages of
         true ->
-            {ok, PageStateBin, Rest1} = ?DATA:decode_bytes(Rest);
+            {ok, PageStateBin, Rest1} = cqerl_datatypes:decode_bytes(Rest);
         false ->
             Rest1 = Rest,
             PageStateBin = undefined
@@ -300,8 +299,8 @@ decode_result_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
         false ->
             case GlobalTableSpec of
                 true ->
-                    {ok, KeySpaceName, Rest2} = ?DATA:decode_string(Rest1),
-                    {ok, TableName, Rest3} = ?DATA:decode_string(Rest2),
+                    {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
+                    {ok, TableName, Rest3} = cqerl_datatypes:decode_string(Rest2),
                     GlobalSpec = {KeySpaceName, TableName};
                 false ->
                     GlobalSpec = undefined,
@@ -322,11 +321,11 @@ decode_columns_metadata(GlobalSpec, Binary, Remainder, Acc) when is_list(Acc), R
             Binary1 = Binary,
             #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName};
         undefined ->
-            {ok, KeySpaceName, Binary0} = ?DATA:decode_string(Binary),
-            {ok, TableName, Binary1} = ?DATA:decode_string(Binary0),
+            {ok, KeySpaceName, Binary0} = cqerl_datatypes:decode_string(Binary),
+            {ok, TableName, Binary1} = cqerl_datatypes:decode_string(Binary0),
             #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName}
     end,
-    {ok, NameBin, Binary2} = ?DATA:decode_string(Binary1),
+    {ok, NameBin, Binary2} = cqerl_datatypes:decode_string(Binary1),
     Name = binary_to_atom(NameBin, utf8),
     {ok, Type, Binary3} = decode_type(Binary2),
     decode_columns_metadata(GlobalSpec, Binary3, Remainder-1, [Record#cqerl_result_column_spec{name=Name, type=Type} | Acc]).
@@ -385,11 +384,11 @@ request_frame(#cqerl_frame{tracing=Tracing,
 %% @doc Given frame and startup options, produce a 'STARTUP' request frame encoded in the protocol format.
 
 -spec startup_frame(RequestFrame :: #cqerl_frame{}, StartupOptions :: #cqerl_startup_options{}) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 startup_frame(Frame, #cqerl_startup_options{cql_version=CQLVersion, compression=Compression}) ->
-    {ok, Map} = ?DATA:encode_proplist_to_map([ {'CQL_VERSION', CQLVersion},
-                                               {'COMPRESSION', Compression} ]),
+    Map = cqerl_datatypes:encode_proplist_to_map([ {'CQL_VERSION', CQLVersion},
+                                                   {'COMPRESSION', Compression} ]),
     request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_STARTUP}, Map).
 
 
@@ -398,7 +397,7 @@ startup_frame(Frame, #cqerl_startup_options{cql_version=CQLVersion, compression=
 %% @doc Given frame options, produce a 'OPTIONS' request frame encoded in the protocol format.
 
 -spec options_frame(RequestFrame :: #cqerl_frame{}) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 options_frame(Frame=#cqerl_frame{}) ->
     request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_OPTIONS}).
@@ -410,10 +409,10 @@ options_frame(Frame=#cqerl_frame{}) ->
 %%            frame encoded in the protocol format.
 
 -spec auth_frame(RequestFrame :: #cqerl_frame{}, AuthData :: binary()) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 auth_frame(Frame=#cqerl_frame{}, Data) when is_binary(Data) ->
-    {ok, Bytes} = ?DATA:encode_bytes(Data),
+    Bytes = cqerl_datatypes:encode_bytes(Data),
     request_frame(Frame#cqerl_frame{compression=false, opcode=?CQERL_OP_AUTH_RESPONSE}, Bytes).
 
 
@@ -423,10 +422,10 @@ auth_frame(Frame=#cqerl_frame{}, Data) when is_binary(Data) ->
 %%            frame encoded in the protocol format.
 
 -spec prepare_frame(RequestFrame :: #cqerl_frame{}, CQLStatement :: binary()) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 prepare_frame(Frame, CQLStatement) when is_binary(CQLStatement) ->
-    {ok, Payload} = ?DATA:encode_long_string(CQLStatement),
+    Payload = cqerl_datatypes:encode_long_string(CQLStatement),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_PREPARE}, Payload).
 
 
@@ -436,7 +435,7 @@ prepare_frame(Frame, CQLStatement) when is_binary(CQLStatement) ->
 %%            frame encoded in the protocol format.
 
 -spec register_frame(RequestFrame :: #cqerl_frame{}, EventList :: [atom() | {atom(), boolean()}]) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
     RegisteredEvents0 = [],
@@ -452,7 +451,7 @@ register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
         true -> [?CQERL_EVENT_SCHEMA_CHANGE | RegisteredEvents2];
         _ ->        RegisteredEvents2
     end,
-    {ok, EventStringList} = ?DATA:encode_string_list(RegisteredEvents3),
+    EventStringList = cqerl_datatypes:encode_string_list(RegisteredEvents3),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_REGISTER}, EventStringList).
 
 
@@ -462,14 +461,14 @@ register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
 %%            frame encoded in the protocol format.
 
 -spec query_frame(RequestFrame :: #cqerl_frame{}, QueryParameters :: #cqerl_query_parameters{}, Query :: #cqerl_query{}) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 query_frame(Frame=#cqerl_frame{},
             QueryParameters=#cqerl_query_parameters{},
             #cqerl_query{values=Values, statement=Query, kind=normal}) ->
 
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
-    {ok, QueryBin} = ?DATA:encode_long_string(Query),
+    QueryBin = cqerl_datatypes:encode_long_string(Query),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_QUERY},
                                 << QueryBin/binary, QueryParametersBin/binary >>).
 
@@ -480,14 +479,14 @@ query_frame(Frame=#cqerl_frame{},
 %%            frame encoded in the protocol format.
 
 -spec execute_frame(RequestFrame :: #cqerl_frame{}, QueryParameters :: #cqerl_query_parameters{}, Query :: #cqerl_query{}) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 execute_frame(Frame=#cqerl_frame{},
               QueryParameters=#cqerl_query_parameters{},
               #cqerl_query{values=Values, statement=QueryID, kind=prepared}) ->
 
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
-    {ok, QueryIDBin} = ?DATA:encode_short_bytes(QueryID),
+    QueryIDBin = cqerl_datatypes:encode_short_bytes(QueryID),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_EXECUTE},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
@@ -503,7 +502,7 @@ encode_mode_name(counter)  -> ?CQERL_BATCH_COUNTER.
 %%            'BATCH' request frame encoded in the protocol format.
 
 -spec batch_frame(RequestFrame :: #cqerl_frame{}, BatchParameters :: #cql_query_batch{}) ->
-    {ok, binary()} | {error, badarg}.
+    {ok, binary()}.
 
 batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
                                                    mode=Type,
@@ -527,13 +526,13 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
 %% @doc Decode a response frame coming from the server, expanding the response options and response term.
 
 -spec response_frame(ResponseFrame :: #cqerl_frame{}, Response :: bitstring()) ->
-    {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}.
+    {ok, #cqerl_frame{}, any(), binary()} | {incomplete, binary()}.
 
 response_frame(_Response, Binary) when size(Binary) < 9 ->
-    {delay, Binary};
+    {incomplete, Binary};
 
 response_frame(_Response, Binary = << _:5/binary, Size:?INT, Body/binary >>) when size(Body) < Size ->
-    {delay, Binary};
+    {incomplete, Binary};
 
 response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
                << Resp:?CHAR, FrameFlags:?CHAR, ID:?SHORT, OpCode:?CHAR, Size:?INT, Body0/binary >>)
@@ -547,7 +546,7 @@ response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
     {ok, UncompressedBody} = maybe_decompress_body(Compression, CompressionType, Body1),
     case HasWarnings of
         true ->
-            {ok, Warnings, Body2} = ?DATA:decode_string_list(UncompressedBody),
+            {ok, Warnings, Body2} = cqerl_datatypes:decode_string_list(UncompressedBody),
             io:format("Warning from Cassandra: ~p~n", [Warnings]);
         false ->
             Body2 = UncompressedBody
@@ -559,10 +558,8 @@ response_frame(_, Binary) ->
     {delay, Binary}.
 
 
--spec decode_response_term(#cqerl_frame{}, binary()) -> {ok, any()} | {error, badarg}.
-
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Body/binary >>) ->
-    {ok, ErrorDescription, Rest} = ?DATA:decode_string(Body),
+    {ok, ErrorDescription, Rest} = cqerl_datatypes:decode_string(Body),
     case ErrorCode of
         _EmptyError when ErrorCode == 0;              % Server Error
                          ErrorCode == 16#000A;        % Protocol Error
@@ -577,7 +574,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Bo
 
         16#1100 -> % Write Timeout Exception
             << Availability:?SHORT, Received:?INT, Required:?INT, Rest1/binary >> = Rest,
-            {ok, WriteType, _Rest} = ?DATA:decode_string(Rest1),
+            {ok, WriteType, _Rest} = cqerl_datatypes:decode_string(Rest1),
             {ok, {ErrorCode, ErrorDescription, {Availability, Received, Required, WriteType}}};
 
         16#1200 -> % Read Timeout Exception
@@ -585,8 +582,8 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Bo
             {ok, {ErrorCode, ErrorDescription, {Availability, Received, Required, DataPresent}}};
 
         16#2400 -> % Already Existing Key Space or Table
-            {ok, KeySpace, Rest1} = ?DATA:decode_string(Rest),
-            {ok, Table, _Rest} = ?DATA:decode_string(Rest1),
+            {ok, KeySpace, Rest1} = cqerl_datatypes:decode_string(Rest),
+            {ok, Table, _Rest} = cqerl_datatypes:decode_string(Rest1),
             ErrorData = case Table of
                 <<>> -> {key_space, KeySpace};
                 _ -> {table, KeySpace, Table}
@@ -594,7 +591,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Bo
             {ok, {ErrorCode, ErrorDescription, ErrorData}};
 
         16#2500 -> % Unprepared Query
-            {ok, QueryID, _Rest} = ?DATA:decode_short_bytes(Rest),
+            {ok, QueryID, _Rest} = cqerl_datatypes:decode_short_bytes(Rest),
             {ok, {ErrorCode, ErrorDescription, QueryID}}
     end;
 
@@ -602,11 +599,11 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_READY}, _Body) ->
     {ok, undefined};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_AUTHENTICATE}, Body) ->
-    {ok, String, _Rest} = ?DATA:decode_string(Body),
+    {ok, String, _Rest} = cqerl_datatypes:decode_string(Body),
     {ok, String};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Body) ->
-    {ok, Proplist, _Rest} = ?DATA:decode_multimap_to_proplist(Body),
+    {ok, Proplist, _Rest} = cqerl_datatypes:decode_multimap_to_proplist(Body),
     {ok, Proplist};
 
 %% Void result
@@ -619,7 +616,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 2:?INT, Body/bina
 
 %% Set_keyspace result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 3:?INT, Body/binary >>) ->
-    {ok, KeySpaceName, _Rest} = ?DATA:decode_string(Body),
+    {ok, KeySpaceName, _Rest} = cqerl_datatypes:decode_string(Body),
     {ok, {set_keyspace, KeySpaceName}};
 
 %% Prepared result
@@ -628,53 +625,53 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 4:?INT, Body/bina
 
 %% Schema_change result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/binary >>) ->
-    {ok, ChangeName, Rest1} = ?DATA:decode_string(Body),
-    {ok, TargetString, Rest2} = ?DATA:decode_string(Rest1),
+    {ok, ChangeName, Rest1} = cqerl_datatypes:decode_string(Body),
+    {ok, TargetString, Rest2} = cqerl_datatypes:decode_string(Rest1),
     SchemaChange0 = #cql_schema_changed{change_type=list_to_atom(string:to_lower(binary_to_list(ChangeName))),
                                         target=list_to_atom(string:to_lower(binary_to_list(TargetString)))},
     SchemaChange1 = if
         SchemaChange0#cql_schema_changed.target == keyspace ->
-            {ok, KeyspaceName, _Rest} = ?DATA:decode_string(Rest2),
+            {ok, KeyspaceName, _Rest} = cqerl_datatypes:decode_string(Rest2),
             SchemaChange0#cql_schema_changed{keyspace=KeyspaceName};
 
         SchemaChange0#cql_schema_changed.target == table orelse
         SchemaChange0#cql_schema_changed.target == type ->
-            {ok, KeyspaceName, Rest3} = ?DATA:decode_string(Rest2),
-            {ok, EntityName, _Rest} = ?DATA:decode_string(Rest3),
+            {ok, KeyspaceName, Rest3} = cqerl_datatypes:decode_string(Rest2),
+            {ok, EntityName, _Rest} = cqerl_datatypes:decode_string(Rest3),
             SchemaChange0#cql_schema_changed{keyspace=KeyspaceName, name=EntityName};
 
         SchemaChange0#cql_schema_changed.target == function orelse
         SchemaChange0#cql_schema_changed.target == aggregate ->
-            {ok, KeyspaceName, Rest3} = ?DATA:decode_string(Rest2),
-            {ok, EntityName, Rest4} = ?DATA:decode_string(Rest3),
-            {ok, Args, _Rest} = ?DATA:decode_string_list(Rest4),
+            {ok, KeyspaceName, Rest3} = cqerl_datatypes:decode_string(Rest2),
+            {ok, EntityName, Rest4} = cqerl_datatypes:decode_string(Rest3),
+            {ok, Args, _Rest} = cqerl_datatypes:decode_string_list(Rest4),
             SchemaChange0#cql_schema_changed{keyspace=KeyspaceName, name=EntityName, args=Args}
     end,
 
     {ok, {schema_change, SchemaChange1}};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
-    {ok, EventNameBin, Rest0} = ?DATA:decode_string(Body),
+    {ok, EventNameBin, Rest0} = cqerl_datatypes:decode_string(Body),
     EventName = binary_to_atom(EventNameBin, latin1),
     if
         EventName == ?CQERL_EVENT_TOPOLOGY_CHANGE orelse
         EventName == ?CQERL_EVENT_STATUS_CHANGE ->
-            {ok, TopologyChangeName, Rest1} = ?DATA:decode_string(Rest0),
+            {ok, TopologyChangeName, Rest1} = cqerl_datatypes:decode_string(Rest0),
             TopologyChangeType = binary_to_atom(TopologyChangeName, latin1),
-            {ok, ChangedNodeInet, _Rest} = ?DATA:decode_inet(Rest1),
+            {ok, ChangedNodeInet, _Rest} = cqerl_datatypes:decode_inet(Rest1),
             {ok, {EventName, {TopologyChangeType, ChangedNodeInet}}};
 
         EventName == ?CQERL_EVENT_SCHEMA_CHANGE ->
-            {ok, SchemaChangeName, Rest1} = ?DATA:decode_string(Rest0),
+            {ok, SchemaChangeName, Rest1} = cqerl_datatypes:decode_string(Rest0),
             SchemaChangeType = binary_to_atom(SchemaChangeName, latin1),
-            {ok, KeySpaceName, Rest2} = ?DATA:decode_string(Rest1),
-            {ok, TableName, _Rest} = ?DATA:decode_string(Rest2),
+            {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
+            {ok, TableName, _Rest} = cqerl_datatypes:decode_string(Rest2),
             {ok, {EventName, {SchemaChangeType, KeySpaceName, TableName}}}
     end;
 
 decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQERL_OP_AUTH_CHALLENGE;
                                                                AuthCode == ?CQERL_OP_AUTH_SUCCESS ->
-    {ok, Bytes, _Rest} = ?DATA:decode_bytes(Body),
+    {ok, Bytes, _Rest} = cqerl_datatypes:decode_bytes(Body),
     {ok, Bytes}.
 
 

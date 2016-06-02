@@ -5,18 +5,27 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
--export([mode/0]).
-
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    application:ensure_all_started(pooler),
-    cqerl_sup:start_link().
+    {ok, Pid} = cqerl_sup:start_link(),
+    apply_config(),
+    {ok, Pid}.
 
 stop(_State) ->
     ok.
 
-mode() ->
-    application:get_env(cqerl, mode, hash).
+apply_config() ->
+    Groups = application:get_env(cqerl, client_groups, []),
+    lists:foreach(fun(G) -> start_group(G) end, Groups).
+
+start_group({client_group, Opts}) ->
+    Name = proplists:get_value(name, Opts),
+    Hosts = proplists:get_value(hosts, Opts),
+    ClientsPerServer = proplists:get_value(clients_per_server, Opts),
+    cqerl:add_group(Name, Hosts, Opts, ClientsPerServer);
+
+start_group(_) ->
+    error(bad_group_config).

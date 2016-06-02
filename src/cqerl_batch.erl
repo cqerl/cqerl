@@ -2,7 +2,7 @@
 -include("cqerl_protocol.hrl").
 
 -export([start_link/2, init/3]).
--export([system_continue/3, system_terminate/4]).
+-export([system_continue/3]).
 
 start_link(Call, Batch=#cql_query_batch{}) ->
     proc_lib:start_link(?MODULE, init, [Call, Batch, self()]).
@@ -48,6 +48,7 @@ loop(Call, Batch=#cql_query_batch{queries=QueryStates}, Debug, Parent) ->
             end
     end.
 
+-spec terminate(term(), term()) -> no_return().
 terminate(Call, Batch) ->
     Queries = lists:map(fun
         ({Query = #cql_query{statement=Statement, values=Values}, uncached}) ->
@@ -65,6 +66,3 @@ terminate(Call, Batch) ->
 
 system_continue(Parent, Debug, {Call, Batch}) ->
     loop(Call, Batch, Debug, Parent).
-
-system_terminate(Reason, _Parent, _Debug, _State) ->
-    exit(Reason).

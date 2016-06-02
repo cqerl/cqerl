@@ -11,7 +11,6 @@
   {applications, [kernel,
                   stdlib,
                   ssl,
-                  pooler,
                   re2,
                   semver,
                   snappy,

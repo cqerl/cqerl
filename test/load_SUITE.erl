@@ -7,8 +7,6 @@
 
 -compile(export_all).
 
--import(test_helper, [get_client/1]).
-
 %%--------------------------------------------------------------------
 %% Function: suite() -> Info
 %%
@@ -22,7 +20,7 @@
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
 suite() ->
-  [{timetrap, {seconds, 30}} | test_helper:requirements()].
+    [{timetrap, {seconds, 30}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -47,12 +45,11 @@ suite() ->
 %%--------------------------------------------------------------------
 tests() ->
     [
-     single_client, n_clients, many_clients, many_sync_clients, many_concurrent_clients
+     single_client, many_concurrent_clients
     ].
 
 groups() ->
     [
-     {pooler, [sequence], tests()},
      {hash, [sequence], tests()}
     ].
 
@@ -73,7 +70,6 @@ groups() ->
 
 all() ->
     [
-     {group, pooler},
      {group, hash}
     ].
 
@@ -92,17 +88,20 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    test_helper:set_mode(pooler, Config),
-    Config1 = test_helper:standard_setup("test_keyspace_1", Config),
-    test_helper:create_keyspace(<<"test_keyspace_1">>, Config1),
+    Config2 = test_helper:standard_setup(Config),
+    cqerl:add_group(main, ["localhost"], Config, 1),
+    cqerl:wait_for_group(main),
 
-    Client = get_client(Config1),
+    test_helper:create_keyspace(<<"test_keyspace_1">>, Config2),
+
+    cqerl:add_group(ks, ["localhost"], [{keyspace, "test_keyspace_1"} | Config], 10),
+    cqerl:wait_for_group(ks),
+
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =
-    cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
-    cqerl:close_client(Client),
+    cqerl:run_query(test_keyspace_1, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
 
-    [{pool_min_size, 10}, {pool_max_size, 100} | Config1].
+    Config2.
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -128,11 +127,6 @@ end_per_suite(_Config) ->
 %%
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
-init_per_group(pooler, Config) ->
-    test_helper:set_mode(pooler, Config);
-init_per_group(hash, Config) ->
-    test_helper:set_mode(hash, Config);
-
 init_per_group(_, Config) ->
     Config.
 
@@ -185,146 +179,43 @@ init_per_testcase(_TestCase, Config) ->
 end_per_testcase(_TestCase, Config) ->
     Config.
 
-single_client(Config) ->
-  Client = get_client(Config),
-  Num = 500,    % # of requests
-  Dt = 2,    % in ms, yielding (1000/Dt) req/s
-  
-  Iterator = fun
-    (_F, 0, _M) -> ok;
-    (F, N, M) -> 
+single_client(_Config) ->
+    Num = 500,    % # of requests
+    Dt = 2,    % in ms, yielding (1000/Dt) req/s
+    Iterator = fun
+                   (_F, 0, _M) -> ok;
+    (F, N, M) ->
       erlang:send_after(Dt*M, self(), send_request),
       F(F, N-1, M+1)
-  end,
-  Iterator(Iterator, Num, 0),
-  
-  Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
-  
-  T1 = os:timestamp(),
-  DelayLooper = fun
-    (_F, 0, 0, Acc) -> Acc;
+               end,
+    Iterator(Iterator, Num, 0),
+
+    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);",
+                   keyspace = test_keyspace_1
+                  },
+
+    T1 = os:timestamp(),
+    DelayLooper = fun
+                      (_F, 0, 0, Acc) -> Acc;
     (F, N, M, Acc) ->
       receive
-        {result, Tag, void} -> 
-          {ok, T} = orddict:find(Tag, Acc),
-          F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
-          
-        send_request -> 
-          Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
-          
-        OtherMsg ->
-          ct:fail("Unexpected response ~p", [OtherMsg])
-        
-      after 1000 -> 
-        ct:fail("All delayed messages did not arrive in time")
-      end
-  end,
-  Deltas = DelayLooper(DelayLooper, Num, Num, []),
-  
-  Sum = lists:foldr(fun ({_Tag, T}, Acc) -> Acc + T end, 0, Deltas),
-  ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
-    [Num, (timer:now_diff(os:timestamp(), T1))/1.0e6, Sum/Num]).
-  
+          {cqerl_result, Tag, void} ->
+              {ok, T} = orddict:find(Tag, Acc),
+              F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
+          send_request ->
+              Tag = cqerl:send_query(Q#cql_query{values=[{id, N}, {name, "test"}]}),
+              F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
+          OtherMsg ->
+              ct:fail("Unexpected response ~p", [OtherMsg])
 
-get_n_clients(_Config, 0, Acc) -> Acc;
-get_n_clients(Config, N, Acc) ->
-  get_n_clients(Config, N-1, [get_client(Config)|Acc]).
-
-n_clients(Config) ->
-  NC = 10,
-  Clients = get_n_clients(Config, NC, []),
-  
-  Num = 1500,    % # of requests
-  Dt = 2,    % in ms, yielding (1000/Dt) req/s
-  
-  Iterator = fun
-    (_F, 0, _M) -> ok;
-    (F, N, M) -> 
-      erlang:send_after(Dt*M, self(), send_request),
-      F(F, N-1, M+1)
-  end,
-  Iterator(Iterator, Num, 0),
-  
-  Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
-  
-  T1 = os:timestamp(),
-  DelayLooper = fun
-    (_F, 0, 0, Acc) -> Acc;
-    (F, N, M, Acc) ->
-      receive
-        {result, Tag, void} -> 
-          {ok, T} = orddict:find(Tag, Acc),
-          F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
-          
-        send_request ->
-          Client = lists:nth((N rem 5) + 1, Clients),
-          Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
-          
-        OtherMsg ->
-          ct:fail("Unexpected response ~p", [OtherMsg])
-        
       after 1000 -> 
-        ct:fail("All delayed messages did not arrive in time")
+                ct:fail("All delayed messages did not arrive in time")
       end
-  end,
-  Deltas = DelayLooper(DelayLooper, Num, Num, []),
-  
-  Sum = lists:foldr(fun ({_Tag, T}, Acc) -> Acc + T end, 0, Deltas),
-  ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds", 
-    [Num, (timer:now_diff(os:timestamp(), T1))/1.0e6, Sum/Num]).
-
-many_clients(Config) ->
-  Num = 75000,    % # of requests
-  Dt = 0.1,    % in ms, yielding (1000/Dt) req/s
-  
-  Iterator = fun
-    (_F, 0, _M) -> ok;
-    (F, N, M) -> 
-      erlang:send_after(trunc(Dt*M), self(), send_request),
-      F(F, N-1, M+1)
-  end,
-  Iterator(Iterator, Num, 0),
-  
-  Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);"},
-  
-  T1 = os:timestamp(),
-  DelayLooper = fun
-    (_F, 0, 0, Acc) -> Acc;
-    (F, N, M, Acc) ->
-      receive
-        {result, Tag, void} -> 
-          {T, Client} = gb_trees:get(Tag, Acc),
-          cqerl:close_client(Client),
-          {Pid, _} = Client,
-          F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
-          
-        send_request ->
-          Client = get_client(Config),
-          Tag = cqerl:send_query(Client, Q#cql_query{values=[{id, N}, {name, "test"}]}),
-          F(F, N-1, M, gb_trees:insert(Tag, {os:timestamp(), Client}, Acc));
-          
-        OtherMsg ->
-          ct:fail("Unexpected response ~p", [OtherMsg])
-        
-      after 1000 -> 
-        ct:fail("All delayed messages did not arrive in time")
-      end
-  end,
-  Deltas = gb_trees:to_list(DelayLooper(DelayLooper, Num, Num, gb_trees:empty())),
-  Pids = lists:foldr(fun
-      ({_, {Pid, _}}, Acc) ->
-          case lists:member(Pid, Acc) of
-              true -> Acc;
-              false -> [Pid | Acc]
-          end
-  end, [], Deltas),
-    
-  DistinctPids = length(Pids),
-  Sum = lists:foldr(fun ({_Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
-  ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds", 
-    [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
+                  end,
+    Deltas = DelayLooper(DelayLooper, Num, Num, []),
+    Sum = lists:foldr(fun ({_Tag, T}, Acc) -> Acc + T end, 0, Deltas),
+    ct:log("~w requests sent over ~w seconds -- mean request roundtrip : ~w microseconds",
+           [Num, (timer:now_diff(os:timestamp(), T1))/1.0e6, Sum/Num]).
 
 sync_insert() ->
     receive
@@ -341,66 +232,16 @@ sync_insert() ->
             ct:fail("Wrong msg ~p~n",[OtherMsg]),
             ok
     after 1000 ->
-        ct:fail("Timeout~n",[]),
-        timeout
+              ct:fail("Timeout~n",[]),
+              timeout
     end.
 
-many_sync_clients(Config) ->
-    Num = 75000,
-    Dt = 0.01,
-    Iterator = fun
-        (_F, 0, _M) -> ok;
-        (F, N, M) ->
-            Client = get_client(Config),
-            erlang:send_after(trunc(Dt*N), self(), {sync_request, self(),Client}),
-            F(F, N-1, M+1)
-        end,
-    Iterator(Iterator, Num, 0),
-
-    T1 = os:timestamp(),
-    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
-    DelayLooper = fun
-        (_F, 0, 0, Acc) ->
-            Acc;
-        (F, N, M, Acc) ->
-            receive
-                {result, Tag} ->
-                    {T, Client} = gb_trees:get(Tag, Acc),
-                    {Pid, _} = Client,
-                    cqerl:close_client(Client),
-                    F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
-                {sync_request, P, Client} ->
-                    Tag = make_ref(),
-                    Now = os:timestamp(),
-                    Pid = spawn(fun sync_insert/0),
-                    Pid ! {P, {Client, Q}, Tag, N},
-                    F(F, N-1, M, gb_trees:insert(Tag, {Now, Client}, Acc));
-                OtherMsg ->
-                    ct:fail("Unexpected response ~p", [OtherMsg])
-            after 1000 ->
-                ct:fail("All delayed messages did not arrive in time~n")
-            end
-    end,
-    Deltas = gb_trees:to_list(DelayLooper(DelayLooper, Num, Num, gb_trees:empty())),
-    Pids = lists:foldr(fun
-        ({_, {Pid, _}}, Acc) ->
-            case lists:member(Pid, Acc) of
-                true -> Acc;
-                false -> [Pid | Acc]
-            end
-    end, [], Deltas),
-
-    DistinctPids = length(Pids),
-    Sum = lists:foldr(fun ({_Tag, {_, T}}, Acc) -> Acc + T end, 0, Deltas),
-    ct:log("~w requests sent to ~w clients over ~w seconds -- mean request roundtrip : ~w seconds --~n",
-    [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
-
-many_concurrent_clients(Config) ->
+many_concurrent_clients(_Config) ->
     Procs = 200,
     Count = lists:seq(1, Procs),
     Me = self(),
     lists:foreach(fun(I) ->
-                          spawn_link(fun() -> concurrent_client(Me, I, Config) end)
+                          spawn_link(fun() -> concurrent_client(Me, I) end)
                   end,
                   Count),
     lists:foreach(fun(_) ->
@@ -410,12 +251,13 @@ many_concurrent_clients(Config) ->
                   end,
                   Count).
 
-concurrent_client(ReportTo, ID, Config) ->
+concurrent_client(ReportTo, ID) ->
     Iters = 500,
-    Client = get_client(Config),
-    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
+    Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);",
+                   consistency=1,
+                   keyspace = test_keyspace_1},
     lists:foreach(fun(I) ->
-                          {ok, void} = cqerl:run_query(Client, Q#cql_query{values=[{id, ID}, {name, integer_to_list(I)}]})
+                          {ok, void} = cqerl:run_query(Q#cql_query{values=[{id, ID}, {name, integer_to_list(I)}]})
                   end,
                   lists:seq(1, Iters)),
     ReportTo ! done.

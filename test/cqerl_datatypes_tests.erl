@@ -16,7 +16,7 @@ string_test() ->
   
   % Test that a list string produces the correct output
   LString1 = "Hello there",
-  {ok, StringBinary} = cqerl_datatypes:encode_string(LString1),
+  StringBinary = cqerl_datatypes:encode_string(LString1),
   case length(LString1) + ?SHORT_LENGTH of
     Size when Size == size(StringBinary) -> ok
   end,
@@ -27,7 +27,7 @@ string_test() ->
   
   % Test that a binary string of cyrillic characters produces the correct output
   BString2 = <<"Юникод">>,
-  {ok, StringBinary2} = cqerl_datatypes:encode_string(BString2),
+  StringBinary2 = cqerl_datatypes:encode_string(BString2),
   case size(BString2) + ?SHORT_LENGTH of
     Size2 when Size2 == size(StringBinary2) -> ok
   end,
@@ -39,7 +39,7 @@ long_string_test() ->
 
   % Test that a list string produces the correct output
   LString1 = "Hello there",
-  {ok, StringBinary} = cqerl_datatypes:encode_long_string(LString1),
+  StringBinary = cqerl_datatypes:encode_long_string(LString1),
   case length(LString1) + ?INT_LENGTH of
     Size when Size == size(StringBinary) -> ok
   end,
@@ -50,7 +50,7 @@ long_string_test() ->
   
   % Test that a binary string of cyrillic characters produces the correct output
   BString2 = <<"Юникод">>,
-  {ok, StringBinary2} = cqerl_datatypes:encode_long_string(BString2),
+  StringBinary2 = cqerl_datatypes:encode_long_string(BString2),
   case size(BString2) + ?INT_LENGTH of
     Size2 when Size2 == size(StringBinary2) -> ok
   end,
@@ -61,7 +61,7 @@ long_string_test() ->
 bytes_test() ->
   % Test that encoding a proper byte sequence returns a properly encoded binary
   Bytes1 = crypto:rand_bytes(100000),
-  {ok, EncodedBytes1} = cqerl_datatypes:encode_bytes(Bytes1),
+  EncodedBytes1 = cqerl_datatypes:encode_bytes(Bytes1),
   case size(Bytes1) + ?INT_LENGTH of
     Size2 when Size2 == size(EncodedBytes1) -> ok
   end,
@@ -76,7 +76,7 @@ short_bytes_test() ->
   
   % Test that encoding a proper byte sequence returns a properly encoded binary
   Bytes1 = crypto:rand_bytes(5000),
-  {ok, EncodedBytes1} = cqerl_datatypes:encode_short_bytes(Bytes1),
+  EncodedBytes1 = cqerl_datatypes:encode_short_bytes(Bytes1),
   case size(Bytes1) + ?SHORT_LENGTH of
     Size2 when Size2 == size(EncodedBytes1) -> ok
   end,
@@ -87,7 +87,7 @@ short_bytes_test() ->
 string_list_test() ->
   % Test that encoding a proper string list returns a properly encoded binary
   StringList = ["Hello", <<", World! ">>, "How are ", <<"you?">>],
-  {ok, EncodedStringList} = cqerl_datatypes:encode_string_list(StringList),
+  EncodedStringList = cqerl_datatypes:encode_string_list(StringList),
   CumulLength = lists:foldl(fun % Calculate the correct length of the output
     (String, Sum) when is_list(String) -> Sum + length(String) + ?SHORT_LENGTH;
     (Binary, Sum) when is_binary(Binary) -> Sum + size(Binary) + ?SHORT_LENGTH
@@ -104,7 +104,7 @@ string_list_test() ->
 map_test() ->
   % Test that encoding a proplist as a string map yields a properly encoded binary
   Proplist = [{foo, <<"bar">>}, {<<"Hello, ">>, <<"World!">>}, {"Another", <<"one">>}],
-  {ok, EncodedMap} = cqerl_datatypes:encode_proplist_to_map(Proplist),
+  EncodedMap = cqerl_datatypes:encode_proplist_to_map(Proplist),
   CumulLength = lists:foldl(fun
     ({Key, Value}, Sum) when is_atom(Key) -> Sum + size(atom_to_binary(Key, latin1)) 
                                               + ?SHORT_LENGTH + size(Value) + ?SHORT_LENGTH;
@@ -128,7 +128,7 @@ multimap_test() ->
               {<<"Hello, ">>, [<<"World!">>, "everyone", "dear"]}, 
               {"Another", [<<"one">>, "Dog"]}],
               
-  {ok, EncodedMMap} = cqerl_datatypes:encode_proplist_to_multimap(Proplist),
+  EncodedMMap = cqerl_datatypes:encode_proplist_to_multimap(Proplist),
   StringListLength = fun (StringList) ->
     lists:foldl(fun
       (String, Sum) when is_list(String) -> Sum + length(String) + ?SHORT_LENGTH;

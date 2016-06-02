@@ -9,8 +9,6 @@
 
 -compile(export_all).
 
--import(test_helper, [maybe_get_client/1, get_client/1]).
-
 %%--------------------------------------------------------------------
 %% Function: suite() -> Info
 %%
@@ -50,13 +48,11 @@ suite() ->
 
 connection_tests() ->
     [
-     random_selection,
-     failed_connection
+     create_keyspace
     ].
 
 database_tests() ->
     [
-     {initial, [sequence], [connect, create_keyspace]},
      create_table,
      simple_insertion_roundtrip,
      async_insertion_roundtrip,
@@ -64,7 +60,6 @@ database_tests() ->
      missing_prepared_query,
      missing_prepared_batch,
      options,
-     cache_cleanup,
      {transactions, [parallel],
       [
        {types, [parallel],
@@ -83,16 +78,8 @@ database_tests() ->
 
 groups() ->
     [
-     {pooler,
-      [
-       {connection_pooler, [sequence], connection_tests()},
-       {database_pooler, [sequence], database_tests()}
-      ]},
-     {hash,
-      [
-       {connection_hash, [sequence], connection_tests() -- [random_selection]},
-       {database_hash, [sequence], database_tests()}
-      ]}
+     {init, [], connection_tests()},
+     {main_tests, [], database_tests()}
     ].
 
 %%--------------------------------------------------------------------
@@ -112,8 +99,8 @@ groups() ->
 all() ->
     [datatypes_test,
      protocol_test,
-     {group, pooler},
-     {group, hash}
+     {group, init},
+     {group, main_tests}
     ].
 
 %%--------------------------------------------------------------------
@@ -131,7 +118,9 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    test_helper:standard_setup("test_keyspace_2", Config).
+    application:ensure_started(cqerl),
+    Config2 = test_helper:standard_setup(Config),
+    Config2.
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -158,19 +147,16 @@ end_per_suite(_Config) ->
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
 
-init_per_group(NoKeyspace, Config) when NoKeyspace == connection_pooler;
-                                        NoKeyspace == initial ->
-    %% Here we remove the keyspace configuration, since we're going to drop it
-    %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
-    [{keyspace, undefined} | proplists:delete(keyspace, Config)];
-
-% Set mode:
-init_per_group(pooler, Config) ->
-    test_helper:set_mode(pooler, Config);
-init_per_group(hash, Config) ->
-    test_helper:set_mode(hash, Config);
-
-init_per_group(_Group, Config) ->
+init_per_group(init, Config) ->
+    cqerl:add_group(main, ["localhost"], Config, 10),
+    cqerl:wait_for_group(main),
+    Config;
+init_per_group(main_tests, Config) ->
+    NewConfig = [{keyspace, "test_keyspace_2"} | Config],
+    cqerl:add_group(ks, ["localhost"], NewConfig, 10),
+    cqerl:wait_for_group(ks),
+    NewConfig;
+init_per_group(_, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -184,11 +170,6 @@ init_per_group(_Group, Config) ->
 %%
 %% Description: Cleanup after each test case group.
 %%--------------------------------------------------------------------
-end_per_group(pooler, Config) ->
-    Client = get_client([{keyspace, undefined}|Config]),
-    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
-    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
-    cqerl:close_client(Client);
 end_per_group(_, _Config) ->
     ok.
 
@@ -233,89 +214,61 @@ datatypes_test(_Config) ->
 protocol_test(_Config) ->
     ok = eunit:test(cqerl_protocol).
 
-get_multiple_clients(_Config, 0, Acc) -> Acc;
-get_multiple_clients(Config, N, Acc) ->
-    get_multiple_clients(Config, N-1, [get_client(Config) | Acc]).
-
-random_selection(Config) ->
-    Clients = get_multiple_clients(Config, 200, []),
-    DistinctPids = lists:foldl(fun({Pid, _Ref}, Pids) ->
-        case lists:member(Pid, Pids) of
-            true -> Pids;
-            false -> [Pid | Pids]
-        end
-    end, [], Clients),
-    MaxSize = proplists:get_value(pool_min_size, Config),
-    MaxSize = length(DistinctPids),
-    lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
-
-failed_connection(Config) ->
-    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
-    {error, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
-    % A previous bug would cause timeouts on subsequent calls with an already
-    % used invalid keyspace. Test that case here.
-    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
-
-connect(Config) ->
-    {Pid, Ref} = get_client(Config),
-    true = is_pid(Pid),
-    true = is_reference(Ref),
-    cqerl:close_client({Pid, Ref}),
-    ok.
-
 create_keyspace(Config) ->
     test_helper:create_keyspace(<<"test_keyspace_2">>, Config).
 
-create_table(Config) ->
-    Client = get_client(Config),
-    ct:log("Got client ~w~n", [Client]),
+create_table(_Config) ->
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries1">>}} =
-        cqerl:run_query(Client, Q),
-    cqerl:close_client(Client).
+    cqerl:run_query(#cql_query{statement = Q, keyspace = test_keyspace_2}).
 
-simple_insertion_roundtrip(Config) ->
-    Client = get_client(Config),
+simple_insertion_roundtrip(_Config) ->
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    {ok, void} = cqerl:run_query(Client, #cql_query{statement=Q, values=[
-        {id, "hello"},
-        {age, 18},
-        {email, <<"mathieu@damours.org">>}
-    ]}),
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
+    {ok, void} = cqerl:run_query(#cql_query{
+                                    statement=Q,
+                                    keyspace = test_keyspace_2,
+                                    values=[
+                                            {id, "hello"},
+                                            {age, 18},
+                                            {email, <<"mathieu@damours.org">>}
+                                           ]}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries1;">>, keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
     <<"hello">> = proplists:get_value(id, Row),
     18 = proplists:get_value(age, Row),
     <<"mathieu@damours.org">> = proplists:get_value(email, Row),
-    cqerl:close_client(Client),
     Result.
 
-emptiness(Config) ->
-    Client = get_client(Config),
-    {ok, void} = cqerl:run_query(Client, "update entries1 set email = null where id = 'hello';"),
-    {ok, Result} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
+emptiness(_Config) ->
+    {ok, void} = cqerl:run_query(test_keyspace_2, "update entries1 set email = null where id = 'hello';"),
+    {ok, Result} = cqerl:run_query(test_keyspace_2, "select * from entries1 where id = 'hello';"),
     Row = cqerl:head(Result),
     null = proplists:get_value(email, Row),
-    {ok, void} = cqerl:run_query(Client, #cql_query{statement="update entries1 set age = ? where id = 'hello';",
-                                                    values=[{age, null}]}),
-    {ok, Result2} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
+    {ok, void} = cqerl:run_query(#cql_query{statement="update entries1 set age = ? where id = 'hello';",
+                                            values=[{age, null}],
+                                            keyspace=test_keyspace_2
+                                           }),
+    {ok, Result2} = cqerl:run_query(test_keyspace_2, "select * from entries1 where id = 'hello';"),
     Row2 = cqerl:head(Result2),
-    null = proplists:get_value(age, Row2),
-    cqerl:close_client(Client).
+    null = proplists:get_value(age, Row2).
 
-missing_prepared_query(Config) ->
-    Client = get_client(Config),
+missing_prepared_query(_Config) ->
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    {ok, _Result} = cqerl:run_query(Client, #cql_query{statement = Q, values =
-                                                       [{id, "abc"}, {age, 22}, {email, "me@here.com"}]}),
+    {ok, _Result} = cqerl:run_query(#cql_query{statement = Q,
+                                               values = [{id, "abc"},
+                                                         {age, 22},
+                                                         {email, "me@here.com"}],
+                                               keyspace = test_keyspace_2}),
     %% This query causes prepared queries on the table to be invalidated:
-    {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol int"),
+    {ok, _} = cqerl:run_query(test_keyspace_2, "ALTER TABLE entries1 ADD newcol int"),
     %% This query will attempt to use the prepared query and fail, falling back to re-preparing it:
-    {ok, _Result2} = cqerl:run_query(Client, #cql_query{statement = Q, values =
-                                                       [{id, "def"}, {age, 22}, {email, "me@here.com"}]}).
+    {ok, _Result2} = cqerl:run_query(#cql_query{statement = Q,
+                                                values = [{id, "def"},
+                                                          {age, 22},
+                                                          {email, "me@here.com"}],
+                                                keyspace = test_keyspace_2}).
 
-missing_prepared_batch(Config) ->
-    Client = get_client(Config),
+missing_prepared_batch(_Config) ->
     S1 = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
     V1 = [{id, "abc"}, {age, 22}, {email, "me@here.com"}],
     Q1 = #cql_query{statement = S1, values = V1},
@@ -325,55 +278,46 @@ missing_prepared_batch(Config) ->
     V2 = [ {id, "fff"}, {age, 66} ],
     Q2 = #cql_query{statement = S2, values = V2},
 
-    {ok, _Result} = cqerl:run_query(Client, #cql_query_batch{queries = [Q1, Q2]}),
+    Batch = #cql_query_batch{queries = [Q1, Q2], keyspace = test_keyspace_2},
+    {ok, _Result} = cqerl:run_query(Batch),
     %% This query causes prepared queries on the table to be invalidated:
-    {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol2 int"),
+    {ok, _} = cqerl:run_query(test_keyspace_2, "ALTER TABLE entries1 ADD newcol2 int"),
     %% This query will attempt to use the prepared queries and fail, falling back to re-preparing them:
-    {ok, _Result} = cqerl:run_query(Client, #cql_query_batch{queries = [Q1, Q2]}).
+    {ok, _Result} = cqerl:run_query(Batch).
 
-async_insertion_roundtrip(Config) ->
-    Client = get_client(Config),
-    
-    Ref = cqerl:send_query(Client, #cql_query{
-        statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>, 
+async_insertion_roundtrip(_Config) ->
+    Ref = cqerl:send_query(#cql_query{
+        statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
         values = [
             {id, "1234123"},
             {age, 45},
             {email, <<"yvon@damours.org">>}
-        ]
+        ],
+        keyspace = test_keyspace_2
     }),
-    receive {result, Ref, void} -> ok end,
-    
-    Ref2 = cqerl:send_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
+    receive {cqerl_result, Ref, void} -> ok end,
+
+    Ref2 = cqerl:send_query(#cql_query{statement = <<"SELECT * FROM entries1;">>, keyspace = test_keyspace_2}),
     receive
-        {result, Ref2, Result=#cql_result{}} ->
+        {cqerl_result, Ref2, Result=#cql_result{}} ->
             {_Row, Result2} = cqerl:next(Result),
             Row = cqerl:head(Result2),
             <<"1234123">> = proplists:get_value(id, Row),
             45 = proplists:get_value(age, Row),
-            <<"yvon@damours.org">> = proplists:get_value(email, Row),
-            Res = Row;
-            
+            <<"yvon@damours.org">> = proplists:get_value(email, Row);
         Other ->
-            Res = undefined,
             ct:fail("Received: ~p~n", [Other])
-            
-    end,
-    
-    cqerl:close_client(Client),
-    Res.
+    end.
 
-cache_cleanup(Config) ->
-    Client = get_client(Config),
-    {ClientPID, _} = Client,
-    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    CQLQuery = #cql_query{statement = Q, values = [{id, "abc"}, {age, 22}, {email, "me@here.com"}]},
-    {ok, _Result} = cqerl:run_query(Client, CQLQuery),
-    % Query should now be cached:
-    ?assertMatch(#cqerl_cached_query{}, cqerl_cache:lookup(ClientPID, CQLQuery)),
-    exit(ClientPID, crash),
-    timer:sleep(250),
-    ?assertEqual(queued, cqerl_cache:lookup(ClientPID, CQLQuery)).
+%cache_cleanup(_Config) ->
+%    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
+%    CQLQuery = #cql_query{statement = Q, values = [{id, "abc"}, {age, 22}, {email, "me@here.com"}]},
+%    {ok, _Result} = cqerl:run_query(CQLQuery),
+%    % Query should now be cached:
+%    ?assertMatch(#cqerl_cached_query{}, cqerl_cache:lookup(ClientPID, CQLQuery)),
+%    exit(ClientPID, crash),
+%    timer:sleep(250),
+%    ?assertEqual(queued, cqerl_cache:lookup(ClientPID, CQLQuery)).
 
 datatypes_columns(Cols) ->
     datatypes_columns(1, Cols, <<>>).
@@ -384,8 +328,6 @@ datatypes_columns(I, [ColumnType|Rest], Bin) ->
     datatypes_columns(I+1, Rest, << Bin/binary, Column/binary >>).
 
 all_datatypes(Config) ->
-    Client = get_client(Config),
-
     Time = {23, 4, 123},
     Date = {1970, 1, 1},
     AbsTime = (12 * 3600 + 4 * 60 + 123) * math:pow(10, 9),
@@ -401,7 +343,9 @@ all_datatypes(Config) ->
                                     col4, col5, col6, col7, col8, col9, col10,
                                     col11, col12, col13, col14
                                     ) VALUES (?, ?, ?, ?, ?, ?, ?,
-                                    ?, ?, ?, ?, ?, ?, ?)">>},
+                                    ?, ?, ?, ?, ?, ?, ?)">>,
+                           keyspace = test_keyspace_2
+                          },
 
                 [
                     {col1, "hello"},
@@ -446,7 +390,9 @@ all_datatypes(Config) ->
                                         col4, col5, col6, col7, col8, col9, col10,
                                         col11, col12, col13, col14, col15, col16,
                                         col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
-                                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
+                                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>,
+                           keyspace = test_keyspace_2
+                          },
                 [
                     {col1, "hello"},
                     {col2, 9223372036854775807},
@@ -493,16 +439,16 @@ all_datatypes(Config) ->
     CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
 
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2}),
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1}),
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow2}),
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1}),
+    {ok, void} = cqerl:run_query(InsQ#cql_query{
         statement="INSERT INTO entries2(col1, col11) values (?, ?);",
         values=RRow3=[ {col1, foobaz}, {col11, 'åäö'} ]
     }),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2;">>}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries2;">>, keyspace = test_keyspace_2}),
     {Row1, Result1} = cqerl:next(Result),
     {Row2, Result2} = cqerl:next(Result1),
     {Row3, _Result3} = cqerl:next(Result2),
@@ -539,33 +485,31 @@ all_datatypes(Config) ->
                     Val = proplists:get_value(Key, Row, null)
             end, ReferenceRow)
     end, [Row1, Row2, Row3]),
-    cqerl:close_client(Client),
     [Row1, Row2, Row3].
 
-custom_encoders(Config) ->
-    Client = get_client(Config),
+custom_encoders(_Config) ->
 
     Cols = datatypes_columns([varchar, varchar, varchar]),
     CreationQ = <<"CREATE TABLE entries2_1(",  Cols/binary, " PRIMARY KEY(col1, col2, col3));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2_1">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
 
-    InsQ = #cql_query{statement = <<"INSERT INTO entries2_1(col1, col2, col3) VALUES (?, ?, ?)">>},
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2_1(col1, col2, col3) VALUES (?, ?, ?)">>, keyspace = test_keyspace_2},
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1=[
         {col1, <<"test">>},
         {col2, <<"hello">>},
         {col3, <<"testing tuples">>}
     ]}),
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow2=[
         {col1, <<"test">>},
         {col2, <<"nice to have">>},
         {col3, <<"custom encoder">>}
     ]}),
 
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{
         statement = <<"SELECT * FROM entries2_1 WHERE col1 = ? AND (col2,col3) IN ?;">>,
-
+        keyspace = test_keyspace_2,
         values = [
             {col1, <<"test">>},
             {'in(col2,col3)', [
@@ -588,30 +532,30 @@ custom_encoders(Config) ->
 
     [RRow1, RRow2] = cqerl:all_rows(Result),
 
-    cqerl:close_client(Client),
     ok.
 
-options(Config) ->
+options(_Config) ->
     application:set_env(cqerl, maps, true),
     application:set_env(cqerl, text_uuids, true),
-    Client = get_client(Config),
     Cols = datatypes_columns([timeuuid, uuid]),
     CreationQ = <<"CREATE TABLE entries2_2(",  Cols/binary, " PRIMARY KEY(col1));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2_2">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
 
     UUIDState = uuid:new(self()),
     {TimeUUID, _} = uuid:get_v1(UUIDState),
     UUID = uuid:get_v4(),
 
-    InsQ = #cql_query{statement = <<"INSERT INTO entries2_2(col1, col2) VALUES (?, ?)">>},
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=[
+    InsQ = #cql_query{statement = <<"INSERT INTO entries2_2(col1, col2) VALUES (?, ?)">>,
+                      keyspace = test_keyspace_2},
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=[
         {col1, TimeUUID},
         {col2, UUID}
     ]}),
 
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM entries2_2;">>}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries2_2;">>,
+                                                            keyspace = test_keyspace_2}),
 
     TextTimeUUID = uuid:uuid_to_string(TimeUUID, binary_standard),
     TextUUID = uuid:uuid_to_string(UUID, binary_standard),
@@ -619,34 +563,34 @@ options(Config) ->
     [#{col1 := TextTimeUUID,
        col2 := TextUUID}] = cqerl:all_rows(Result),
 
-    cqerl:close_client(Client),
     application:unset_env(cqerl, maps),
     application:unset_env(cqerl, text_uuids).
 
-collection_types(Config) ->
-    Client = get_client(Config),
-    
+collection_types(_Config) ->
     CreationQ = <<"CREATE TABLE entries3(key varchar, numbers list<int>, names set<varchar>, phones map<varchar, varchar>, PRIMARY KEY(key));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries3">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
         
-    {ok, void} = cqerl:run_query(Client, #cql_query{
+    {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
         values = [
             {key, "First collection"},
             {numbers, [1,2,3,4,5]},
             {names, ["matt", "matt", "yvon"]},
             {phones, [{<<"home">>, <<"418-123-4545">>}, {"work", "555-555-5555"}]}
-        ]
+        ],
+         keyspace = test_keyspace_2
     }),
     
-    {ok, void} = cqerl:run_query(Client, #cql_query{
+    {ok, void} = cqerl:run_query(#cql_query{
         statement = "UPDATE entries3 SET names = names + {'martin'} WHERE key = ?",
-        values = [{key, "First collection"}]
+        values = [{key, "First collection"}],
+         keyspace = test_keyspace_2
     }),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = "SELECT * FROM entries3;"}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = "SELECT * FROM entries3;",
+                                                            keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
     <<"First collection">> = proplists:get_value(key, Row),
     [1,2,3,4,5] = proplists:get_value(numbers, Row),
@@ -660,40 +604,39 @@ collection_types(Config) ->
         ({<<"work">>, <<"555-555-5555">>}) -> ok;
         (_) -> throw(unexpected_value)
     end, proplists:get_value(phones, Row)),
-    cqerl:close_client(Client),
     Row.
 
-counter_type(Config) ->
-    Client = get_client(Config),
+counter_type(_Config) ->
     
     CreationQ = <<"CREATE TABLE entries4(key varchar, count counter, PRIMARY KEY(key));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries4">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
     
-    {ok, void} = cqerl:run_query(Client, #cql_query{
+    {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
         values = [
             {key, "First counter"},
             {count, 18}
-        ]
+        ],
+         keyspace = test_keyspace_2
     }),
     
-    {ok, void} = cqerl:run_query(Client, #cql_query{
+    {ok, void} = cqerl:run_query(#cql_query{
         statement = "UPDATE entries4 SET count = count + 10 WHERE key = ?;",
-        values = [{key, "First counter"}]
+        values = [{key, "First counter"}],
+         keyspace = test_keyspace_2
     }),
     
-    {ok, Result=#cql_result{}} = cqerl:run_query(Client, #cql_query{statement = "SELECT * FROM entries4;"}),
+    {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = "SELECT * FROM entries4;",
+                                                            keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
     <<"First counter">> = proplists:get_value(key, Row),
     28 = proplists:get_value(count, Row),
-    cqerl:close_client(Client),
     Row.
 
 
-varint_type(Config) ->
-    Client = get_client(Config),
+varint_type(_Config) ->
 
     CreationQ = "CREATE TABLE varint_test (key varint PRIMARY KEY, sval text)",
     ct:log("Executing : ~s~n", [CreationQ]),
@@ -701,26 +644,27 @@ varint_type(Config) ->
     {ok, #cql_schema_changed{change_type=created,
                              keyspace = <<"test_keyspace_2">>,
                              name = <<"varint_test">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
 
     Statement = "INSERT INTO varint_test(key, sval) VALUES (?, ?)",
 
     TestVals = varint_test_ranges(),
     lists:foreach(fun(K) ->
       {ok, void} =
-      cqerl:run_query(Client,
-                      #cql_query{statement = Statement,
+      cqerl:run_query( #cql_query{statement = Statement,
                                  values = [{key, K},
                                            {sval,
                                             integer_to_list(K)}
-                                          ]})
+                                          ],
+                                  keyspace = test_keyspace_2})
       end,
       TestVals),
 
     Statement2 = "SELECT * FROM varint_test",
-    {ok, Result} = cqerl:run_query(Client, #cql_query{statement =
+    {ok, Result} = cqerl:run_query(#cql_query{statement =
                                                       Statement2,
-                                                     page_size = 2000}),
+                                                     page_size = 2000,
+                                              keyspace = test_keyspace_2}),
     Rows = cqerl:all_rows(Result),
     Vals = lists:sort(check_extract_varints(Rows)),
     ct:log("Vals ~p ~p: ~p", [length(Rows), length(Vals), Vals]),
@@ -760,8 +704,7 @@ check_extract_varints(Rows) ->
     Ints = CheckInts,
     Ints.
 
-decimal_type(Config) ->
-    Client = get_client(Config),
+decimal_type(_Config) ->
 
     CreationQ = "CREATE TABLE decimal_test (key decimal PRIMARY KEY,
                  scale int, unscaled varint)",
@@ -770,7 +713,7 @@ decimal_type(Config) ->
     {ok, #cql_schema_changed{change_type=created,
                              keyspace = <<"test_keyspace_2">>,
                              name = <<"decimal_test">>}} =
-        cqerl:run_query(Client, CreationQ),
+        cqerl:run_query(test_keyspace_2, CreationQ),
 
     Statement = "INSERT INTO decimal_test(key, scale, unscaled)
                  VALUES (?, ?, ?)",
@@ -778,19 +721,20 @@ decimal_type(Config) ->
     TestVals = decimal_test_ranges(),
     lists:foreach(fun({U, S}) ->
       {ok, void} =
-      cqerl:run_query(Client,
-                      #cql_query{statement = Statement,
+      cqerl:run_query(#cql_query{statement = Statement,
                                  values = [{key, {U, S}},
                                            {unscaled, U},
                                            {scale, S}
-                                          ]})
+                                          ],
+                                 keyspace = test_keyspace_2})
       end,
       TestVals),
 
     Statement2 = "SELECT * FROM decimal_test",
-    {ok, Result} = cqerl:run_query(Client, #cql_query{statement =
+    {ok, Result} = cqerl:run_query(#cql_query{statement =
                                                       Statement2,
-                                                     page_size = 20000}),
+                                                     page_size = 20000,
+                                              keyspace = test_keyspace_2}),
     Rows = cqerl:all_rows(Result),
     Vals = lists:sort(check_extract_decimals(Rows)),
     ct:log("Vals ~p ~p: ~p", [length(TestVals), length(Vals), Vals]),
@@ -821,16 +765,15 @@ inserted_rows(N, Q, Acc) ->
         {email, list_to_binary(["test", ID, "@gmail.com"])}
     ]} | Acc ]).
 
-batches_and_pages(Config) ->
-    Client = get_client(Config),
+batches_and_pages(_Config) ->
     T1 = os:timestamp(),
     N = 100,
     Bsz = 25,
-    {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
+    {ok, void} = cqerl:run_query(test_keyspace_2, "TRUNCATE entries1;"),
     Q = #cql_query{statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
-    Batch = #cql_query_batch{queries=inserted_rows(N, Q, [])},
+    Batch = #cql_query_batch{queries=inserted_rows(N, Q, []), keyspace = test_keyspace_2},
     ct:log("Batch : ~w~n", [Batch]),
-    {ok, void} = cqerl:run_query(Client, Batch),
+    {ok, void} = cqerl:run_query(Batch),
     AddIDs = fun (Result, IDs0) ->
         lists:foldr(fun (Row, IDs) ->
                         ID = proplists:get_value(id, Row),
@@ -842,23 +785,22 @@ batches_and_pages(Config) ->
                     end, 
                     IDs0, cqerl:all_rows(Result))
     end,
-    {ok, Result} = cqerl:run_query(Client, #cql_query{page_size=Bsz, statement="SELECT * FROM entries1;"}),
+    {ok, Result} = cqerl:run_query(#cql_query{page_size=Bsz, statement="SELECT * FROM entries1;",
+                                              keyspace = test_keyspace_2}),
     IDs1 = AddIDs(Result, gb_sets:new()),
-    
+
     {ok, Result2} = cqerl:fetch_more(Result),
     Ref1 = cqerl:fetch_more_async(Result2),
     IDs2 = AddIDs(Result2, IDs1),
-    FetchMoreRef = receive
-        {result, Ref1, Result3} ->
+    {FetchMoreRef, IDs3} = receive
+        {cqerl_result, Ref1, Result3} ->
             Ref2 = cqerl:fetch_more_async(Result3),
-            IDs3 = AddIDs(Result3, IDs2),
-            Ref2
+            {Ref2, AddIDs(Result3, IDs2)}
     end,
     receive
-        {result, FetchMoreRef, Result4} ->
+        {cqerl_result, FetchMoreRef, Result4} ->
             IDs4 = AddIDs(Result4, IDs3),
             N = gb_sets:size(IDs4)
     end,
     ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms",
-           [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]),
-    cqerl:close_client(Client).
+           [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]).

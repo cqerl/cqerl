@@ -4,7 +4,7 @@
 
 %% API
 -export([start_link/0,
-         add_clients/2]).
+         add_clients/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -20,6 +20,12 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, main).
 
+add_clients(Name, Node, Opts, Count) ->
+    case supervisor:start_child(?MODULE, client_sup_spec(Name, Node, Opts, Count)) of
+        {ok, SupPid} -> {ok, {Count, SupPid}};
+        {error, E} -> {error, E}
+    end.
+
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
@@ -27,49 +33,34 @@ start_link() ->
 init(main) ->
     {ok,
      {
-      #{
-       strategy => simple_one_for_one
-      },
-      [#{
-        id => key_sup,
-        start => {supervisor, start_link, [?MODULE]},
-        restart => transient,
-        type => supervisor
-      }]
+      #{},
+      []
      }};
 
-init([key, Key = {Node, _Opts}, FullOpts, ChildCount]) ->
+init({clients, Name, Node, Opts, ChildCount}) ->
     {ok,
      {
-      #{
-       strategy => one_for_one,
-       intensity => 5,
-       period => 10
-      },
+      #{},
       [
-        client_spec(Key, Node, FullOpts, I) ||
+        client_spec(Name, Node, Opts, I) ||
         I <- lists:seq(1, ChildCount)
-      ]}}.
+      ]
+     }}.
 
-client_spec(Key, Node, FullOpts, I) ->
+%% ===================================================================
+%% Private functions
+%% ===================================================================
+
+client_sup_spec(Name, Node, Opts, Count) ->
+    ID = {Name, Node},
     #{
-       id => {cqerl_client, Key, I},
-       start => {cqerl_client, start_link, [Node, FullOpts, Key]}
+      id => {cqerl_client_sup, ID},
+      start => {supervisor, start_link, [?MODULE, {clients, Name, Node, Opts, Count}]},
+      type => supervisor
      }.
 
-add_clients(Node, Opts) ->
-    Key = {Node, Opts},
-    ChildCount = child_count(Key),
-    GlobalOpts = cqerl:get_global_opts(),
-    OptGetter = cqerl:make_option_getter(Opts, GlobalOpts),
-    FullOpts = [ {auth, OptGetter(auth)}, {ssl, OptGetter(ssl)},
-                 {keyspace, OptGetter(keyspace)}, {protocol_version, OptGetter(protocol_version)} ],
-
-    case supervisor:start_child(?MODULE, [[key, Key, FullOpts, ChildCount]]) of
-        {ok, SupPid} -> {ok, {ChildCount, SupPid}};
-        {error, E} -> {error, E}
-    end.
-
-
-child_count(_Key) ->
-    application:get_env(cqerl, num_clients, 20).
+client_spec(Name, Node, Opts, I) ->
+    #{
+       id => {cqerl_client, Node, I},
+       start => {cqerl_client, start_link, [Name, Node, Opts]}
+     }.
