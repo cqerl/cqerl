@@ -86,8 +86,8 @@ wait_for_client(GroupName) ->
 %% =================
 
 init(_) ->
-    ets:new(cqerl_client_tables, [named_table, {read_concurrency, true}, protected,
-                                  {keypos, #client_table.key}]),
+    _Table = ets:new(cqerl_client_tables, [named_table, {read_concurrency, true}, protected,
+                                           {keypos, #client_table.key}]),
     {ok, #state{}}.
 
 handle_call({wait_for_client, GroupName}, From,

@@ -19,7 +19,8 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 new_processor(UserQuery, Msg, ProtocolVersion) ->
-    supervisor:start_child(?MODULE, [self(), UserQuery, Msg, ProtocolVersion]).
+    {ok, _Pid} = supervisor:start_child(?MODULE, [self(), UserQuery, Msg, ProtocolVersion]),
+    ok.
 
 %% ===================================================================
 %% Supervisor callbacks

@@ -19,7 +19,8 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 new_batch_coordinator(Call, Batch) ->
-    supervisor:start_child(?MODULE, [{self(), Call}, Batch]).
+    {ok, Pid} = supervisor:start_child(?MODULE, [{self(), Call}, Batch]),
+    ok.
 
 %% ===================================================================
 %% Supervisor callbacks

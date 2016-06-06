@@ -561,9 +561,9 @@ switch_to_live_state(State=#state{group_name = GroupName,
     }.
 
 send_to_db(#state{trans=tcp, socket=Socket}, Data) when is_binary(Data) ->
-    gen_tcp:send(Socket, Data);
+    ok = gen_tcp:send(Socket, Data);
 send_to_db(#state{trans=ssl, socket=Socket}, Data) when is_binary(Data) ->
-    ssl:send(Socket, Data).
+    ok = ssl:send(Socket, Data).
 
 create_socket({Addr, Port}, Opts) ->
     BaseOpts = [{active, false}, {mode, binary}],
@@ -593,9 +593,9 @@ create_socket({Addr, Port}, Opts) ->
 activate_socket(#state{socket=undefined}) ->
     ok;
 activate_socket(#state{trans=ssl, socket=Socket}) ->
-    ssl:setopts(Socket, [{active, once}]);
+    ok = ssl:setopts(Socket, [{active, once}]);
 activate_socket(#state{trans=tcp, socket=Socket}) ->
-    inet:setopts(Socket, [{active, once}]).
+    ok = inet:setopts(Socket, [{active, once}]).
 
 
 
