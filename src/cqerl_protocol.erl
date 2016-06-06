@@ -33,12 +33,12 @@ encode_frame_flags(_,     _)     -> 0.
 
 
 encode_query_valuelist([]) ->
-    {ok, << 0:?SHORT >>};
+    << 0:?SHORT >>;
 
 encode_query_valuelist(Values) when is_list(Values) ->
     BytesSequence = << <<(cqerl_datatypes:encode_bytes(Value))/binary>> || Value <- Values >>,
     ValuesLength = length(Values),
-    {ok, << ValuesLength:?SHORT, BytesSequence/binary >>}.
+    << ValuesLength:?SHORT, BytesSequence/binary >>.
 
 
 -spec encode_consistency_name(consistency_level() | consistency_level_int()) -> consistency_level_int().
@@ -66,13 +66,12 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
                                                 page_size=PageSize,
                                                 serial_consistency=SerialConsistency}, Values) ->
 
+    {ValueBin, ValuesFlag} =
     case Values of
         List when is_list(List), length(List) > 0 ->
-            {ok, ValueBin} = encode_query_valuelist(Values),
-            ValuesFlag = 1;
+            {encode_query_valuelist(Values), 1};
         _ ->
-            ValueBin = <<>>,
-            ValuesFlag = 0
+            {<<>>, 0}
     end,
 
     SkipMetadataFlag = case SkipMetadata of
@@ -80,34 +79,33 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
         _ -> 0
     end,
 
+    {PageSizeBin, PageSizeFlag} =
     case PageSize of
         PageSize when is_integer(PageSize), PageSize > 0 ->
-            PageSizeBin = << PageSize:?INT >>,
-            PageSizeFlag = 1;
+            {<< PageSize:?INT >>, 1};
         _ ->
-            PageSizeBin = <<>>,
-            PageSizeFlag = 0
+            {<<>>, 0}
     end,
 
+    {PageStateBin, PageStateFlag} =
     case PageState of
         PageState when is_binary(PageState) ->
-            PageStateBin = cqerl_datatypes:encode_bytes(PageState),
-            PageStateFlag = 1;
+            {cqerl_datatypes:encode_bytes(PageState), 1};
         _ ->
-            PageStateBin = <<>>,
-            PageStateFlag = 0
+            {<<>>, 0}
     end,
 
     SerialConsistencyInt = encode_serial_consistency_name(SerialConsistency),
+
+    {SerialConsistencyBin, SerialConsistencyFlag} =
     case SerialConsistencyInt of
         SerialConsistencyInt when SerialConsistencyInt == ?CQERL_CONSISTENCY_SERIAL;
                                   SerialConsistencyInt == ?CQERL_CONSISTENCY_LOCAL_SERIAL ->
-            SerialConsistencyBin = << SerialConsistencyInt:?SHORT >>,
-            SerialConsistencyFlag = 1;
+            {<< SerialConsistencyInt:?SHORT >>, 1};
         _ ->
-            SerialConsistencyBin = <<>>,
-            SerialConsistencyFlag = 0
+            {<<>>, 0}
     end,
+
     ConsistencyInt = encode_consistency_name(Consistency),
     Flags = << 0:3, SerialConsistencyFlag:1, PageStateFlag:1, PageSizeFlag:1, SkipMetadataFlag:1, ValuesFlag:1 >>,
     {ok, iolist_to_binary([ << ConsistencyInt:?SHORT >>, Flags, ValueBin, PageSizeBin, PageStateBin, SerialConsistencyBin ])}.
@@ -116,15 +114,14 @@ encode_query_parameters(#cqerl_query_parameters{consistency=Consistency,
 
 
 encode_batch_queries([#cqerl_query{kind=Kind, statement=Statement, values=Values} | Rest], Acc) ->
+    {QueryBin, KindNum} =
     case Kind of
         prepared ->
-            QueryBin = cqerl_datatypes:encode_short_bytes(Statement),
-            KindNum = 1;
+            {cqerl_datatypes:encode_short_bytes(Statement), 1};
         _ ->
-            QueryBin = cqerl_datatypes:encode_long_string(Statement),
-            KindNum = 0
+            {cqerl_datatypes:encode_long_string(Statement), 0}
     end,
-    {ok, ValueBin} = encode_query_valuelist(Values),
+    ValueBin = encode_query_valuelist(Values),
     encode_batch_queries(Rest, [[ << KindNum:?CHAR >>, QueryBin, ValueBin ] | Acc]);
 
 encode_batch_queries([], Acc) ->
@@ -248,30 +245,33 @@ decode_udt_type(Size, Acc, Rest) ->
 decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec]} = decode_flags(Flags, [0]),
 
-    Rest1 = case get(protocol_version) of
-        3 -> 
-            Rest;
+    Rest1 = skip_primarykey_indices(Rest),
+
+    {GlobalSpec, Rest2} = decode_global_spec(GlobalTableSpec, Rest1),
+
+    {ok, Columns, Rest3} = decode_columns_metadata(GlobalSpec, Rest2, ColumnCount, []),
+    {ok, #cqerl_result_metadata{columns_count=ColumnCount,
+                                columns=Columns}, Rest3}.
+
+skip_primarykey_indices(Data) ->
+    case get(protocol_version) of
+        3 ->
+            Data;
         4 ->
             % TODO: Take the following into account.
             % Currently, we ignore the pk indices. We're not going eager routing yet.
-            << PKCount:?INT, Rest0/binary >> = Rest,
-            {ok, _PKIndices, Rest5} = decode_primarykey_indices(Rest0, PKCount),
-            Rest5
-    end,
+            << PKCount:?INT, Rest0/binary >> = Data,
+            {ok, _PKIndices, Rest1} = decode_primarykey_indices(Rest0, PKCount),
+            Rest1
+    end.
 
-    case GlobalTableSpec of
-        true ->
-            {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
-            {ok, TableName, Rest3} = cqerl_datatypes:decode_string(Rest2),
-            GlobalSpec = {KeySpaceName, TableName};
-        false ->
-            GlobalSpec = undefined,
-            Rest3 = Rest1
-    end,
+decode_global_spec(false, Data) ->
+    {undefined, Data};
+decode_global_spec(true, Data) ->
+    {ok, KeySpaceName, Rest0} = cqerl_datatypes:decode_string(Data),
+    {ok, TableName, Rest1} = cqerl_datatypes:decode_string(Rest0),
+    {{KeySpaceName, TableName}, Rest1}.
 
-    {ok, Columns, Rest4} = decode_columns_metadata(GlobalSpec, Rest3, ColumnCount, []),
-    {ok, #cqerl_result_metadata{columns_count=ColumnCount,
-                                columns=Columns}, Rest4}.
 
 decode_primarykey_indices(Binary, NumIndices) ->
     decode_primarykey_indices(Binary, NumIndices, []).
@@ -284,46 +284,38 @@ decode_primarykey_indices(<< PKIndex:?SHORT, Rest/binary >>, RemindingIndices, A
 decode_result_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec, HasMorePages, NoMetadata]} = decode_flags(Flags, [0, 1, 2]),
 
-    case HasMorePages of
-        true ->
-            {ok, PageStateBin, Rest1} = cqerl_datatypes:decode_bytes(Rest);
-        false ->
-            Rest1 = Rest,
-            PageStateBin = undefined
-    end,
+    {PageStateBin, Rest1} = decode_page_state(HasMorePages, Rest),
 
     case NoMetadata of
         true ->
             {ok, #cqerl_result_metadata{page_state=PageStateBin, columns_count=ColumnCount}, Rest1};
 
         false ->
-            case GlobalTableSpec of
-                true ->
-                    {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
-                    {ok, TableName, Rest3} = cqerl_datatypes:decode_string(Rest2),
-                    GlobalSpec = {KeySpaceName, TableName};
-                false ->
-                    GlobalSpec = undefined,
-                    Rest3 = Rest1
-            end,
-            {ok, Columns, Rest4} = decode_columns_metadata(GlobalSpec, Rest3, ColumnCount, []),
+            {GlobalSpec, Rest2} = decode_global_spec(GlobalTableSpec, Rest1),
+            {ok, Columns, Rest3} = decode_columns_metadata(GlobalSpec, Rest2, ColumnCount, []),
             {ok, #cqerl_result_metadata{page_state=PageStateBin,
-                                                                    columns_count=ColumnCount,
-                                                                    columns=Columns}, Rest4}
+                                        columns_count=ColumnCount,
+                                        columns=Columns}, Rest3}
     end.
+
+decode_page_state(false, Data) ->
+    {undefined, Data};
+decode_page_state(true, Data) ->
+    {ok, PageStateBin, Rest} = cqerl_datatypes:decode_bytes(Data),
+    {PageStateBin, Rest}.
+
 
 decode_columns_metadata(_GlobalSpec, Binary, 0, Acc) ->
     {ok, lists:reverse(Acc), Binary};
 
 decode_columns_metadata(GlobalSpec, Binary, Remainder, Acc) when is_list(Acc), Remainder > 0 ->
-    Record = case GlobalSpec of
+    {Binary1, Record} = case GlobalSpec of
         {KeySpaceName, TableName} ->
-            Binary1 = Binary,
-            #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName};
+            {Binary, #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName}};
         undefined ->
-            {ok, KeySpaceName, Binary0} = cqerl_datatypes:decode_string(Binary),
-            {ok, TableName, Binary1} = cqerl_datatypes:decode_string(Binary0),
-            #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName}
+            {ok, KeySpaceName, Bin0} = cqerl_datatypes:decode_string(Binary),
+            {ok, TableName, Bin1} = cqerl_datatypes:decode_string(Bin0),
+            {Bin1, #cqerl_result_column_spec{keyspace=KeySpaceName, table_name=TableName}}
     end,
     {ok, NameBin, Binary2} = cqerl_datatypes:decode_string(Binary1),
     Name = binary_to_atom(NameBin, utf8),
@@ -526,7 +518,7 @@ batch_frame(Frame=#cqerl_frame{}, #cql_query_batch{consistency=Consistency,
 %% @doc Decode a response frame coming from the server, expanding the response options and response term.
 
 -spec response_frame(ResponseFrame :: #cqerl_frame{}, Response :: bitstring()) ->
-    {ok, #cqerl_frame{}, any(), binary()} | {incomplete, binary()}.
+    {{ok, #cqerl_frame{}, any()} | incomplete, binary()}.
 
 response_frame(_Response, Binary) when size(Binary) < 9 ->
     {incomplete, Binary};
@@ -544,18 +536,19 @@ response_frame(Response0=#cqerl_frame{compression_type=CompressionType},
     Response = Response0#cqerl_frame{opcode=OpCode, stream_id=ID, compression=Compression, tracing=Tracing},
     << Body1:Size/binary, Rest/binary >> = Body0,
     {ok, UncompressedBody} = maybe_decompress_body(Compression, CompressionType, Body1),
-    case HasWarnings of
+    Body2 = case HasWarnings of
         true ->
-            {ok, Warnings, Body2} = cqerl_datatypes:decode_string_list(UncompressedBody),
-            io:format("Warning from Cassandra: ~p~n", [Warnings]);
+            {ok, Warnings, Body_} = cqerl_datatypes:decode_string_list(UncompressedBody),
+            io:format("Warning from Cassandra: ~p~n", [Warnings]),
+            Body_;
         false ->
-            Body2 = UncompressedBody
+            UncompressedBody
     end,
     {ok, ResponseTerm} = decode_response_term(Response, Body2),
-    {ok, Response, ResponseTerm, Rest};
+    {{ok, Response, ResponseTerm}, Rest};
 
 response_frame(_, Binary) ->
-    {delay, Binary}.
+    {incomplete, Binary}.
 
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Body/binary >>) ->
