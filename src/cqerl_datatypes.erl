@@ -437,7 +437,7 @@ encode_data({{tuple, Types}, List}, _Query) when is_list(List) ->
 
 encode_data({{udt, Types}, Values}, _Query) when is_list(Values) ->
     GetValueBinary = fun({Name, Type}) ->
-        Value = proplists:get_value(binary_to_atom(Name, utf8), Values),
+        Value = proplists:get_value(binary_to_atom(Name, utf8), Values, null),
         Bin = encode_data({Type, Value}, _Query),
         encode_bytes(Bin)
     end,
