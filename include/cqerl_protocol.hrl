@@ -1,5 +1,9 @@
--define(CQERL_FRAME_RESP,         16#84).
--define(CQERL_FRAME_REQ,          16#04).
+-ifndef(_CQERL_PROTOCOL_HRL_).
+-define(_CQERL_PROTOCOL_HRL_, 1).
+
+-define(MIN_CQERL_FRAME_RESP,     16#83).
+-define(MAX_CQERL_FRAME_RESP,     16#84).
+-define(CQERL_FRAME_REQ,          16#00).
 -define(CQERL_FRAME_COMPRESSION,  16#01).
 -define(CQERL_FRAME_TRACING,      16#02).
 
@@ -67,8 +71,10 @@
 }).
 
 -record(cqerl_cached_query, {
-    key :: {pid(), binary()},
-    query_ref = <<>> :: binary(),
-    params_metadata :: #cqerl_result_metadata{},
-    result_metadata :: #cqerl_result_metadata{}
+    key :: {pid(), binary() | '_'},
+    query_ref = <<>> :: binary() | '_',
+    params_metadata :: #cqerl_result_metadata{} | '_',
+    result_metadata :: #cqerl_result_metadata{} | '_'
 }).
+
+-endif. % _CQERL_PROTOCOL_HRL_

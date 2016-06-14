@@ -2,10 +2,14 @@
 
 -module(integrity_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include("cqerl.hrl").
+-include("cqerl_protocol.hrl").
 
 -compile(export_all).
+
+-import(test_helper, [maybe_get_client/1, get_client/1]).
 
 %%--------------------------------------------------------------------
 %% Function: suite() -> Info
@@ -19,14 +23,8 @@
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
-suite() -> 
-  [{timetrap, {seconds, 20}},
-   {require, ssl, cqerl_test_ssl},
-   {require, auth, cqerl_test_auth},
-   % {require, keyspace, cqerl_test_keyspace},
-   {require, host, cqerl_host},
-   {require, pool_min_size, pool_min_size},
-   {require, pool_max_size, pool_max_size}].
+suite() ->
+  [{timetrap, {seconds, 20}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -49,33 +47,53 @@ suite() ->
 %%
 %% Description: Returns a list of test case group definitions.
 %%--------------------------------------------------------------------
-groups() -> [
-    {connection, [sequence], [
-        random_selection,
-        failed_connection
-    ]},
-    {database, [sequence], [ 
-        {initial, [sequence], [connect, create_keyspace]}, 
-        create_table,
-        simple_insertion_roundtrip, 
-        async_insertion_roundtrip, 
-        emptiness,
-        missing_prepared_query,
-        missing_prepared_batch,
-        options,
-        {transactions, [parallel], [
-            {types, [parallel], [
-                all_datatypes, 
-                % custom_encoders, 
-                collection_types, 
-                counter_type,
-                varint_type,
-                decimal_type
-            ]},
-            batches_and_pages
-        ]}
-    ]}
-].
+
+connection_tests() ->
+    [
+     random_selection,
+     failed_connection
+    ].
+
+database_tests() ->
+    [
+     {initial, [sequence], [connect, create_keyspace]},
+     create_table,
+     simple_insertion_roundtrip,
+     async_insertion_roundtrip,
+     emptiness,
+     missing_prepared_query,
+     missing_prepared_batch,
+     options,
+     cache_cleanup,
+     {transactions, [parallel],
+      [
+       {types, [parallel],
+        [
+         all_datatypes, 
+         % custom_encoders,
+         collection_types,
+         counter_type,
+         varint_type,
+         decimal_type
+        ]},
+       batches_and_pages
+      ]}
+    ].
+
+
+groups() ->
+    [
+     {pooler,
+      [
+       {connection_pooler, [sequence], connection_tests()},
+       {database_pooler, [sequence], database_tests()}
+      ]},
+     {hash,
+      [
+       {connection_hash, [sequence], connection_tests() -- [random_selection]},
+       {database_hash, [sequence], database_tests()}
+      ]}
+    ].
 
 %%--------------------------------------------------------------------
 %% Function: all() -> GroupsAndTestCases
@@ -94,8 +112,8 @@ groups() -> [
 all() ->
     [datatypes_test,
      protocol_test,
-     {group, connection},
-     {group, database}
+     {group, pooler},
+     {group, hash}
     ].
 
 %%--------------------------------------------------------------------
@@ -113,46 +131,7 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    case erlang:function_exported(application, ensure_all_started, 1) of
-      true -> application:ensure_all_started(cqerl);
-      false ->
-        application:start(crypto),
-        application:start(asn1),
-        application:start(public_key),
-        application:start(ssl),
-        application:start(pooler),
-        application:start(cqerl)
-    end,
-    
-    application:start(sasl),
-    RawSSL = ct:get_config(ssl),
-    DataDir = proplists:get_value(data_dir, Config),
-    SSL = case RawSSL of
-        undefined -> false;
-        false -> false;
-        _ ->
-            %% To relative file paths for SSL, prepend the path of
-            %% the test data directory. To bypass this behavior, provide
-            %% an absolute path.
-            lists:map(fun
-                ({FileOpt, Path}) when FileOpt == cacertfile;
-                                       FileOpt == certfile;
-                                       FileOpt == keyfile ->
-                    case Path of
-                        [$/ | _Rest] -> {FileOpt, Path};
-                        _ -> {FileOpt, filename:join([DataDir, Path])}
-                    end;
-
-                (Opt) -> Opt
-            end, RawSSL)
-    end,
-    [ {auth, ct:get_config(auth)}, 
-      {ssl, RawSSL},
-      {prepared_ssl, SSL},
-      {keyspace, "test_keyspace_2"},
-      {host, ct:get_config(host)},
-      {pool_min_size, ct:get_config(pool_min_size)},
-      {pool_max_size, ct:get_config(pool_max_size)} ] ++ Config.
+    test_helper:standard_setup("test_keyspace_2", Config).
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -162,11 +141,8 @@ init_per_suite(Config) ->
 %%
 %% Description: Cleanup after the suite.
 %%--------------------------------------------------------------------
-end_per_suite(Config) ->
-    Client = get_client([{keyspace, undefined}|Config]),
-    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
-    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
-    cqerl:close_client(Client).
+end_per_suite(_Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_group(GroupName, Config0) ->
@@ -182,12 +158,19 @@ end_per_suite(Config) ->
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
 
-init_per_group(NoKeyspace, Config) when NoKeyspace == connection;
+init_per_group(NoKeyspace, Config) when NoKeyspace == connection_pooler;
                                         NoKeyspace == initial ->
     %% Here we remove the keyspace configuration, since we're going to drop it
     %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
-    [{keyspace, undefined} | Config];
-init_per_group(_group, Config) ->
+    [{keyspace, undefined} | proplists:delete(keyspace, Config)];
+
+% Set mode:
+init_per_group(pooler, Config) ->
+    test_helper:set_mode(pooler, Config);
+init_per_group(hash, Config) ->
+    test_helper:set_mode(hash, Config);
+
+init_per_group(_Group, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
@@ -201,8 +184,13 @@ init_per_group(_group, Config) ->
 %%
 %% Description: Cleanup after each test case group.
 %%--------------------------------------------------------------------
-end_per_group(_group, Config) ->
-    Config.
+end_per_group(pooler, Config) ->
+    Client = get_client([{keyspace, undefined}|Config]),
+    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
+    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
+    cqerl:close_client(Client);
+end_per_group(_, _Config) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% Function: init_per_testcase(TestCase, Config0) ->
@@ -262,11 +250,11 @@ random_selection(Config) ->
     lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
 
 failed_connection(Config) ->
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
-    {closed, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
+    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
+    {error, _} = maybe_get_client([{keyspace, <<"another_fake_keyspace">>} | Config]),
     % A previous bug would cause timeouts on subsequent calls with an already
     % used invalid keyspace. Test that case here.
-    {closed, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
+    {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]).
 
 connect(Config) ->
     {Pid, Ref} = get_client(Config),
@@ -276,17 +264,8 @@ connect(Config) ->
     ok.
 
 create_keyspace(Config) ->
-    Client = get_client(Config),
-    Q = <<"CREATE KEYSPACE test_keyspace_2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};">>,
-    D = <<"DROP KEYSPACE test_keyspace_2;">>,
-    case cqerl:run_query(Client, #cql_query{statement=Q}) of
-        {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} -> ok;
-        {error, {16#2400, _, {key_space, <<"test_keyspace_2">>}}} ->
-            {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, D),
-            {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:close_client(Client).
-        
+    test_helper:create_keyspace(<<"test_keyspace_2">>, Config).
+
 create_table(Config) ->
     Client = get_client(Config),
     ct:log("Got client ~w~n", [Client]),
@@ -384,6 +363,17 @@ async_insertion_roundtrip(Config) ->
     cqerl:close_client(Client),
     Res.
 
+cache_cleanup(Config) ->
+    Client = get_client(Config),
+    {ClientPID, _} = Client,
+    Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
+    CQLQuery = #cql_query{statement = Q, values = [{id, "abc"}, {age, 22}, {email, "me@here.com"}]},
+    {ok, _Result} = cqerl:run_query(Client, CQLQuery),
+    % Query should now be cached:
+    ?assertMatch(#cqerl_cached_query{}, cqerl_cache:lookup(ClientPID, CQLQuery)),
+    exit(ClientPID, crash),
+    timer:sleep(250),
+    ?assertEqual(queued, cqerl_cache:lookup(ClientPID, CQLQuery)).
 
 datatypes_columns(Cols) ->
     datatypes_columns(1, Cols, <<>>).
@@ -395,64 +385,118 @@ datatypes_columns(I, [ColumnType|Rest], Bin) ->
 
 all_datatypes(Config) ->
     Client = get_client(Config),
-    Cols = datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
-                              float, int, timestamp, uuid, varchar, tinyint,
-                              smallint, timeuuid, inet, date, time, varint]),
-    CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
-    ct:log("Executing : ~s~n", [CreationQ]),
-    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
-        cqerl:run_query(Client, CreationQ),
-    
-    InsQ = #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
-                                    col4, col5, col6, col7, col8, col9, col10,
-                                    col11, col12, col13, col14, col15, col16,
-                                    col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
-                                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
-    
+
     Time = {23, 4, 123},
     Date = {1970, 1, 1},
     AbsTime = (12 * 3600 + 4 * 60 + 123) * math:pow(10, 9),
 
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1=[
-        {col1, "hello"},
-        {col2, 9223372036854775807},
-        {col3, <<1,2,3,4,5,6,7,8,9,10>>},
-        {col4, true},
-        {col5, {1234, 5}},
-        {col6, 5.1235131241221e-6},
-        {col7, 5.12351e-6},
-        {col8, 2147483647},
-        {col9, now},
-        {col10, new},
-        {col11, <<"Юникод"/utf8>>},
-        {col12, 120},
-        {col13, 1200},
-        {col14, now},
-        {col15, {127, 0, 0, 1}},
-        {col16, Date},
-        {col17, Time},
-        {col18, 666}
-    ]}),
-    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2=[
-        {col1, <<"foobar">>},
-        {col2, -9223372036854775806},
-        {col3, <<1,2,3,4,5,6,7,8,9,10>>},
-        {col4, false},
-        {col5, {1234, -5}},
-        {col6, -5.1235131241220e-6},
-        {col7, -5.12351e-6},
-        {col8, -2147483646},
-        {col9, 1984336643},
-        {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
-        {col11, <<"åäö"/utf8>>},
-        {col12, -120},
-        {col13, -1200},
-        {col14, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
-        {col15, {0,0,0,0,0,0,0,0}},
-        {col16, Date},
-        {col17, AbsTime},
-        {col18, 666}
-    ]}),
+    {Cols, InsQ, RRow1, RRow2} = case proplists:get_value(protocol_version, Config) of
+        3 ->
+            {
+                datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
+                                  float, int, timestamp, uuid, varchar,
+                                  timeuuid, inet, varint]),
+
+                #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
+                                    col4, col5, col6, col7, col8, col9, col10,
+                                    col11, col12, col13, col14
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?,
+                                    ?, ?, ?, ?, ?, ?, ?)">>},
+
+                [
+                    {col1, "hello"},
+                    {col2, 9223372036854775807},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, true},
+                    {col5, {1234, 5}},
+                    {col6, 5.1235131241221e-6},
+                    {col7, 5.12351e-6},
+                    {col8, 2147483647},
+                    {col9, now},
+                    {col10, new},
+                    {col11, <<"Юникод"/utf8>>},
+                    {col12, now},
+                    {col13, {127, 0, 0, 1}},
+                    {col14, 666}
+                ], [
+                    {col1, <<"foobar">>},
+                    {col2, -9223372036854775806},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, false},
+                    {col5, {1234, -5}},
+                    {col6, -5.1235131241220e-6},
+                    {col7, -5.12351e-6},
+                    {col8, -2147483646},
+                    {col9, 1984336643},
+                    {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
+                    {col11, <<"åäö"/utf8>>},
+                    {col12, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
+                    {col13, {0,0,0,0,0,0,0,0}},
+                    {col14, 666}
+                ]
+            };
+
+        _ ->
+            {
+                datatypes_columns([ascii, bigint, blob, boolean, decimal, double,
+                                  float, int, timestamp, uuid, varchar, timeuuid, inet, varint, 
+                                  tinyint, smallint, date, time]),
+
+                #cql_query{statement = <<"INSERT INTO entries2(col1, col2, col3,
+                                        col4, col5, col6, col7, col8, col9, col10,
+                                        col11, col12, col13, col14, col15, col16,
+                                        col17, col18) VALUES (?, ?, ?, ?, ?, ?, ?,
+                                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>},
+                [
+                    {col1, "hello"},
+                    {col2, 9223372036854775807},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, true},
+                    {col5, {1234, 5}},
+                    {col6, 5.1235131241221e-6},
+                    {col7, 5.12351e-6},
+                    {col8, 2147483647},
+                    {col9, now},
+                    {col10, new},
+                    {col11, <<"Юникод"/utf8>>},
+                    {col12, now},
+                    {col13, {127, 0, 0, 1}},
+                    {col14, 666},
+                    {col15, 120},
+                    {col16, 1200},
+                    {col17, Date},
+                    {col18, Time}
+                ],
+                [
+                    {col1, <<"foobar">>},
+                    {col2, -9223372036854775806},
+                    {col3, <<1,2,3,4,5,6,7,8,9,10>>},
+                    {col4, false},
+                    {col5, {1234, -5}},
+                    {col6, -5.1235131241220e-6},
+                    {col7, -5.12351e-6},
+                    {col8, -2147483646},
+                    {col9, 1984336643},
+                    {col10, <<22,6,195,126,110,122,64,242,135,15,38,179,46,108,22,64>>},
+                    {col11, <<"åäö"/utf8>>},
+                    {col12, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
+                    {col13, {0,0,0,0,0,0,0,0}},
+                    {col14, 666},
+                    {col15, -120},
+                    {col16, -1200},
+                    {col17, Date},
+                    {col18, AbsTime}
+                ]
+            }
+    end,
+
+    CreationQ = <<"CREATE TABLE entries2(",  Cols/binary, " PRIMARY KEY(col1));">>,
+    ct:log("Executing : ~s~n", [CreationQ]),
+    {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
+        cqerl:run_query(Client, CreationQ),
+
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow2}),
+    {ok, void} = cqerl:run_query(Client, InsQ#cql_query{values=RRow1}),
     {ok, void} = cqerl:run_query(Client, InsQ#cql_query{
         statement="INSERT INTO entries2(col1, col11) values (?, ?);",
         values=RRow3=[ {col1, foobaz}, {col11, 'åäö'} ]
@@ -470,14 +514,14 @@ all_datatypes(Config) ->
                 <<"foobaz">> -> RRow3
             end,
             lists:foreach(fun
-                ({col14, _}) -> true = uuid:is_v1(proplists:get_value(col14, Row));
+                ({col12, _}) -> true = uuid:is_v1(proplists:get_value(col12, Row));
                 ({col10, _}) -> true = uuid:is_v4(proplists:get_value(col10, Row));
                 ({col9, _}) -> ok; %% Yeah, I know...
                 
                 ({col16, {Y, M, D}}) ->
                     {Y, M, D} = proplists:get_value(col16, Row);
 
-                ({col17, _}) -> proplists:get_value(col17, Row) == AbsTime;
+                ({col18, _}) -> proplists:get_value(col18, Row) == AbsTime;
 
                 ({col1, Key}) when is_list(Key) ->
                     Val = list_to_binary(Key),
@@ -490,6 +534,7 @@ all_datatypes(Config) ->
                 ({col7, Val0}) ->
                     Val = round(Val0 * 1.0e11),
                     Val = round(proplists:get_value(col7, Row) * 1.0e11);
+
                 ({Key, Val}) ->
                     Val = proplists:get_value(Key, Row, null)
             end, ReferenceRow)
@@ -817,26 +862,3 @@ batches_and_pages(Config) ->
     ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms",
            [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]),
     cqerl:close_client(Client).
-
-% Call when you're expecting a valid client
-get_client(Config) ->
-    {ok, Client} = maybe_get_client(Config),
-    Client.
-
-% Call to test new_client error cases
-maybe_get_client(Config) ->
-    Host = proplists:get_value(host, Config),
-    SSL = proplists:get_value(prepared_ssl, Config),
-    Auth = proplists:get_value(auth, Config, undefined),
-    Keyspace = proplists:get_value(keyspace, Config),
-    PoolMinSize = proplists:get_value(pool_min_size, Config),
-    PoolMaxSize = proplists:get_value(pool_max_size, Config),
-
-    io:format("Options : ~w~n", [[
-        {ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
-        {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}
-        ]]),
-
-    cqerl:new_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace}, 
-                            {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize} ]).
-

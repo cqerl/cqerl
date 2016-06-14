@@ -1,3 +1,6 @@
+-ifndef(_CQERL_HRL_).
+-define(_CQERL_HRL_, 1).
+
 -define(CQERL_CONSISTENCY_ANY,          0).
 -define(CQERL_CONSISTENCY_ONE,          1).
 -define(CQERL_CONSISTENCY_TWO,          2).
@@ -24,6 +27,8 @@
     is_pid(element(1, Client)) andalso 
     is_reference(element(2, Client))
 ).
+
+-define(DEFAULT_PROTOCOL_VERSION, 4).
 
 -define(CQERL_PARSE_ADDR (Addr), case erlang:function_exported(inet, parse_address, 1) of
     true -> inet:parse_address(Addr);
@@ -93,3 +98,5 @@
     name        :: binary(),
     args        :: [ binary() ]
 }).
+
+-endif. % _CQERL_HRL_

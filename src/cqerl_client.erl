@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/2, new_user/2, remove_user/1,
+-export([start_link/2, start_link/3, new_user/2, remove_user/1,
          run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
          prepare_query/2,
          batch_ready/2]).
@@ -55,7 +55,9 @@ end).
     queries = [] :: list({integer(), term()}),
     queued,
     available_slots = [] :: list(integer()),
-    waiting_preparation = []
+    waiting_preparation = [],
+    mode :: hash | pooler,
+    key :: {term(), term()}
 }).
 
 -record(client_user, {
@@ -69,16 +71,25 @@ end).
 %% ------------------------------------------------------------------
 
 start_link(Inet, Opts) ->
-    gen_fsm:start_link(?MODULE, [Inet, Opts], []).
+    gen_fsm:start_link(?MODULE, [Inet, Opts, undefined], []).
+
+start_link(Inet, Opts, Key) ->
+    gen_fsm:start_link(?MODULE, [Inet, Opts, Key], []).
 
 new_user(Pid, From) ->
-    try
-        gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
-    catch
-        exit:_ -> {error, {closed, process_died}}
+    case cqerl_app:mode() of
+        pooler ->
+            try
+                gen_fsm:sync_send_event(Pid, {new_user, From}, infinity)
+            catch
+                exit:_ -> {error, {closed, process_died}}
+            end;
+        hash ->
+            ok
     end.
 
 remove_user({ClientPid, ClientRef}) ->
+    cqerl_app:mode() =:= pooler andalso
     gen_fsm:send_event(ClientPid, {remove_user, ClientRef}).
 
 run_query(Client, Query) when ?IS_IOLIST(Query) ->
@@ -106,7 +117,13 @@ fetch_more_async(Continuation=#cql_result{client={ClientPid, ClientRef}}) ->
     QueryRef.
 
 prepare_query(ClientPid, Query) ->
-    gen_fsm:send_event(ClientPid, {prepare_query, Query}).
+    % We don't want the cqerl_cache process to crash if our client has gone away,
+    % so wrap in a try-catch
+    try
+        gen_fsm:send_event(ClientPid, {prepare_query, Query})
+    catch
+        _:_ -> ok
+    end.
 
 batch_ready({ClientPid, Call}, QueryBatch) ->
     gen_fsm:send_event(ClientPid, {batch_ready, Call, QueryBatch}).
@@ -115,10 +132,11 @@ batch_ready({ClientPid, Call}, QueryBatch) ->
 %% gen_fsm Function Definitions
 %% ------------------------------------------------------------------
 
-init([Inet, Opts]) ->
+init([Inet, Opts, Key]) ->
     case create_socket(Inet, Opts) of
         {ok, Socket, Transport} ->
             {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
+            cqerl:put_protocol_version(proplists:get_value(protocol_version, Opts, cqerl:get_protocol_version())),
             {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
             put(uuidstate, uuid:new(self())),
             State = #client_state{
@@ -126,7 +144,9 @@ init([Inet, Opts]) ->
                 authmod=AuthHandler, authargs=AuthArgs,
                 users=[],
                 sleep=get_sleep_duration(Opts),
-                keyspace=proplists:get_value(keyspace, Opts)
+                keyspace=proplists:get_value(keyspace, Opts),
+                key=Key,
+                mode=cqerl_app:mode()
             },
             send_to_db(State, OptionsFrame),
             activate_socket(State),
@@ -254,6 +274,9 @@ handle_info({processor_threw, {Error, {Query, Call}}}, live,
         {rows, _} ->
             {UserCall, _} = Query,
             respond_to_user(UserCall, {error, Error}),
+            {next_state, live, State};
+
+        {prepared, _rest} ->
             {next_state, live, State}
     end;
 
@@ -390,7 +413,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, undefined} -> ok;
                 {ok, UserQuery} ->
-                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg})
+                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg}, cqerl:get_protocol_version())
             end,
             {next_state, live, release_stream_id(StreamID, State)};
 
@@ -404,7 +427,7 @@ handle_info({ Transport, Socket, BinaryMsg }, live, State = #client_state{ socke
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, RawMsg}, Delayed} ->
             case orddict:find(StreamID, State#client_state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg});
+                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg}, cqerl:get_protocol_version());
                 {ok, undefined} -> ok
             end,
             {next_state, live, release_stream_id(StreamID, State)};
@@ -641,7 +664,8 @@ process_outgoing_query(Call,
     end,
     cqerl_processor_sup:new_processor(
         { State#client_state.trans, State#client_state.socket, CachedResult },
-        { send, BaseFrame, Values, Query, SkipMetadata }
+        { send, BaseFrame, Values, Query, SkipMetadata },
+        cqerl:get_protocol_version()
     ),
     maybe_signal_busy(State2 = State1#client_state{queries=Queries1}),
     State2.
@@ -703,10 +727,19 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     send_to_db(State, Frame),
     {starting, State}.
 
-switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace, inet=Inet}) ->
+switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
+                                         inet=Inet, key=Key, mode=Mode}) ->
     signal_alive(Inet, Keyspace),
-    UsersTab = ets:new(users, [set, private, {keypos, #client_user.ref}]),
-    lists:foreach(fun(From) -> add_user(From, UsersTab) end, Users),
+    UsersTab =
+    case Mode of
+        hash ->
+            cqerl_hash:client_started(Key),
+            undefined;
+        pooler ->
+            T = ets:new(users, [set, private, {keypos, #client_user.ref}]),
+            lists:foreach(fun(From) -> add_user(From, T) end, Users),
+            T
+    end,
     Queries = create_queries_dict(),
     State1 = State#client_state{
         authstate=undefined, authargs=undefined, delayed = <<>>,
@@ -756,9 +789,9 @@ create_socket({Addr, Port}, Opts) ->
 activate_socket(#client_state{socket=undefined}) ->
     ok;
 activate_socket(#client_state{trans=ssl, socket=Socket}) ->
-    ssl:setopts(Socket, [{active, once}, {mode, binary}, {packet, raw}]);
+    ssl:setopts(Socket, [{active, once}]);
 activate_socket(#client_state{trans=tcp, socket=Socket}) ->
-    inet:setopts(Socket, [{active, once}, {packet, raw}]).
+    inet:setopts(Socket, [{active, once}]).
 
 
 
@@ -805,7 +838,6 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
     case application:get_env(cqerl, preferred_cql_version, undefined) of
         undefined ->
             [GreaterVersion|_] = SemVersions;
-
         Version1 ->
             [GreaterVersion|_] = lists:dropwhile(fun (SemVersion) ->
                 case semver:compare(SemVersion, Version1) of
@@ -813,7 +845,6 @@ choose_cql_version({'CQL_VERSION', Versions}) ->
                     _ -> false
                 end
             end, SemVersions)
-
     end,
     [_v | Version] = semver:vsn_string(GreaterVersion),
     list_to_binary(Version).
@@ -846,13 +877,23 @@ create_queries_dict(N, Acc) ->
 
 
 get_sleep_duration(Opts) ->
-    round(case proplists:get_value(sleep_duration, Opts) of
-        {Amount, sec} -> Amount * 1000;
-        {Amount, min} -> Amount * 1000 * 60;
-        {Amount, hour} -> Amount * 1000 * 60 * 60;
-        Amount when is_integer(Amount) -> Amount
-    end).
+    case cqerl_app:mode() of
+        hash -> infinity;
+        _ ->
+            round(case proplists:get_value(sleep_duration, Opts) of
+                      {Amount, sec} -> Amount * 1000;
+                      {Amount, min} -> Amount * 1000 * 60;
+                      {Amount, hour} -> Amount * 1000 * 60 * 60;
+                      Amount when is_integer(Amount) -> Amount
+                  end)
+    end.
 
 stop_during_startup(Reason, State = #client_state{users = Users}) ->
-    lists:foreach(fun (From) -> gen_server:reply(From, {closed, Reason}) end, Users),
+    lists:foreach(fun (From) -> gen_server:reply(From, {error, Reason}) end, Users),
+    % In pooler mode, do a short sleep here before dying - pooler immediately (and
+    % continiously) restarts the process, and in failure states such as setting an
+    % invalid keyspace this leads very quickly to use of all the local ports and
+    % eaddrinuse errors on further attempts (including valid ones) by clients to
+    % connect.
+    cqerl_app:mode() =:= pooler andalso timer:sleep(200),
     {stop, normal, State#client_state{socket=undefined}}.

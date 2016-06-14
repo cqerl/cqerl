@@ -3,13 +3,14 @@
 
 -define(INT,   32/big-signed-integer).
 
--export([start_link/3, process/3]).
+-export([start_link/4, process/4]).
 
-start_link(ClientPid, UserQuery, Msg) ->
-    Pid = spawn_link(?MODULE, process, [ClientPid, UserQuery, Msg]),
+start_link(ClientPid, UserQuery, Msg, ProtocolVersion) ->
+    Pid = spawn_link(?MODULE, process, [ClientPid, UserQuery, Msg, ProtocolVersion]),
     {ok, Pid}.
 
-process(ClientPid, A, B) ->
+process(ClientPid, A, B, ProtocolVersion) ->
+    cqerl:put_protocol_version(ProtocolVersion),
     try do_process(ClientPid, A, B) of
         Result -> Result
     catch

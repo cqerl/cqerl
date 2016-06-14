@@ -24,7 +24,8 @@
 
 -record(state, {
     cached_queries :: ets:tid(),
-    queued = [] :: list(tuple())
+    queued = [] :: list(tuple()),
+    monitored_clients = [] :: list(pid())
 }).
 
 %% ------------------------------------------------------------------
@@ -138,7 +139,8 @@ handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
             {noreply, State}
     end;
 
-handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}},
+handle_cast({query_prepared, Key = {ClientPid, _Query},
+             {QueryID, QueryMetadata, ResultMetadata}},
             State=#state{queued=Queue, cached_queries=Cache}) ->
 
     CachedQuery = #cqerl_cached_query{key=Key, query_ref=QueryID,
@@ -147,9 +149,10 @@ handle_cast({query_prepared, Key, {QueryID, QueryMetadata, ResultMetadata}},
 
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
+            NewState = maybe_monitor(ClientPid, State),
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
             ets:insert(Cache, CachedQuery),
-            {noreply, State#state{queued=orddict:erase(Key, Queue)}};
+            {noreply, NewState#state{queued=orddict:erase(Key, Queue)}};
         error ->
             {noreply, State}
     end;
@@ -174,6 +177,11 @@ handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cache
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({'DOWN', _Ref, process, Pid, _},
+            State=#state{cached_queries=Cache, monitored_clients = MonitoredClients}) ->
+    ets:match_delete(Cache, #cqerl_cached_query{key = {Pid, '_'}, _='_'}),
+    {noreply, State#state{monitored_clients = lists:delete(Pid, MonitoredClients)}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -186,4 +194,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
+
+maybe_monitor(Pid, State = #state{monitored_clients = Monitored}) ->
+    case lists:member(Pid, Monitored) of
+        true ->
+            State;
+        false ->
+            monitor(process, Pid),
+            State#state{monitored_clients = [Pid | Monitored]}
+    end.
 
