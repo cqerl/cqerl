@@ -194,18 +194,14 @@ run_query(ClientRef, Query, Retry) when Retry =< 0->
 
 run_query(ClientRef, Query, Retry) ->
     case cqerl_client:run_query(ClientRef, Query) of
-        {error, Reason}=Response when is_tuple(Reason) ->
-            case element(1, Reason) of
-                16#1100 -> %% Write timeout
-                    error_logger:info_msg("Cassandra write timeout, retrying retry=~p", [Retry]),
-                    run_query(ClientRef, Query, Retry - 1);
-                16#1200 -> %% Read timeout
-                    error_logger:info_msg("Cassandra read timeout, retrying retry=~p", [Retry]),
-                    run_query(ClientRef, Query, Retry - 1);
-                _ ->
-                    Response
-            end;
-        Response -> Response
+        {error, {16#1100, _, _}} -> %% Write timeout
+            error_logger:info_msg("Cassandra write timeout, retrying retry=~p", [Retry]),
+            run_query(ClientRef, Query, Retry - 1);
+        {error, {16#1200, _, _}} -> %% Read timeout
+            error_logger:info_msg("Cassandra read timeout, retrying retry=~p", [Retry]),
+            run_query(ClientRef, Query, Retry - 1);
+        Response -> 
+            Response
     end.
 
 
