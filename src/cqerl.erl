@@ -160,8 +160,8 @@ close_client(ClientRef) ->
 
 
 
-%% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
-%%            return with the result from Cassandra (synchronously).
+%% @doc Send a query to cassandra for execution. The function will return with the result from Cassandra (synchronously).
+%%
 %% The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record
 %%
 %% <pre>#cql_query{
@@ -180,9 +180,9 @@ close_client(ClientRef) ->
 %% <code>two</code>, <code>three</code>, <code>quorum</code>, <code>all</code>, <code>local_quorum</code>, <code>each_quorum</code>, <code>serial</code>,
 %% <code>local_serial</code> or <code>local_one</code>.
 %%
-%% How <em>bindings</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
-%% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
-%% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
+%% How <em>values</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
+%% they are assumed to be positional (<code>?</code>). In both cases, <em>values</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) or map, where keys match the
+%% parameter names. 
 
 -spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
