@@ -6,7 +6,7 @@
 
 -export([
     start_link/0,
-    client_started/3,
+    client_started/4,
     remove_client/2,
     get_client/2,
     get_random_client/1,
@@ -52,10 +52,10 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec client_started(term(), cqerl_node(), keyspace()) -> ok.
-client_started(Name, Node, Keyspace) ->
+-spec client_started(term(), cqerl_node(), keyspace(), proplists:proplist()) -> ok.
+client_started(Name, Node, Keyspace, Opts) ->
     Key = make_client_key(Node, Keyspace),
-    gen_server:cast(?MODULE, {add_client, Name, Key, self()}).
+    gen_server:cast(?MODULE, {add_client, Name, Key, Opts, self()}).
 
 remove_client(Node, Keyspace) ->
     Key = make_client_key(Node, Keyspace),
@@ -100,8 +100,8 @@ handle_call({wait_for_client, GroupName}, From,
 handle_call(_, _, State) ->
     {reply, {error, bad_call}, State}.
 
-handle_cast({add_client, Name, Key, Pid}, State) ->
-    NewState = add_client(Name, Key, Pid, State),
+handle_cast({add_client, Name, Key, Opts, Pid}, State) ->
+    NewState = add_client(Name, Key, Opts, Pid, State),
     {noreply, NewState};
 
 handle_cast({remove_client, Key, Pid}, State) ->
@@ -139,9 +139,10 @@ get_existing_table(Key) ->
         [] -> {error, clients_not_started}
     end.
 
-add_client(Name, Key, Pid, State = #state{active_groups = Groups}) ->
+add_client(Name, Key, Opts, Pid, State = #state{active_groups = Groups}) ->
     T = get_create_table(Key),
     add_client_to_table(Pid, T),
+    cqerl_schema:add_node(Key#client_key.node, Opts),
     NewState = notify_waiters(Name, State),
     NewState#state{active_groups = sets:add_element(Name, Groups)}.
 
@@ -204,7 +205,7 @@ get_client_from_table(Table) ->
     end.
 
 select_random_from_valid([]) ->
-    {error, no_clients};
+    {error, no_random_clients};
 
 select_random_from_valid(Tables) ->
     #client_table{table = T} = lists:nth(rand:uniform(length(Tables)), Tables),

@@ -554,13 +554,7 @@ decode_data({{udt, ValueTypes}, Size, Bin}, Opts) ->
     List0 = decode_column_collection_content(CollectionBin),
     List1 = [ {Name, decode_data({ValueType, Size2, ValueBin}, Opts)} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
-
-    case proplists:get_bool(maps, Opts) of
-        true ->
-            {maps:from_list(List2), Rest};
-        false ->
-            {List2, Rest}
-    end;
+    {maps:from_list(List2), Rest};
 
 decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
@@ -568,13 +562,7 @@ decode_data({{map, KeyType, ValueType}, Size, Bin}, Opts) ->
     List = [ { element(1, decode_data({KeyType, KSize, KeyBin}, Opts)),
                element(1, decode_data({ValueType, VSize, ValueBin}, Opts)) } ||
         << KSize:?INT, KeyBin:KSize/binary, VSize:?INT, ValueBin:VSize/binary >> <= EntriesBin ],
-
-    case proplists:get_bool(maps, Opts) of
-        true ->
-            {maps:from_list(List), Rest};
-        false ->
-            {List, Rest}
-    end;
+    {maps:from_list(List), Rest};
 
 decode_data({_, Size, << Size:?INT, Data/binary >>}, _Opts) ->
     << Data:Size/binary, Rest/binary >> = Data,

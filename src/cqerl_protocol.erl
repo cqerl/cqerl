@@ -457,11 +457,11 @@ register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
 
 query_frame(Frame=#cqerl_frame{},
             QueryParameters=#cqerl_query_parameters{},
-            #cqerl_query{values=Values, statement=Query, kind=normal}) ->
+            #cqerl_query{values=Values, statement=Query, kind=normal, tracing=Tracing}) ->
 
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
     QueryBin = cqerl_datatypes:encode_long_string(Query),
-    request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_QUERY},
+    request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_QUERY, tracing=Tracing},
                                 << QueryBin/binary, QueryParametersBin/binary >>).
 
 
@@ -475,11 +475,11 @@ query_frame(Frame=#cqerl_frame{},
 
 execute_frame(Frame=#cqerl_frame{},
               QueryParameters=#cqerl_query_parameters{},
-              #cqerl_query{values=Values, statement=QueryID, kind=prepared}) ->
+              #cqerl_query{values=Values, statement=QueryID, kind=prepared, tracing=Tracing}) ->
 
     {ok, QueryParametersBin} = encode_query_parameters(QueryParameters, Values),
     QueryIDBin = cqerl_datatypes:encode_short_bytes(QueryID),
-    request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_EXECUTE},
+    request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_EXECUTE, tracing=Tracing},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
@@ -599,6 +599,10 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, Body) ->
     {ok, Proplist, _Rest} = cqerl_datatypes:decode_multimap_to_proplist(Body),
     {ok, Proplist};
 
+decode_response_term(Frame = #cqerl_frame{opcode=?CQERL_OP_RESULT, tracing=true},
+                    <<_UUID:16/binary, Body/binary >>) ->
+    decode_response_term(Frame#cqerl_frame{tracing=false}, Body);
+
 %% Void result
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 1:?INT, _Body/binary >>) ->
     {ok, {void, undefined}};
@@ -672,7 +676,7 @@ decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQER
 encode_query_values(Values, Query) when is_list(Values) ->
     [cqerl_datatypes:encode_data(Value, Query) || Value <- Values];
 encode_query_values(ValueMap, Query) ->
-    encode_query_values(safe_map_to_list(ValueMap), Query).
+    encode_query_values(maps:to_list(ValueMap), Query).
 
 encode_query_values(Values, Query, []) ->
     encode_query_values(Values, Query);
@@ -690,45 +694,9 @@ encode_query_values(Values, Query, ColumnSpecs) when is_list(Values) ->
     end, ColumnSpecs);
 
 encode_query_values(ValueMap, Query, ColumnSpecs) ->
-    encode_query_values(safe_map_to_list(ValueMap), Query, ColumnSpecs).
-
-safe_map_to_list(ValueMap) ->
-    case code:which(maps) of
-        non_existing ->
-            throw(invalid_valuelist);
-        _ ->
-            case erlang:is_map(ValueMap) of
-                true ->
-                    maps:to_list(ValueMap);
-                _ ->
-                    throw(invalid_valuelist)
-            end
-    end.
-
-
+    encode_query_values(maps:to_list(ValueMap), Query, ColumnSpecs).
 
 decode_row(Row, ColumnSpecs, Opts) ->
-    case proplists:get_bool(maps, Opts) of
-        true ->
-            try_decode_map_row(Row, ColumnSpecs, Opts);
-        false ->
-            decode_proplist_row(Row, ColumnSpecs, Opts)
-    end.
-
-try_decode_map_row(Row, ColumnSpecs, Opts) ->
-    case code:which(maps) of
-        non_existing -> decode_proplist_row(Row, ColumnSpecs, Opts);
-        _ -> decode_map_row(Row, ColumnSpecs, Opts)
-    end.
-
-decode_proplist_row(Row, ColumnSpecs, Opts) ->
-    lists:map(fun
-        ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
-            {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, Opts),
-            {Name, Data}
-    end, lists:zip(Row, ColumnSpecs)).
-
-decode_map_row(Row, ColumnSpecs, Opts) ->
     maps:from_list(lists:map(fun
         ({<< Size:?INT, ValueBin/binary >>, #cqerl_result_column_spec{name=Name, type=Type}}) ->
             {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, Opts),

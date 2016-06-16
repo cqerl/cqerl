@@ -53,7 +53,8 @@
     kind                = normal :: normal | prepared,
     statement           = <<>>   :: binary(),
     values              = []     :: list(binary()),
-    source_query                 :: #cql_query{}
+    source_query                 :: #cql_query{},
+    tracing             = false  :: boolean()
 }).
 
 -record(cqerl_result_column_spec, {

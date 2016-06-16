@@ -4,6 +4,7 @@
 -module(cqerl).
 
 -export([
+    start/0,
     run_query/1,
     send_query/1,
 
@@ -36,6 +37,9 @@
 ]).
 
 -include("cqerl.hrl").
+
+start() ->
+    application:ensure_all_started(cqerl).
 
 %% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
 %%            return with the result from Cassandra (synchronously).
@@ -186,7 +190,7 @@ normalise_keyspace(KS) when is_list(KS)   -> list_to_atom(KS);
 normalise_keyspace(KS) when is_binary(KS) -> binary_to_atom(KS, latin1);
 normalise_keyspace(KS) when is_atom(KS)   -> KS.
 
--spec add_group(atom(), [host()], proplists:proplist(), pos_integer()) -> ok.
+-spec add_group(term(), [host()], proplists:proplist(), pos_integer()) -> ok.
 add_group(Name, Hosts, Opts, ClientsPerServer) ->
     FullOpts = merge_opts(Opts),
     lists:foreach(
@@ -238,7 +242,7 @@ select_client(#cql_query_batch{keyspace = Keyspace}) ->
     random_select_client(Keyspace);
 
 select_client(Query = #cql_query{keyspace = Keyspace}) ->
-    case application:get_env(cqerl, strategy, token_aware) of
+    case application:get_env(cqerl, strategy, simple) of
         token_aware ->
             ta_select_client(Query);
         _ ->
@@ -266,7 +270,7 @@ ta_select_client(#cql_query{keyspace = undefined}) ->
 ta_select_client(Query = #cql_query{keyspace = Keyspace}) ->
     case cqerl_schema:select_client(Query) of
         {ok, Client} -> {ok, Client};
-        {error, no_clients} -> random_select_client(Keyspace)
+        {error, _} -> random_select_client(Keyspace)
     end.
 
 random_select_client(undefined) ->

@@ -1,5 +1,13 @@
 # CQErl
 
+
+Changes in cqerl2:
+
+* maps only - proplist support removed
+* API change: `get_client` call no longer required
+* 18.3+ only
+* Token aware policy
+
 Native Erlang client for CQL3 over Cassandra's latest binary protocol v4.
 
 [**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Clusters](#clusters) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)

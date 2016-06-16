@@ -30,8 +30,9 @@ init([]) ->
        child(cqerl_cache, worker),
        child(cqerl_batch_sup, supervisor),
        child(cqerl_processor_sup, supervisor),
-       child(cqerl_client_sup, supervisor),
-       child(cqerl_hash, worker)
+       child(cqerl_schema, worker),
+       child(cqerl_hash, worker),
+       child(cqerl_client_sup, supervisor)
       ]}}.
 
 child(Module, Type) ->

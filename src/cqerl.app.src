@@ -15,7 +15,8 @@
                   semver,
                   snappy,
                   lz4,
-                  uuid]},
+                  uuid,
+                  erlang_murmurhash]},
 
   {mod, {cqerl_app, []}},
   {env, []}

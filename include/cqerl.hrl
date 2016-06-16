@@ -70,7 +70,8 @@
     consistency = one :: consistency_level() | consistency_level_int(),
     serial_consistency = undefined :: serial_consistency() | serial_consistency_int() | undefined,
 
-    value_encode_handler = undefined :: function() | undefined
+    value_encode_handler = undefined :: function() | undefined,
+    tracing     = false     :: boolean()
 }).
 
 -record(cql_call, {

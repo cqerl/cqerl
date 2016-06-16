@@ -8,7 +8,8 @@
 %% ------------------------------------------------------------------
 
 -export([start_link/3,
-         run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
+         run_query/2, query_async/2,
+         fetch_more/1, fetch_more_async/1,
          prepare_query/2,
          batch_ready/2]).
 
@@ -504,12 +505,12 @@ process_outgoing_query(Call,
 
     {BaseFrame, State1} = seq_frame(State),
     I = BaseFrame#cqerl_frame.stream_id,
-    {ColumnSpecs, SkipMetadata, Query, Values} =
+    {ColumnSpecs, SkipMetadata, Query, Values, Tracing} =
     case Item of
-        Q = #cql_query{values=V} ->
-            {undefined, false, Q, V};
-        #cql_result{cql_query = Q = #cql_query{values=V}, columns = CS} ->
-            {CS, true, Q, V}
+        Q = #cql_query{values=V, tracing=T} ->
+            {undefined, false, Q, V, T};
+        #cql_result{cql_query = Q = #cql_query{values=V, tracing=T}, columns = CS} ->
+            {CS, true, Q, V, T}
     end,
     NewQueries = case CachedResult of
         uncached -> orddict:store(I, {Call, {Query, ColumnSpecs}}, Queries);
@@ -518,7 +519,7 @@ process_outgoing_query(Call,
     end,
     cqerl_processor_sup:new_processor(
         { State1#state.trans, State1#state.socket, CachedResult },
-        { send, BaseFrame, Values, Query, SkipMetadata },
+        { send, BaseFrame, Values, Query, SkipMetadata, Tracing },
         cqerl:get_protocol_version()
     ),
     State1#state{queries = NewQueries}.
@@ -541,6 +542,7 @@ maybe_set_keyspace(State=#state{keyspace=undefined}) ->
 maybe_set_keyspace(State=#state{keyspace=Keyspace}) ->
     KeyspaceName = atom_to_binary(Keyspace, latin1),
     BaseFrame = base_frame(State),
+
     {ok, Frame} = cqerl_protocol:query_frame(BaseFrame,
         #cqerl_query_parameters{},
         #cqerl_query{statement = <<"USE ", KeyspaceName/binary>>}
@@ -548,9 +550,9 @@ maybe_set_keyspace(State=#state{keyspace=Keyspace}) ->
     send_to_db(State, Frame),
     State.
 
-switch_to_live_state(State=#state{group_name = GroupName,
+switch_to_live_state(State=#state{group_name = GroupName, opts = Opts,
                                   node=Node, keyspace = Keyspace}) ->
-    cqerl_hash:client_started(GroupName, Node, Keyspace),
+    cqerl_hash:client_started(GroupName, Node, Keyspace, Opts),
     Queries = create_queries_dict(),
     State#state{
         authstate=undefined, authargs=undefined, delayed = <<>>,

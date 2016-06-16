@@ -43,7 +43,8 @@ do_process(ClientPid, UserQuery, { rows, Msg }) ->
     ClientPid ! {rows, Call, Result},
     ok;
 
-do_process(_ClientPid, {Trans, Socket, CachedResult}, { send, BaseFrame, Values, Query, SkipMetadata }) ->
+do_process(_ClientPid, {Trans, Socket, CachedResult},
+           { send, BaseFrame, Values, Query, SkipMetadata, Tracing }) ->
     {ok, Frame} = case CachedResult of
         uncached ->
             cqerl_protocol:query_frame(BaseFrame,
@@ -57,7 +58,8 @@ do_process(_ClientPid, {Trans, Socket, CachedResult}, { send, BaseFrame, Values,
                 #cqerl_query{
                     kind    = normal,
                     statement = Query#cql_query.statement,
-                    values  = cqerl_protocol:encode_query_values(Values, Query)
+                    values  = cqerl_protocol:encode_query_values(Values, Query),
+                    tracing = Tracing
                 }
             );
 
@@ -73,7 +75,8 @@ do_process(_ClientPid, {Trans, Socket, CachedResult}, { send, BaseFrame, Values,
                 #cqerl_query{
                     kind    = prepared,
                     statement = Ref,
-                    values  = cqerl_protocol:encode_query_values(Values, Query, PMetadata#cqerl_result_metadata.columns)
+                    values  = cqerl_protocol:encode_query_values(Values, Query, PMetadata#cqerl_result_metadata.columns),
+                    tracing = Tracing
                 }
             )
     end,
