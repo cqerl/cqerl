@@ -198,7 +198,7 @@ decode_short_bytes(Bin = << Length:?SHORT, Rest/binary >>) when size(Rest) < Len
 
 decode_inet(<<Length:?CHAR, Rest/binary>>) ->
     <<Address:Length/binary, Port:?INT, Rest1/binary>> = Rest,
-    {ok, {binary_to_list(Address), Port}, Rest1}.
+    {ok, cqerl:normalise_node({binary_to_list(Address), Port}), Rest1}.
 
 
 decode_string_list(<< ListLength:?SHORT, Rest/binary >>) ->

@@ -426,27 +426,13 @@ prepare_frame(Frame, CQLStatement) when is_binary(CQLStatement) ->
 %% @doc Given frame options and the list of events, produce a 'REGISTER' request
 %%            frame encoded in the protocol format.
 
--spec register_frame(RequestFrame :: #cqerl_frame{}, EventList :: [atom() | {atom(), boolean()}]) ->
+-spec register_frame(RequestFrame :: #cqerl_frame{}, EventList :: [event_type()]) ->
     {ok, binary()}.
 
 register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
-    RegisteredEvents0 = [],
-    RegisteredEvents1 = case proplists:get_value(topology_change, EventList, false) of
-        true -> [?CQERL_EVENT_TOPOLOGY_CHANGE | RegisteredEvents0];
-        _ ->        RegisteredEvents0
-    end,
-    RegisteredEvents2 = case proplists:get_value(status_change, EventList, false) of
-        true -> [?CQERL_EVENT_STATUS_CHANGE | RegisteredEvents1];
-        _ ->        RegisteredEvents1
-    end,
-    RegisteredEvents3 = case proplists:get_value(schema_change, EventList, false) of
-        true -> [?CQERL_EVENT_SCHEMA_CHANGE | RegisteredEvents2];
-        _ ->        RegisteredEvents2
-    end,
-    EventStringList = cqerl_datatypes:encode_string_list(RegisteredEvents3),
+    EventStrings = [atom_to_list(E) || E <- EventList],
+    EventStringList = cqerl_datatypes:encode_string_list(EventStrings),
     request_frame(Frame#cqerl_frame{opcode=?CQERL_OP_REGISTER}, EventStringList).
-
-
 
 
 %% @doc Given frame options, query parameters and a query, produce a 'QUERY' request
@@ -648,30 +634,49 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/bina
     {ok, {schema_change, SchemaChange1}};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
-    {ok, EventNameBin, Rest0} = cqerl_datatypes:decode_string(Body),
-    EventName = binary_to_atom(EventNameBin, latin1),
-    if
-        EventName == ?CQERL_EVENT_TOPOLOGY_CHANGE orelse
-        EventName == ?CQERL_EVENT_STATUS_CHANGE ->
-            {ok, TopologyChangeName, Rest1} = cqerl_datatypes:decode_string(Rest0),
-            TopologyChangeType = binary_to_atom(TopologyChangeName, latin1),
-            {ok, ChangedNodeInet, _Rest} = cqerl_datatypes:decode_inet(Rest1),
-            {ok, {EventName, {TopologyChangeType, ChangedNodeInet}}};
-
-        EventName == ?CQERL_EVENT_SCHEMA_CHANGE ->
-            {ok, SchemaChangeName, Rest1} = cqerl_datatypes:decode_string(Rest0),
-            SchemaChangeType = binary_to_atom(SchemaChangeName, latin1),
-            {ok, KeySpaceName, Rest2} = cqerl_datatypes:decode_string(Rest1),
-            {ok, TableName, _Rest} = cqerl_datatypes:decode_string(Rest2),
-            {ok, {EventName, {SchemaChangeType, KeySpaceName, TableName}}}
-    end;
+    {ok, EventName, Rest0} = cqerl_datatypes:decode_string(Body),
+    decode_event(binary_to_existing_atom(EventName, utf8), Rest0);
 
 decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQERL_OP_AUTH_CHALLENGE;
                                                                AuthCode == ?CQERL_OP_AUTH_SUCCESS ->
     {ok, Bytes, _Rest} = cqerl_datatypes:decode_bytes(Body),
     {ok, Bytes}.
 
+decode_event(?CQERL_EVENT_TOPOLOGY_CHANGE, Data) ->
+    {ok, Type, Rest} = cqerl_datatypes:decode_string(Data),
+    {ok, Node, <<>>} = cqerl_datatypes:decode_inet(Rest),
+    {ok, #topology_change{type = binary_to_existing_atom(Type, utf8),
+                          node = Node}};
 
+decode_event(?CQERL_EVENT_STATUS_CHANGE, Data) ->
+    {ok, Type, Rest} = cqerl_datatypes:decode_string(Data),
+    {ok, Node, <<>>} = cqerl_datatypes:decode_inet(Rest),
+    {ok, #status_change{type = binary_to_existing_atom(Type, utf8),
+                        node = Node}};
+
+decode_event(?CQERL_EVENT_SCHEMA_CHANGE, Data) ->
+    {ok, Type, Rest1} = cqerl_datatypes:decode_string(Data),
+    {ok, Target, Rest2} = cqerl_datatypes:decode_string(Rest1),
+    decode_schema_change_options(binary_to_existing_atom(Type, utf8),
+                                 binary_to_existing_atom(Target, utf8),
+                                 Rest2).
+
+decode_schema_change_options(Type, ?CQERL_EVENT_CHANGE_TARGET_KEYSPACE, Data) ->
+    {ok, Keyspace, <<>>} = cqerl_datatypes:decode_string(Data),
+    {ok, #keyspace_change{type = Type,
+                          keyspace = cqerl:normalise_keyspace(Keyspace)}};
+
+decode_schema_change_options(Type, ?CQERL_EVENT_CHANGE_TARGET_TABLE, Data) ->
+    {ok, Keyspace, Rest} = cqerl_datatypes:decode_string(Data),
+    {ok, Table, <<>>} = cqerl_datatypes:decode_string(Rest),
+    {ok, #table_change{type = Type,
+                       keyspace = cqerl:normalise_keyspace(Keyspace),
+                       table = Table}};
+
+decode_schema_change_options(_Type, ?CQERL_EVENT_CHANGE_TARGET_FUNCTION, _Data) ->
+    {ok, unhandled};
+decode_schema_change_options(_Type, ?CQERL_EVENT_CHANGE_TARGET_AGGREGATE, _Data) ->
+    {ok, unhandled}.
 
 encode_query_values(Values, Query) when is_list(Values) ->
     [cqerl_datatypes:encode_data(Value, Query) || Value <- Values];

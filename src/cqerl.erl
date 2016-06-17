@@ -29,6 +29,7 @@
     normalise_node/1,
     normalise_keyspace/1,
 
+    add_group/3,
     add_group/4,
     wait_for_group/1,
 
@@ -157,8 +158,6 @@ tail(Result=#cql_result{dataset=[_Row|Rest]}) ->
 next(#cql_result{dataset=[]}) -> empty_dataset;
 next(Result) -> {head(Result), tail(Result)}.
 
-%% @doc Returns a list of rows as property lists
-
 all_rows(#cql_result{dataset=[]}) -> [];
 all_rows(Result) ->
     all_rows(Result, get_options_list()).
@@ -176,6 +175,7 @@ get_options_list() ->
                 [],
                 [maps, text_uuids]).
 
+-spec normalise_node({string() | tuple(), non_neg_integer()}) -> cqerl_node().
 normalise_node({Host, Port}) when is_tuple(Host), is_integer(Port) ->
     {Host, Port};
 normalise_node({Host, Port}) when is_list(Host), is_integer(Port) ->
@@ -190,7 +190,15 @@ normalise_keyspace(KS) when is_list(KS)   -> list_to_atom(KS);
 normalise_keyspace(KS) when is_binary(KS) -> binary_to_atom(KS, latin1);
 normalise_keyspace(KS) when is_atom(KS)   -> KS.
 
--spec add_group(term(), [host()], proplists:proplist(), pos_integer()) -> ok.
+-spec add_group([host()], proplists:proplist(), pos_integer()) ->
+    group_name().
+add_group(Hosts, Opts, ClientsPerServer) ->
+    add_group(make_ref(), Hosts, Opts, ClientsPerServer).
+
+-spec add_group(group_name(), [host()], proplists:proplist(), pos_integer()) ->
+    group_name().
+add_group(undefined, Hosts, Opts, ClientsPerServer) ->
+    add_group(Hosts, Opts, ClientsPerServer);
 add_group(Name, Hosts, Opts, ClientsPerServer) ->
     FullOpts = merge_opts(Opts),
     lists:foreach(
@@ -198,29 +206,37 @@ add_group(Name, Hosts, Opts, ClientsPerServer) ->
               {ok, _} = cqerl_client_sup:add_clients(
                           Name, normalise_node(Host), FullOpts, ClientsPerServer)
       end,
-      Hosts).
+      Hosts),
+    Name.
 
+-spec wait_for_group(group_name()) -> ok.
 wait_for_group(Name) ->
-    cqerl_hash:wait_for_client(Name).
+    cqerl_client_pool:wait_for_client(Name).
 
 %% =================
 %% Private functions
 %% =================
 
 merge_opts(SetOpts) ->
-    lists:merge(fun compare_opts/2, lists:sort(SetOpts), lists:sort(get_default_opts())).
+    strip_dups(
+      lists:keymerge(1,
+                     lists:keysort(1, proplists:unfold(SetOpts)),
+                     lists:keysort(1, get_default_opts()))).
 
 get_default_opts() ->
     [
      {auth, {cqerl_auth_plain_handler, []}},
      {ssl, false},
      {keyspace, undefined},
-     {name, undefined},
      {protocol_version, ?DEFAULT_PROTOCOL_VERSION}
     ].
 
-compare_opts({A, _}, {A, _}) -> true;
-compare_opts(A, B) -> A =< B.
+strip_dups([]) -> [];
+strip_dups([V]) -> [V];
+strip_dups([V = {A, _}, {A, _} | Tail]) ->
+    strip_dups([V | Tail]);
+strip_dups([X, Y | Tail]) ->
+    [X | strip_dups([Y | Tail])].
 
 -spec get_protocol_version() -> integer().
 get_protocol_version() ->
@@ -274,9 +290,9 @@ ta_select_client(Query = #cql_query{keyspace = Keyspace}) ->
     end.
 
 random_select_client(undefined) ->
-    cqerl_hash:get_random_client(undefined);
+    cqerl_client_pool:get_random_client(undefined);
 random_select_client(Keyspace) ->
-    case cqerl_hash:get_random_client(Keyspace) of
+    case cqerl_client_pool:get_random_client(Keyspace) of
         {ok, Client} -> {ok, Client};
         {error, no_clients} -> random_select_client(undefined)
     end.

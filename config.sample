@@ -1,0 +1,11 @@
+{
+    client_groups,
+    [
+        {client_group, [
+            {name, localhost},
+            {hosts, ["10.1.1.107", "10.1.1.108", {"10.1.1.109", 6666}]},
+            {keyspace, wocky_test_localhost},
+            {clients_per_server, 10}
+         ]}
+    ]
+}

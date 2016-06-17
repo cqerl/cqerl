@@ -21,6 +21,42 @@
 -define(CQERL_EVENT_STATUS_CHANGE,    'STATUS_CHANGE').
 -define(CQERL_EVENT_SCHEMA_CHANGE,    'SCHEMA_CHANGE').
 
+-type event_type() :: ?CQERL_EVENT_TOPOLOGY_CHANGE |
+                      ?CQERL_EVENT_STATUS_CHANGE |
+                      ?CQERL_EVENT_SCHEMA_CHANGE.
+
+-define(CQERL_TOPOLOGY_CHANGE_TYPE_NEW_NODE, 'NEW_NODE').
+-define(CQERL_TOPOLOGY_CHANGE_TYPE_REMOVED_NODE, 'REMOVED_NODE').
+
+-type topology_change() :: ?CQERL_TOPOLOGY_CHANGE_TYPE_NEW_NODE |
+                           ?CQERL_TOPOLOGY_CHANGE_TYPE_REMOVED_NODE.
+
+-define(CQERL_STATUS_CHANGE_TYPE_UP, 'UP').
+-define(CQERL_STATUS_CHANGE_TYPE_DOWN, 'DOWN').
+
+-type status_change() :: ?CQERL_STATUS_CHANGE_TYPE_UP |
+                         ?CQERL_STATUS_CHANGE_TYPE_DOWN.
+
+-define(CQERL_EVENT_CHANGE_TYPE_CREATED, 'CREATED').
+-define(CQERL_EVENT_CHANGE_TYPE_DROPPED, 'DROPPED').
+-define(CQERL_EVENT_CHANGE_TYPE_UPDATED, 'UPDATED').
+
+-type schema_change() :: ?CQERL_EVENT_CHANGE_TYPE_CREATED |
+                         ?CQERL_EVENT_CHANGE_TYPE_DROPPED |
+                         ?CQERL_EVENT_CHANGE_TYPE_UPDATED.
+
+-define(CQERL_EVENT_CHANGE_TARGET_KEYSPACE,  'KEYSPACE').
+-define(CQERL_EVENT_CHANGE_TARGET_TABLE,     'TABLE').
+-define(CQERL_EVENT_CHANGE_TARGET_TYPE,      'TYPE').
+-define(CQERL_EVENT_CHANGE_TARGET_FUNCTION,  'FUNCTION').
+-define(CQERL_EVENT_CHANGE_TARGET_AGGREGATE, 'AGGREGATE').
+
+-type change_target() :: ?CQERL_EVENT_CHANGE_TARGET_KEYSPACE |
+                         ?CQERL_EVENT_CHANGE_TARGET_TABLE |
+                         ?CQERL_EVENT_CHANGE_TARGET_TYPE |
+                         ?CQERL_EVENT_CHANGE_TARGET_FUNCTION |
+                         ?CQERL_EVENT_CHANGE_TARGET_AGGREGATE.
+
 -define(DEFAULT_PORT, 9042).
 
 -define(DEFAULT_PROTOCOL_VERSION, 4).
@@ -51,6 +87,7 @@
 -type parameter() :: { datatype(), parameter_val() }.
 -type named_parameter() :: { atom(), parameter_val() }.
 
+-type group_name() :: term().
 -type cqerl_node() :: {inet:ip_address() | inet:hostname(), inet:port_number()}.
 -type host() :: cqerl_node() | inet:hostname().
 

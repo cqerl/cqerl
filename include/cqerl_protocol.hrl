@@ -78,4 +78,25 @@
     result_metadata :: #cqerl_result_metadata{} | '_'
 }).
 
+-record(topology_change, {
+    type :: topology_change(),
+    node :: cqerl_node()
+}).
+
+-record(status_change, {
+    type :: status_change(),
+    node :: cqerl_node()
+}).
+
+-record(keyspace_change, {
+    type :: schema_change(),
+    keyspace :: keyspace()
+}).
+
+-record(table_change, {
+    type :: schema_change(),
+    keyspace :: keyspace(),
+    table :: binary()
+}).
+
 -endif. % _CQERL_PROTOCOL_HRL_

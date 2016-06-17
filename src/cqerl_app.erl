@@ -22,10 +22,11 @@ apply_config() ->
     lists:foreach(fun(G) -> start_group(G) end, Groups).
 
 start_group({client_group, Opts}) ->
-    Name = proplists:get_value(name, Opts),
+    Name = proplists:get_value(name, Opts, undefined),
     Hosts = proplists:get_value(hosts, Opts),
     ClientsPerServer = proplists:get_value(clients_per_server, Opts),
-    cqerl:add_group(Name, Hosts, Opts, ClientsPerServer);
+    G = cqerl:add_group(Name, Hosts, Opts, ClientsPerServer),
+    cqerl:wait_for_group(G);
 
 start_group(_) ->
     error(bad_group_config).

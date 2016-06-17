@@ -1,4 +1,4 @@
--module(cqerl_hash).
+-module(cqerl_client_pool).
 
 -include("cqerl.hrl").
 
@@ -8,6 +8,7 @@
     start_link/0,
     client_started/4,
     remove_client/2,
+    get_client/1,
     get_client/2,
     get_random_client/1,
     wait_for_client/1
@@ -39,6 +40,12 @@
           mon_ref :: reference() | '_'
          }).
 
+-record(named_client, {
+          name :: term() | '_',
+          pid :: pid(),
+          mon_ref :: reference() | '_'
+         }).
+
 -record(state, {
           active_groups = sets:new() :: sets:set(),
           waiters = [] :: [{term(), term()}]
@@ -61,21 +68,33 @@ remove_client(Node, Keyspace) ->
     Key = make_client_key(Node, Keyspace),
     gen_server:cast(?MODULE, {remove_client, Key, self()}).
 
+-spec get_client(cqerl_node(), keyspace()) -> {ok, {pid(), reference()}} |
+                                              {error, client_not_configured}.
 get_client(Node, Keyspace) ->
     Key = make_client_key(Node, Keyspace),
     case get_existing_table(Key) of
         {ok, T} ->
             get_client_from_table(T);
         _ ->
-            {ok, client_not_configured}
+            {error, client_not_configured}
+    end.
+
+-spec get_client(group_name()) -> {ok, {pid(), reference()}} |
+                                  {error, no_clients}.
+get_client(Name) ->
+    case ets:lookup(cqerl_named_clients, Name) of
+        [] ->
+            ct:log("No clients in named table"),
+            {error, no_clients};
+        Clients -> get_named_client(Clients)
     end.
 
 get_random_client(Keyspace) ->
-    Tables = ets:tab2list(cqerl_client_tables),
-    ValidTables =
-    lists:filter(fun(#client_table{key = Key}) ->
-                         Key#client_key.keyspace =:= Keyspace
-                 end, Tables),
+    ValidTables = ets:match_object(
+                    cqerl_client_tables,
+                    #client_table{key = #client_key{keyspace = Keyspace, _='_'},
+                                  _='_'}),
+    ct:log("Valid tables: ~p ~p", [ValidTables, ets:tab2list(cqerl_client_tables)]),
     select_random_from_valid(ValidTables).
 
 wait_for_client(GroupName) ->
@@ -86,8 +105,12 @@ wait_for_client(GroupName) ->
 %% =================
 
 init(_) ->
-    _Table = ets:new(cqerl_client_tables, [named_table, {read_concurrency, true}, protected,
-                                           {keypos, #client_table.key}]),
+    _Table = ets:new(cqerl_client_tables,
+                     [named_table, {read_concurrency, true}, protected,
+                      {keypos, #client_table.key}]),
+    _Table2 = ets:new(cqerl_named_clients,
+                      [named_table, {read_concurrency, true}, protected,
+                       bag, {keypos, #named_client.name}]),
     {ok, #state{}}.
 
 handle_call({wait_for_client, GroupName}, From,
@@ -107,6 +130,7 @@ handle_cast({add_client, Name, Key, Opts, Pid}, State) ->
 handle_cast({remove_client, Key, Pid}, State) ->
     {ok, T} = get_existing_table(Key),
     remove_client_from_table(Pid, T),
+    remove_from_named_clients(Pid),
     {noreply, State};
 
 handle_cast(_, State) ->
@@ -140,19 +164,28 @@ get_existing_table(Key) ->
     end.
 
 add_client(Name, Key, Opts, Pid, State = #state{active_groups = Groups}) ->
-    T = get_create_table(Key),
-    add_client_to_table(Pid, T),
+    MonRef = monitor(process, Pid),
+    case is_reference(Name) of
+        true -> add_client_to_table(Key, Pid, MonRef);
+        false -> add_client_to_named_table(Name, Pid, MonRef)
+    end,
     cqerl_schema:add_node(Key#client_key.node, Opts),
     NewState = notify_waiters(Name, State),
     NewState#state{active_groups = sets:add_element(Name, Groups)}.
 
-add_client_to_table(Pid, Table) ->
-    MonRef = monitor(process, Pid),
+add_client_to_table(Key, Pid, MonRef) ->
+    Table = get_create_table(Key),
     Index = find_empty_index(Table),
     Record = #client{index = Index,
                      pid = Pid,
                      mon_ref = MonRef},
     ets:insert(Table, Record).
+
+add_client_to_named_table(Name, Pid, MonRef) ->
+    Record = #named_client{pid = Pid,
+                           name = Name,
+                           mon_ref = MonRef},
+    ets:insert(cqerl_named_clients, Record).
 
 find_empty_index(Table) ->
     UsedIndices = [I || #client{index = I} <- ets:tab2list(Table)],
@@ -168,7 +201,11 @@ clear_existing(Pid) ->
       fun(#client_table{table = T}) ->
               remove_client_from_table(Pid, T)
       end,
-      Tables).
+      Tables),
+    remove_from_named_clients(Pid).
+
+remove_from_named_clients(Pid) ->
+    ets:match_delete(cqerl_named_clients, #named_client{pid = Pid, _ = '_'}).
 
 remove_client_from_table(Pid, Table) when is_pid(Pid) ->
     case ets:match_object(Table, #client{pid = Pid, _ = '_'}) of
@@ -201,14 +238,18 @@ get_client_from_table(Table) ->
     N = erlang:phash2(self(), ets:info(Table, size)) + 1,
     case ets:lookup(Table, N) of
         [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
-        [] -> {error, no_clients}
+        [] ->
+            ct:log("No clients in hash table: ~p ~p", [N, ets:tab2list(Table)]),
+            {error, no_clients}
     end.
 
 select_random_from_valid([]) ->
-    {error, no_random_clients};
+    ct:log("Exhaused valid tables"),
+    {error, no_clients};
 
 select_random_from_valid(Tables) ->
     #client_table{table = T} = lists:nth(rand:uniform(length(Tables)), Tables),
+    ct:log("Checking table ~p ~p", [T, ets:tab2list(T)]),
     case get_client_from_table(T) of
         {ok, Client} -> {ok, Client};
         {error, _} -> select_random_from_valid(Tables -- [T])
@@ -224,4 +265,7 @@ notify_waiters(Name, State = #state{waiters = Waiters}) ->
                   end, ToNotify),
     State#state{waiters = Waiters -- ToNotify}.
 
-
+get_named_client(Clients) ->
+    N = erlang:phash2(self(), length(Clients)) + 1,
+    C = lists:nth(N, Clients),
+    {ok, {C#named_client.pid, make_ref()}}.

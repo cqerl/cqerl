@@ -148,13 +148,13 @@ end_per_suite(_Config) ->
 %%--------------------------------------------------------------------
 
 init_per_group(init, Config) ->
-    cqerl:add_group(main, ["localhost"], Config, 10),
-    cqerl:wait_for_group(main),
+    G = cqerl:add_group(["localhost"], Config, 10),
+    cqerl:wait_for_group(G),
     Config;
 init_per_group(main_tests, Config) ->
     NewConfig = [{keyspace, "test_keyspace_2"} | Config],
-    cqerl:add_group(ks, ["localhost"], NewConfig, 10),
-    cqerl:wait_for_group(ks),
+    G = cqerl:add_group(["localhost"], NewConfig, 10),
+    cqerl:wait_for_group(G),
     NewConfig;
 init_per_group(_, Config) ->
     Config.

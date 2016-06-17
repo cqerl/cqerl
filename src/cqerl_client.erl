@@ -47,11 +47,12 @@ end).
     socket :: gen_tcp:socket() | ssl:sslsocket(),
     compression_type :: undefined | snappy | lz4,
     keyspace :: atom(),
+    setup_tasks = [] :: [register | set_keyspace],
 
     %% Operating state
     delayed = <<>> :: binary(),     % Fragmented message continuation
     queries = [] :: list({integer(), term()}),
-    queued,
+    queued = queue:new() :: queue:queue(),
     available_slots = [] :: list(integer()),
     waiting_preparation = [],
     state :: starting | live
@@ -98,6 +99,15 @@ batch_ready({ClientPid, Call}, QueryBatch) ->
 
 init([Name, Node, Opts]) ->
     {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
+    SetupTasks = case proplists:get_value(register_for_events, Opts, false) of
+                     false -> [];
+                     true -> [register]
+                 end,
+    SetupTasks2 = case proplists:get_value(keyspace, Opts) of
+                      undefined -> SetupTasks;
+                      _ -> [set_keyspace | SetupTasks]
+                  end,
+
     State = #state{
                    group_name = Name,
                    node = Node,
@@ -105,6 +115,7 @@ init([Name, Node, Opts]) ->
                    keyspace = cqerl:normalise_keyspace(proplists:get_value(keyspace, Opts)),
                    authmod = AuthHandler,
                    authargs = AuthArgs,
+                   setup_tasks = SetupTasks2,
                    state = starting
                   },
     self() ! do_startup,
@@ -229,7 +240,7 @@ handle_info({preparation_failed, {_Node, Statement}, Reason},
             {noreply, State}
     end;
 
-handle_info({tcp_error, Socket, _Reason}, State = #state{socket = Socket}) ->
+handle_info({ tcp_error, Socket, _Reason }, State = #state{socket = Socket}) ->
     {noreply, do_retry(State)};
 
 handle_info({ tcp_closed, _Socket }, State = #state{state = starting}) ->
@@ -259,7 +270,7 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
 
         %% Server tells us all is clear, we can start to throw queries at it
         {ok, #cqerl_frame{opcode=?CQERL_OP_READY}, _} ->
-            FinalState = maybe_set_keyspace(State),
+            FinalState = maybe_do_setup_tasks(State),
             {continue, FinalState};
 
         %% Server tells us we need to authenticate
@@ -305,12 +316,15 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
                     stop_during_startup({auth_client_closed, Reason}, State);
 
                 ok ->
-                    FinalState = maybe_set_keyspace(State),
+                    FinalState = maybe_do_setup_tasks(State),
                     {continue, FinalState }
             end;
 
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT}, {set_keyspace, _KeySpaceName}} ->
-            {continue, switch_to_live_state(State)}
+            {continue, switch_to_live_state(State)};
+
+        {ok, _, unhandled} ->
+            {continue, State}
     end,
     case Resp of
         {continue, State1} ->
@@ -400,8 +414,12 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
             end,
             {continue, release_stream_id(StreamID, State)};
 
-        {ok, #cqerl_frame{opcode=?CQERL_OP_EVENT}, _EventTerm} ->
-            ok%% TODO Manage incoming server-driven events
+        {ok, #cqerl_frame{opcode=?CQERL_OP_EVENT}, EventTerm} ->
+            cqerl_schema:handle_event(EventTerm),
+            {continue, State};
+
+        {ok, _, unhandled} ->
+            {continue, State}
     end,
 
     case Resp of
@@ -537,9 +555,10 @@ respond_to_user(#cql_call{type=async, caller={Pid, QueryRef}}, Term) ->
     Pid ! {cqerl_result, QueryRef, Term}.
 
 
-maybe_set_keyspace(State=#state{keyspace=undefined}) ->
+maybe_do_setup_tasks(State=#state{setup_tasks = []}) ->
     switch_to_live_state(State);
-maybe_set_keyspace(State=#state{keyspace=Keyspace}) ->
+maybe_do_setup_tasks(State=#state{keyspace=Keyspace,
+                                  setup_tasks = [set_keyspace | Rest]}) ->
     KeyspaceName = atom_to_binary(Keyspace, latin1),
     BaseFrame = base_frame(State),
 
@@ -548,15 +567,22 @@ maybe_set_keyspace(State=#state{keyspace=Keyspace}) ->
         #cqerl_query{statement = <<"USE ", KeyspaceName/binary>>}
     ),
     send_to_db(State, Frame),
-    State.
+    State#state{setup_tasks = Rest};
+maybe_do_setup_tasks(State=#state{setup_tasks = [register | Rest]}) ->
+    BaseFrame = base_frame(State),
+    {ok, Frame} = cqerl_protocol:register_frame(BaseFrame,
+                                                [?CQERL_EVENT_TOPOLOGY_CHANGE,
+                                                 ?CQERL_EVENT_STATUS_CHANGE,
+                                                 ?CQERL_EVENT_SCHEMA_CHANGE]),
+    send_to_db(State, Frame),
+    State#state{setup_tasks = Rest}.
 
 switch_to_live_state(State=#state{group_name = GroupName, opts = Opts,
                                   node=Node, keyspace = Keyspace}) ->
-    cqerl_hash:client_started(GroupName, Node, Keyspace, Opts),
+    cqerl_client_pool:client_started(GroupName, Node, Keyspace, Opts),
     Queries = create_queries_dict(),
     State#state{
         authstate=undefined, authargs=undefined, delayed = <<>>,
-        queued=queue:new(),
         queries=Queries,
         available_slots = orddict:fetch_keys(Queries),
         state = live
@@ -672,7 +698,7 @@ do_restart(State = #state{node = Node, keyspace = Keyspace, queries = Queries}) 
     lists:foreach(fun({_, {Call, _}}) ->
                           respond_to_user(Call, {error, connection_failed})
            end, Queries),
-    cqerl_hash:remove_client(Node, Keyspace),
+    cqerl_client_pool:remove_client(Node, Keyspace),
     do_retry(State).
 
 do_retry(State) ->
