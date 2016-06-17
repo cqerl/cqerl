@@ -25,13 +25,13 @@
 ]).
 
 -record(client_key, {
-          node     :: cqerl_node(),
+          node     :: cqerl_node() | '_',
           keyspace :: keyspace()
          }).
 
 -record(client_table, {
           key :: #client_key{},
-          table :: ets:tid()
+          table :: ets:tid() | '_'
          }).
 
 -record(client, {
