@@ -696,7 +696,9 @@ stop_during_startup(_Reason, State) ->
 
 do_restart(State = #state{node = Node, keyspace = Keyspace, queries = Queries}) ->
     lists:foreach(fun({_, {Call, _}}) ->
-                          respond_to_user(Call, {error, connection_failed})
+                          respond_to_user(Call, {error, connection_failed});
+                     ({_, undefined}) ->
+                          ok
            end, Queries),
     cqerl_client_pool:remove_client(Node, Keyspace),
     do_retry(State).

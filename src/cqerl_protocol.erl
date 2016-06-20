@@ -635,7 +635,7 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_RESULT}, << 5:?INT, Body/bina
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_EVENT}, Body) ->
     {ok, EventName, Rest0} = cqerl_datatypes:decode_string(Body),
-    decode_event(binary_to_existing_atom(EventName, utf8), Rest0);
+    decode_event(binary_to_atom(EventName, utf8), Rest0);
 
 decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQERL_OP_AUTH_CHALLENGE;
                                                                AuthCode == ?CQERL_OP_AUTH_SUCCESS ->
@@ -645,20 +645,20 @@ decode_response_term(#cqerl_frame{opcode=AuthCode}, Body) when AuthCode == ?CQER
 decode_event(?CQERL_EVENT_TOPOLOGY_CHANGE, Data) ->
     {ok, Type, Rest} = cqerl_datatypes:decode_string(Data),
     {ok, Node, <<>>} = cqerl_datatypes:decode_inet(Rest),
-    {ok, #topology_change{type = binary_to_existing_atom(Type, utf8),
+    {ok, #topology_change{type = binary_to_atom(Type, utf8),
                           node = Node}};
 
 decode_event(?CQERL_EVENT_STATUS_CHANGE, Data) ->
     {ok, Type, Rest} = cqerl_datatypes:decode_string(Data),
     {ok, Node, <<>>} = cqerl_datatypes:decode_inet(Rest),
-    {ok, #status_change{type = binary_to_existing_atom(Type, utf8),
+    {ok, #status_change{type = binary_to_atom(Type, utf8),
                         node = Node}};
 
 decode_event(?CQERL_EVENT_SCHEMA_CHANGE, Data) ->
     {ok, Type, Rest1} = cqerl_datatypes:decode_string(Data),
     {ok, Target, Rest2} = cqerl_datatypes:decode_string(Rest1),
-    decode_schema_change_options(binary_to_existing_atom(Type, utf8),
-                                 binary_to_existing_atom(Target, utf8),
+    decode_schema_change_options(binary_to_atom(Type, utf8),
+                                 binary_to_atom(Target, utf8),
                                  Rest2).
 
 decode_schema_change_options(Type, ?CQERL_EVENT_CHANGE_TARGET_KEYSPACE, Data) ->

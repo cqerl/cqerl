@@ -23,6 +23,13 @@
          terminate/2,
          code_change/3]).
 
+-export([test_setup/0,
+         test/0,
+         test/1,
+         test1/0,
+         test2/1
+        ]).
+
 -record(token_node, {
           token :: integer() | '_',
           node :: cqerl_node()
@@ -79,7 +86,8 @@ init(_) ->
                               {read_concurrency, true},
                               {keypos, #token_node.token}]),
     _ = ets:new(cqerl_schema, [protected, named_table, bag,
-                               {read_concurrency, true}, {keypos, #column.key}]),
+                               {read_concurrency, true},
+                               {keypos, #column.key}]),
     {ok, #state{}}.
 
 handle_cast({add_node, Node, Opts}, State = #state{nodes = Nodes}) ->
@@ -184,23 +192,31 @@ get_partition_keys(Keyspace, Table) ->
         Keys -> {ok, Keys}
     end.
 
-get_partition_key_value(Keys, Values, Query) ->
-    %TODO: Compound keys
-    #column{col = C, type = Type} = hd(Keys),
-    case maps:get(C, Values, undefined) of
+get_partition_key_value([#column{col = Col, type = Type}], Values, Query) ->
+    case maps:get(Col, Values, undefined) of
         undefined -> {error, no_key_value};
         V -> {ok, cqerl_datatypes:encode_data({Type, V}, Query)}
+    end;
+
+get_partition_key_value(Keys, Values, Query) ->
+    OrderedKeys = lists:keysort(#column.pos, Keys),
+    build_array_bin(OrderedKeys, Values, Query, <<>>).
+
+build_array_bin([], _Values, _Query, BinAcc) ->
+    {ok, BinAcc};
+build_array_bin([#column{col = Col, type = Type} | RestCols],
+                     Values, Query, BinAcc) ->
+    case maps:get(Col, Values, undefined) of
+        undefined ->
+            {error, no_key_value};
+        Val ->
+            Bin = cqerl_datatypes:encode_data({Type, Val}, Query),
+            NewAcc = <<BinAcc/binary, (size(Bin)):16/big-signed, Bin/binary, 0>>,
+            build_array_bin(RestCols, Values, Query, NewAcc)
     end.
 
 get_token(Value) ->
-    Hash = erlang_murmurhash:murmurhash3_x64_128(Value),
-    % Zero pad:
-    Encoded = binary:encode_unsigned(Hash, little),
-    Padding = 16 - size(Encoded),
-    PaddedHash = <<0:(Padding*8), Encoded/binary>>,
-    <<_:8/binary, LowerHalf:8/binary>> = PaddedHash,
-    <<Token:64/signed-little>> = LowerHalf,
-    {ok, Token}.
+    {ok, erlang_murmurhash:murmurhash3_x64_128_cass(Value)}.
 
 get_node_key(Token) ->
     case ets:next(token_nodes, Token-1) of
@@ -218,3 +234,73 @@ get_node(Key) ->
         [#token_node{node = Node} | _] -> {ok, Node}
     end.
 
+test_setup() ->
+    {ok, _} = application:ensure_all_started(cqerl),
+    G = cqerl:add_group(["10.1.1.107", "10.1.1.108", "10.1.1.109"], [{keyspace, xxxxx}], 1),
+    cqerl:wait_for_group(G).
+
+test() ->
+    test(uuid:uuid_to_string(uuid:get_v4())).
+
+test(IDStr) ->
+    Q = "INSERT INTO yyyyy (id, id2) VALUES (" ++ IDStr ++ ", 'test')",
+    {ok, void} = cqerl:run_query(xxxxx, Q),
+    {ok, PK} = get_partition_keys(xxxxx, <<"yyyyy">>),
+    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
+    {ok, Tok} = get_token(PKV),
+    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.yyyyy WHERE id = " ++ IDStr ++ " AND id2 = 'test';\""),
+    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
+    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]).
+
+test1() ->
+    test1(uuid:uuid_to_string(uuid:get_v4())).
+
+test1(IDStr) ->
+    Q = "INSERT INTO zzzzz (id, id2) VALUES (" ++ IDStr ++ ", 'test')",
+    {ok, void} = cqerl:run_query(xxxxx, Q),
+    {ok, PK} = get_partition_keys(xxxxx, <<"zzzzz">>),
+    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
+    {ok, Tok} = get_token(PKV),
+    Out = os:cmd("cqlsh -e \"SELECT token(id) FROM xxxxx.zzzzz WHERE id = " ++ IDStr ++ ";\""),
+    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
+    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
+    V = Tok.
+
+test2(IDStr) ->
+    Q = "INSERT INTO ttttt (id, id2) VALUES ('" ++ IDStr ++ "', 'test')",
+    {ok, void} = cqerl:run_query(xxxxx, Q),
+    {ok, PK} = get_partition_keys(xxxxx, <<"ttttt">>),
+    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
+    {ok, Tok} = get_token(PKV),
+    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.ttttt WHERE id = '" ++ IDStr ++ "' AND id2 = 'test';\""),
+    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
+    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
+    V = Tok.
+
+test3(IDStr) ->
+    Q = "INSERT INTO iiiii (id, id2) VALUES (" ++ integer_to_list(IDStr) ++ ", 'test')",
+    {ok, void} = cqerl:run_query(xxxxx, Q),
+    {ok, PK} = get_partition_keys(xxxxx, <<"iiiii">>),
+    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
+    io:fwrite("~p\n", [PKV]),
+    {ok, Tok} = get_token(PKV),
+    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.iiiii WHERE id = " ++ integer_to_list(IDStr)++ " AND id2 = 'test';\""),
+    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
+    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
+    V = Tok.
+
+test4(IDStr) ->
+    Q = "INSERT INTO jjjjj (id) VALUES (" ++ integer_to_list(IDStr) ++ ")",
+    {ok, void} = cqerl:run_query(xxxxx, Q),
+    {ok, PK} = get_partition_keys(xxxxx, <<"jjjjj">>),
+    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr}, x),
+    {ok, Tok} = get_token(PKV),
+    Out = os:cmd("cqlsh -e \"SELECT token(id) FROM xxxxx.jjjjj WHERE id = " ++ integer_to_list(IDStr)++ ";\""),
+    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
+    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
+    V = Tok.
+
+pretty_bin(<<>>) -> io:fwrite("\n");
+pretty_bin(<< A, Rest/binary>>) ->
+    io:fwrite("~.16B ", [A]),
+    pretty_bin(Rest).
