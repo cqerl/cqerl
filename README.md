@@ -30,8 +30,9 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 * Automatic compression (using lz4 or snappy if available)
 * SSL support
 * Pluggable authentication (as long as it's [SASL][2]-based)
+* Token Aware Policy support
 
-CQErl was designed to be as simple as possible on your side. You just provide the configuration you want as environment variables, and ask to get a client everytime you need to perform a transient piece of work (e.g. handle a web request). You do not need to (and in fact *should not*) keep a client in state for a long time. Under the hood, CQErl maintains a pool of persistent connections with Cassandra and this pattern is the best way to ensure proper load balancing of requests across the pool.
+CQErl was designed to be as simple as possible on your side. You just provide the configuration you want as environment variables. Under the hood, CQErl maintains a pool of persistent connections with Cassandra and select the client to use based on a hash of the requsting PID. This ensures relatively even distribution of work amongst clients when there is a lot of concurrent activity (where distribution is most important).
 
 ### Usage
 
@@ -40,33 +41,9 @@ CQErl was designed to be as simple as possible on your side. You just provide th
 If you installed cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
 
 ```erlang
-{ok, Client} = cqerl:get_client({}).
+G = cqerl:add_group(["localhost"], [], 1),
+cqerl:wait_for_group(G).
 ```
-
-You do not need to close the connection after you've finished using it.
-
-#### Legacy Mode (pooler)
-
-The default mode of operation uses a hash of the user process's PID to allocate
-clients, in a similar way to the system used by [dispcount][9]. 
-
-The old mode used [pooler][1] to manage connections, and
-has been around for quite a while, so is reasonably well tested. It does,
-however, have a couple of performance bottlenecks that may limit scalability on
-larger or more heaviliy loaded systems.
-
-To use the old mode, and be able to use the legacy `new_client/0,1,2` API to get a hold of a
-client process, set
-
-```erlang
-{mode, pooler}
-```
-
-in your application config (see below). In this mode, rather than calling
-`cqerl:get_client/2`, call `cqerl:new_client/2` with the same arguments.
-Calling `cqerl:close_client/1` *is* required in legacy mode.
-
-#### All modes
 
 1. The first argument to `cqerl:get_client/2,1` or `cqerl:new_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
@@ -113,93 +90,10 @@ All the options given above can be provided as environment variables, in which c
 
 Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:get_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:get_client/0`, which chooses an available client at random.
 
-#### Clusters
-
-With CQErl clusters, you can configure either a single set of cassandra nodes from which you can draw a client at any time, or multiple sets that serve different purposes.
-
-##### Single cluster
-
-You can prepare a single cluster setup using this structure in your sys.config file:
-
-```erlang
-[
-  {cqerl, [ {cassandra_nodes, [ 
-                % You can use any of the forms below to specify a cassandra node
-                { "127.0.0.1", 9042 },
-                { {127, 0, 0, 2}, 9042 },
-                "127.0.0.3"
-            ]},
-            { keyspace, dev_keyspace }
-          ]},
-]
-```
-
-or, equivalently, there's an API you can use to add nodes to the single main cluster:
-
-```erlang
-cqerl_cluster:add_nodes([
-    { "127.0.0.1", 9042},
-    { {127, 0, 0, 2}, 9042 },
-    "127.0.0.3"
-]).
-```
-
-or, with connection options:
-
-```erlang
-cqerl_cluster:add_nodes([
-    { "127.0.0.1", 9042},
-    { {127, 0, 0, 2}, 9042 },
-    "127.0.0.3"
-], [
-    { keyspace, dev_keyspace }
-]).
-```
-
-When your main cluster is configured, you can just use `cqerl:get_client/0` to get a client random from the cluster.
-
-##### Multiple clusters
-
-You can prepare multiple clusters using this structure in your sys.config file:
-
-```erlang
-[
-  {cqerl, [ {cassandra_clusters, [
-                { config, {
-                    [ "127.0.0.1", "127.0.0.3" ], 
-                    [ { keyspace, config } ] 
-                }},
-                { operations, {
-                    [ "127.0.0.1:9042", {"127.0.0.1", 9042} ], 
-                    [ { keyspace, operations } ] 
-                }}
-            ]},
-          ]},
-]
-```
-
-or, equivalently, there's an API you can use to add nodes to particular clusters:
-
-```erlang
-cqerl_cluster:add_nodes(config, [
-    { "127.0.0.1", 9042},
-    "127.0.0.3"
-], [
-    { keyspace, config }
-]).
-cqerl_cluster:add_nodes(operations, [
-    { "127.0.0.1", 9042},
-    "127.0.0.3"
-], [
-    { keyspace, operations }
-]).
-```
-
 ##### Options
 
-There are two application environment variables that may be set to change query behaviour:
+There is one application environment variable that may be set to change query behaviour:
 
-* `{maps, true}` will cause query result rows to be returned as maps instead of proplists
 * `{text_uuids, true}` will cause `timeuuid` and `uuid` fields to be returned as binary strings in canonical form (eg `<<"5620c844-e98d-11e5-b97b-08002719e96e">>`) rather than pure binary.
 
 ##### Performing queries
@@ -207,40 +101,28 @@ There are two application environment variables that may be set to change query 
 Performing a query can be as simple as this:
 
 ```erlang
-{ok, Result} = cqerl:run_query(Client, "SELECT * FROM users;").
+{ok, Result} = cqerl:run_query(my_keyspace, "SELECT * FROM users;").
 
 % Equivalent to
-{ok, Result} = cqerl:run_query(Client, <<"SELECT * FROM users;">>).
+{ok, Result} = cqerl:run_query(my_keyspace, <<"SELECT * FROM users;">>).
 
 % Also equivalent to
-{ok, Result} = cqerl:run_query(Client, #cql_query{statement = <<"SELECT * FROM users;">>}).
+{ok, Result} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM users;">>, keyspace = my_keyspace}).
 ```
 
 It can also be performed asynchronously using
 
 ```erlang
-Tag = cqerl:send_query(Client, "SELECT * FROM users;"),
+Tag = cqerl:send_query(my_keyspace, "SELECT * FROM users;"),
 receive
     {result, Tag, Result} ->
         ok
 end.
 ```
 
-In situations where you do not need to wait for the response at all, it's perfectly fine to produce this sort of pattern:
-
-```erlang
-{ok, Client} = cqerl:get_client(),
-cqerl:send_query(Client, #cql_query{statement="UPDATE secrets SET value = null WHERE id = ?;",
-                                    values=[{id, <<"42">>}]}),
-cqerl:close_client(Client).
-```
-
-That is, you can grab a client only the send a query, then you can get rid of it. CQErl will still perform it,
-the difference being that no response will be sent back to you.
-
 Here's a rundown of the possible return values
 
-* `SELECT` queries will yield result of type `#cql_result{}` (more details below). 
+* `SELECT` queries will yield result of type `#cql_result{}` (more details below).
 * Queries that change the database schema will yield result of type `#cql_schema_changed{type, keyspace, table}`
 * Other queries will yield `void` if everything worked correctly.
 * In any case, errors returned by cassandra in response to a query will be the return value (`{error, Reason}` in the synchronous case, and `{error, Tag, Reason}` in the asynchronous case).
@@ -250,16 +132,17 @@ Here's a rundown of the possible return values
 The return value of `SELECT` queries will be a `#cql_result{}` record, which can be used to obtain rows as proplists and fetch more result if available
 
 ```erlang
-{ok, _SchemaChange} = cqerl:run_query(Client, "CREATE TABLE users(id uuid, name varchar, password varchar);"),
+{ok, _SchemaChange} = cqerl:run_query(test_keyspace, "CREATE TABLE users(id uuid, name varchar, password varchar)"),
 {ok, void} = cqerl:run_query(Client, #cql_query{
     statement = "INSERT INTO users(id, name, password) VALUES(?, ?, ?);",
-    values = [
-        {id, new},
-        {name, "matt"},
-        {password, "qwerty"}
-    ]
+    values = #{
+        id => new,
+        name => "matt",
+        password => "qwerty"
+    },
+    keyspace = test_keyspace
 }),
-{ok, Result} = cqerl:run_query(Client, "SELECT * FROM users;").
+{ok, Result} = cqerl:run_query(test_keyspace, "SELECT * FROM users;").
 
 Row = cqerl:head(Result),
 Tail = cqerl:tail(Result),
@@ -269,11 +152,10 @@ Tail = cqerl:tail(Result),
 empty_dataset = cqerl:next(Tail),
 [Row] = cqerl:all_rows(Result),
 
-<<"matt">> = proplists:get_value(name, Row),
-<<"qwerty">> = proplists:get_value(password, Row).
+#{name := <<"matt">>, password := <<"qwerty">>} = Row.
 ```
 
-`#cql_result{}` can also be used to fetch more result, synchronously or asynchronously
+`#cql_result{}` can also be used to fetch more results, synchronously or asynchronously:
 
 ```erlang
 
@@ -302,26 +184,25 @@ When performing queries, you can provide more information than just the query st
 
 1. The query `statement`, as a string or binary
 2. `values` for binding variables from the query statement (see next section).
-    
 3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`. 
 4. You can specify how many rows you want in every result page using the `page_size` (integer) field. The devs at Cassandra recommend a value of 100 (which is the default).
 5. You can also specify what `consistency` you want the query to be executed under. Possible values include:
 
     * `any`
-    * `one`       
-    * `two`        
+    * `one`
+    * `two`
     * `three`
-    * `quorum`     
-    * `all`        
+    * `quorum`
+    * `all`
     * `local_quorum`
     * `each_quorum`
     * `local_one`
-    
+
 6. In case you want to perform a [lightweight transaction][4] using `INSERT` or `UPDATE`, you can also specify the `serial_consistency` that will be use when performing it. Possible values are:
 
     * `serial`
     * `local_serial`
-    
+
 ##### Variable bindings
 
 In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**.
@@ -336,7 +217,7 @@ Example:
 #cql_query{statement="SELECT * FROM table1 WHERE id = :id_value", values=[{id_value, SomeId}]},
 ```
 
-Special cases include: 
+Special cases include:
 
 - providing `TTL` and `TIMESTAMP` option in statements, in which case the proplist key would be `[ttl]` and `[timestamp]` respectively. Note that, while values for a column of type `timestamp` are provided in **milliseconds**, a value for the `TIMESTAMP` option is expected in **microseconds**.
 - `UPDATE keyspace SET set = set + ? WHERE id = 1;`. The name for this variable binding is `set`, the name of the column, and it's expected to be an erlang **list** of values.
@@ -346,9 +227,9 @@ Special cases include:
 - `UPDATE keyspace SET list[?] = 1 WHERE id = 1;`. The name for this variable binding is `idx(list)`, where `list` is the name of the column.
 - `SELECT * FROM keyspace LIMIT ?`. The name for the `LIMIT` variable is `[limit]`.
 
-    Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
-    
-    Finally, when providing the value for a `timeuuid` or `timestamp` column, you can give the value `now`, in which case CQErl will generate a normal timestamp, or a UUID (v1) matching the current date and time.
+Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
+
+Finally, when providing the value for a `timeuuid` or `timestamp` column, you can give the value `now`, in which case CQErl will generate a normal timestamp, or a UUID (v1) matching the current date and time.
 
 ##### Batched queries
 
@@ -418,10 +299,10 @@ By default, this client library assumes we're talking to a 2.2+ or 3+ instance o
 ]
 ```
 
-or in a `cqerl:get_client/2` or `cqerl:get_client/2` call
+or in a `cqerl:add_group/3` call:
 
 ```erlang
-{ok, Client} = cqerl:get_client("127.0.0.1:9042", [{protocol_version, 3}, {keyspace, oper}]).
+G = cqerl:add_group(["127.0.0.1:9042"], [{protocol_version, 3}, {keyspace, oper}], 1).
 ```
 
 ### Installation
@@ -430,13 +311,16 @@ Just include this repository in your project's `rebar.config` file and run `./re
 
 ### Compatibility
 
-As said earlier, this library uses Cassandra's newest native protocol versions (v4, or v3 [optionally](#connecting-to-older-cassandra-instances)), which is said to perform better than the older Thrift-based interface. It also speaks CQL version 3, and uses new features available in Cassandra 2.X, such as paging, parametrization, query preparation and so on.
+As noted earlier, this library uses Cassandra's newest native protocol versions (v4, or v3 [optionally](#connecting-to-older-cassandra-instances)), which is said to perform better than the older Thrift-based interface. It also speaks CQL version 3, and uses new features available in Cassandra 2.X, such as paging, parametrization, query preparation and so on.
 
 All this means is that this library works with Cassandra 2.1.x (2.2+ or 3+ recommended), configured to enable the native protocol. [This documentation page][8] gives details about the how to configure this protocol. In the `cassandra.yaml` configuration file of your Cassandra installation, the `start_native_transport` need to be set to true and you need to take note of the value for `native_transport_port`, which is the port used by this library.
 
+### Token Aware Policy
+This library implementes Token Aware Policy (TAP) for improved query efficincy. TAP allows the client to calculate which node(s) hold the data being read/written and use a direct connection to that node when available. By contrast, a non-TAP client will talk to any node it happens to be connected to, and rely on that node to in turn contact the node holding the data.
+
 ### Tests
 
-CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project. 
+CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project.
 
 1. Clone this repo on your machine
 2. Edit `test/test.config` and put your own cassandra's configurations
