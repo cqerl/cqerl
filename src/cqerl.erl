@@ -258,7 +258,7 @@ select_client(#cql_query_batch{keyspace = Keyspace}) ->
     random_select_client(Keyspace);
 
 select_client(Query = #cql_query{keyspace = Keyspace}) ->
-    case application:get_env(cqerl, strategy, simple) of
+    case application:get_env(cqerl, strategy, token_aware) of
         token_aware ->
             ta_select_client(Query);
         _ ->

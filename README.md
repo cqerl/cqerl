@@ -37,10 +37,10 @@ G = cqerl:add_group(["localhost"], [], 1),
 cqerl:wait_for_group(G).
 ```
 
-1. The first argument to `cqerl:add_group/3` is the set of nodes to which you wish to connect in the form `{IP, Port}`, `IP`, or `Hostname`. `IP` may be a string, binary or tuple as described in the `inet` manual.
+* The first argument to `cqerl:add_group/3` is the set of nodes to which you wish to connect in the form `{IP, Port}`, `IP`, or `Hostname`. `IP` may be a string, binary or tuple as described in the `inet` manual.
     - If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
 
-2. The second argument is a proplist of options. Valid options are:
+* The second argument is a proplist of options. Valid options are:
 
     - `keyspace` which determines in which keyspace all subsequent requests operate, on that connection.
     - `auth` (described below)
@@ -56,29 +56,45 @@ cqerl:wait_for_group(G).
 
     Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
 
-3. The third argument is the number of clients to start *per node*.
+* The third argument is the number of clients to start *per node*.
+
+* The `cqerl:wait_for_group/1` call blocks until *at least one* client from the group is connected and available. Attempts to run queries before this point may procude `no_clients` errors.
+
+* Groups may be named, using `cqerl:add_group/4` and supplying a name (any term) as the first parameter. This name may be passed to `cqerl:wait_for_group/1`.
 
 #### Using environment variables
 
-All the options given above can be provided as environment variables, in which case they are used as default (and overridable) values to any `cqerl:get_client` calls. You can also provide a `cassandra_nodes` variable containing a list of the tuples used as the first argument to `cqerl:get_client` (see [clusters](#clusters) for more explanations). So for example, in your `app.config` or `sys.config` file, you could have the following content:
+Groups of clients may be configured though the application config, for example:
 
 ```erlang
-[
   {cqerl, [
-            {cassandra_nodes, [ { "127.0.0.1", 9042 } ]},
-            {ssl, [ {cacertfile, "cassandra.pem"} ]},
-            {auth, {cqerl_auth_plain_handler, [ {"test", "aaa"} ]}}
-          ]},
-]
+        {client_groups, [
+            {client_group, [
+                {name, cluster1},
+                {hosts, ["10.1.1.107", "10.1.1.108", {"10.1.1.109", 6666}]},
+                {opts, [{keyspace, user_db}, {ssl, true}]},
+                {clients_per_server, 10}
+             ]},
+            {client_group, [
+                {name, config_cluster},
+                {hosts, ["10.1.1.107", "10.1.1.108", {"10.1.1.109", 6666}]},
+                {opts, [{keyspace, config_db}]},
+                {clients_per_server, 2}
+             ]}
+        ]}
+  ]}
 ```
 
-Doing so will fire up connection pools as soon as the CQErl application is started. So when later on you call `cqerl:get_client`, chances are you will hit a preallocated connection (unless they're so busy that CQErl needs to fire up new ones). In fact, if you provide the `cassandra_nodes` environment variable, you can call `cqerl:get_client/0`, which chooses an available client at random.
+Doing so will fire up connection pools as soon as the CQErl application is started. `cqerl:wait_for_group/1` is automatically called in this case, so once cqerl has started, clients should be available immediately.
 
-##### Options
+The `name` and `opts` fields are optional; `hosts` and `clients_per_server` must be included.
 
-There is one application environment variable that may be set to change query behaviour:
+##### Application level options
+
+There are two application environment variables that may be set to change query behaviour:
 
 * `{text_uuids, true}` will cause `timeuuid` and `uuid` fields to be returned as binary strings in canonical form (eg `<<"5620c844-e98d-11e5-b97b-08002719e96e">>`) rather than pure binary.
+* {`strategy`, Strategy`} determines how nodes are chosen for queries. The default value of `token_aware` attempts to use [Token Aware Policy](#token-aware-policy). Setting this to `simple` will disable TAP.
 
 ##### Performing queries
 
@@ -99,12 +115,12 @@ It can also be performed asynchronously using
 ```erlang
 Tag = cqerl:send_query(my_keyspace, "SELECT * FROM users;"),
 receive
-    {result, Tag, Result} ->
+    {cqerl_result, Tag, Result} ->
         ok
 end.
 ```
 
-Here's a rundown of the possible return values
+Here's a rundown of the possible return values:
 
 * `SELECT` queries will yield result of type `#cql_result{}` (more details below).
 * Queries that change the database schema will yield result of type `#cql_schema_changed{type, keyspace, table}`
@@ -329,7 +345,7 @@ cqerl:run_query(#cqerl_query{statement = "SELECT * FROM user_db.user WHERE id = 
 This rework contains a number of compatability-breaking changes from the original `cqerl`. Specifically:
 
 * Proplist support for value lists and returned rows has been removed. Only maps are now used.
-* The `get_client` and `clsoe_client` calls no longer exist nor are needed. Instead, see `add_group` and `wait_for_group`.
+* The `get_client` and `close_client` calls no longer exist nor are needed. Instead, see `add_group` and `wait_for_group`.
 * It is no longer compatible with Erlang versions prior to 18.3.
 * rebar3 is now used as the build system, replacing the older version.
 
