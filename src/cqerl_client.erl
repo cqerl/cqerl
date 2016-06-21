@@ -598,27 +598,25 @@ send_to_db(#state{trans=ssl, socket=Socket}, Data) when is_binary(Data) ->
 create_socket({Addr, Port}, Opts) ->
     BaseOpts = [{active, false}, {mode, binary}],
     {Transport, Result} =
-    case proplists:lookup(ssl, Opts) of
-        {ssl, false} ->
-            {tcp,
-             case proplists:lookup(tcp_opts, Opts) of
-                 none ->
-                     gen_tcp:connect(Addr, Port, BaseOpts, 2000);
-                 {tcp_opts, TCPOpts} ->
-                     gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000)
-             end};
-
-        {ssl, true} ->
-            {ssl, ssl:connect(Addr, Port, BaseOpts, 2000)};
-
-        {ssl, SSLOpts} when is_list(SSLOpts) ->
-            {ssl, ssl:connect(Addr, Port, SSLOpts ++ BaseOpts, 2000)}
+    case proplists:get_value(ssl, Opts, false) of
+        false ->
+            TCPOpts = proplists:get_value(tcp_opts, Opts, []),
+            {tcp, create_tcp_socket(Addr, Port, BaseOpts, TCPOpts)};
+        SSLOpts ->
+            {ssl, create_ssl_socket(Addr, Port, BaseOpts, SSLOpts)}
     end,
     case Result of
         {ok, Socket} -> {ok, Socket, Transport};
         Other -> Other
     end.
 
+create_tcp_socket(Addr, Port, BaseOpts, TCPOpts) ->
+    gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000).
+
+create_ssl_socket(Addr, Port, BaseOpts, true) ->
+    create_ssl_socket(Addr, Port, BaseOpts, []);
+create_ssl_socket(Addr, Port, BaseOpts, Opts) ->
+    ssl:connect(Addr, Port, Opts ++ BaseOpts, 2000).
 
 activate_socket(#state{socket=undefined}) ->
     ok;

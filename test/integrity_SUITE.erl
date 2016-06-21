@@ -227,55 +227,54 @@ simple_insertion_roundtrip(_Config) ->
     {ok, void} = cqerl:run_query(#cql_query{
                                     statement=Q,
                                     keyspace = test_keyspace_2,
-                                    values=[
-                                            {id, "hello"},
-                                            {age, 18},
-                                            {email, <<"mathieu@damours.org">>}
-                                           ]}),
+                                    values= #{id => "hello",
+                                              age => 18,
+                                              email => <<"mathieu@damours.org">>}
+                                   }),
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries1;">>, keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
-    <<"hello">> = proplists:get_value(id, Row),
-    18 = proplists:get_value(age, Row),
-    <<"mathieu@damours.org">> = proplists:get_value(email, Row),
+    <<"hello">> = maps:get(id, Row),
+    18 = maps:get(age, Row),
+    <<"mathieu@damours.org">> = maps:get(email, Row),
     Result.
 
 emptiness(_Config) ->
     {ok, void} = cqerl:run_query(test_keyspace_2, "update entries1 set email = null where id = 'hello';"),
     {ok, Result} = cqerl:run_query(test_keyspace_2, "select * from entries1 where id = 'hello';"),
     Row = cqerl:head(Result),
-    null = proplists:get_value(email, Row),
+    null = maps:get(email, Row),
     {ok, void} = cqerl:run_query(#cql_query{statement="update entries1 set age = ? where id = 'hello';",
-                                            values=[{age, null}],
+                                            values= #{age => null},
                                             keyspace=test_keyspace_2
                                            }),
     {ok, Result2} = cqerl:run_query(test_keyspace_2, "select * from entries1 where id = 'hello';"),
     Row2 = cqerl:head(Result2),
-    null = proplists:get_value(age, Row2).
+    null = maps:get(age, Row2).
 
 missing_prepared_query(_Config) ->
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
     {ok, _Result} = cqerl:run_query(#cql_query{statement = Q,
-                                               values = [{id, "abc"},
-                                                         {age, 22},
-                                                         {email, "me@here.com"}],
+                                               values = #{id => "abc",
+                                                          age => 22,
+                                                          email => "me@here.com"},
                                                keyspace = test_keyspace_2}),
     %% This query causes prepared queries on the table to be invalidated:
     {ok, _} = cqerl:run_query(test_keyspace_2, "ALTER TABLE entries1 ADD newcol int"),
     %% This query will attempt to use the prepared query and fail, falling back to re-preparing it:
     {ok, _Result2} = cqerl:run_query(#cql_query{statement = Q,
-                                                values = [{id, "def"},
-                                                          {age, 22},
-                                                          {email, "me@here.com"}],
+                                                values = #{id => "def",
+                                                           age => 22,
+                                                           email => "me@here.com"},
                                                 keyspace = test_keyspace_2}).
 
 missing_prepared_batch(_Config) ->
     S1 = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    V1 = [{id, "abc"}, {age, 22}, {email, "me@here.com"}],
+    V1 = maps:from_list([{id, "abc"}, {age, 22}, {email, "me@here.com"}]),
     Q1 = #cql_query{statement = S1, values = V1},
 
 
     S2 = "INSERT INTO entries1(id, age) VALUES (?, ?)",
-    V2 = [ {id, "fff"}, {age, 66} ],
+    V2 = maps:from_list([ {id, "fff"}, {age, 66} ]),
     Q2 = #cql_query{statement = S2, values = V2},
 
     Batch = #cql_query_batch{queries = [Q1, Q2], keyspace = test_keyspace_2},
@@ -288,11 +287,11 @@ missing_prepared_batch(_Config) ->
 async_insertion_roundtrip(_Config) ->
     Ref = cqerl:send_query(#cql_query{
         statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-        values = [
+        values = maps:from_list([
             {id, "1234123"},
             {age, 45},
             {email, <<"yvon@damours.org">>}
-        ],
+        ]),
         keyspace = test_keyspace_2
     }),
     receive {cqerl_result, Ref, void} -> ok end,
@@ -302,9 +301,9 @@ async_insertion_roundtrip(_Config) ->
         {cqerl_result, Ref2, Result=#cql_result{}} ->
             {_Row, Result2} = cqerl:next(Result),
             Row = cqerl:head(Result2),
-            <<"1234123">> = proplists:get_value(id, Row),
-            45 = proplists:get_value(age, Row),
-            <<"yvon@damours.org">> = proplists:get_value(email, Row);
+            <<"1234123">> = maps:get(id, Row),
+            45 = maps:get(age, Row),
+            <<"yvon@damours.org">> = maps:get(email, Row);
         Other ->
             ct:fail("Received: ~p~n", [Other])
     end.
@@ -347,7 +346,7 @@ all_datatypes(Config) ->
                            keyspace = test_keyspace_2
                           },
 
-                [
+                maps:from_list([
                     {col1, "hello"},
                     {col2, 9223372036854775807},
                     {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -362,7 +361,8 @@ all_datatypes(Config) ->
                     {col12, now},
                     {col13, {127, 0, 0, 1}},
                     {col14, 666}
-                ], [
+                ]),
+                maps:from_list([
                     {col1, <<"foobar">>},
                     {col2, -9223372036854775806},
                     {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -377,7 +377,7 @@ all_datatypes(Config) ->
                     {col12, <<250,10,224,94,87,197,17,227,156,99,146,79,0,0,0,195>>},
                     {col13, {0,0,0,0,0,0,0,0}},
                     {col14, 666}
-                ]
+                ])
             };
 
         _ ->
@@ -393,7 +393,7 @@ all_datatypes(Config) ->
                                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)">>,
                            keyspace = test_keyspace_2
                           },
-                [
+                maps:from_list([
                     {col1, "hello"},
                     {col2, 9223372036854775807},
                     {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -412,8 +412,8 @@ all_datatypes(Config) ->
                     {col16, 1200},
                     {col17, Date},
                     {col18, Time}
-                ],
-                [
+                ]),
+                maps:from_list([
                     {col1, <<"foobar">>},
                     {col2, -9223372036854775806},
                     {col3, <<1,2,3,4,5,6,7,8,9,10>>},
@@ -432,7 +432,7 @@ all_datatypes(Config) ->
                     {col16, -1200},
                     {col17, Date},
                     {col18, AbsTime}
-                ]
+                ])
             }
     end,
 
@@ -445,45 +445,45 @@ all_datatypes(Config) ->
     {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1}),
     {ok, void} = cqerl:run_query(InsQ#cql_query{
         statement="INSERT INTO entries2(col1, col11) values (?, ?);",
-        values=RRow3=[ {col1, foobaz}, {col11, 'åäö'} ]
+        values=RRow3=maps:from_list([ {col1, foobaz}, {col11, 'åäö'} ])
     }),
-    
+
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries2;">>, keyspace = test_keyspace_2}),
     {Row1, Result1} = cqerl:next(Result),
     {Row2, Result2} = cqerl:next(Result1),
     {Row3, _Result3} = cqerl:next(Result2),
     lists:foreach(fun
         (Row) -> 
-            ReferenceRow = case proplists:get_value(col1, Row) of
+            ReferenceRow = case maps:get(col1, Row) of
                 <<"hello">> -> RRow1;
                 <<"foobar">> -> RRow2;
                 <<"foobaz">> -> RRow3
             end,
             lists:foreach(fun
-                ({col12, _}) -> true = uuid:is_v1(proplists:get_value(col12, Row));
-                ({col10, _}) -> true = uuid:is_v4(proplists:get_value(col10, Row));
+                ({col12, _}) -> true = uuid:is_v1(maps:get(col12, Row));
+                ({col10, _}) -> true = uuid:is_v4(maps:get(col10, Row));
                 ({col9, _}) -> ok; %% Yeah, I know...
                 
                 ({col16, {Y, M, D}}) ->
-                    {Y, M, D} = proplists:get_value(col16, Row);
+                    {Y, M, D} = maps:get(col16, Row);
 
-                ({col18, _}) -> proplists:get_value(col18, Row) == AbsTime;
+                ({col18, _}) -> maps:get(col18, Row) == AbsTime;
 
                 ({col1, Key}) when is_list(Key) ->
                     Val = list_to_binary(Key),
-                    Val = proplists:get_value(col1, Row);
+                    Val = maps:get(col1, Row);
 
                 ({Col, Key}) when is_atom(Key), Col == col1 orelse Col == col11 ->
                     Val = atom_to_binary(Key, utf8),
-                    Val = proplists:get_value(Col, Row);
+                    Val = maps:get(Col, Row);
                     
                 ({col7, Val0}) ->
                     Val = round(Val0 * 1.0e11),
-                    Val = round(proplists:get_value(col7, Row) * 1.0e11);
+                    Val = round(maps:get(col7, Row) * 1.0e11);
 
                 ({Key, Val}) ->
-                    Val = proplists:get_value(Key, Row, null)
-            end, ReferenceRow)
+                    Val = maps:get(Key, Row, null)
+            end, maps:to_list(ReferenceRow))
     end, [Row1, Row2, Row3]),
     [Row1, Row2, Row3].
 
@@ -496,27 +496,27 @@ custom_encoders(_Config) ->
         cqerl:run_query(test_keyspace_2, CreationQ),
 
     InsQ = #cql_query{statement = <<"INSERT INTO entries2_1(col1, col2, col3) VALUES (?, ?, ?)">>, keyspace = test_keyspace_2},
-    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1=[
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1=maps:from_list([
         {col1, <<"test">>},
         {col2, <<"hello">>},
         {col3, <<"testing tuples">>}
-    ]}),
-    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow2=[
+    ])}),
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow2=maps:from_list([
         {col1, <<"test">>},
         {col2, <<"nice to have">>},
         {col3, <<"custom encoder">>}
-    ]}),
+    ])}),
 
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{
         statement = <<"SELECT * FROM entries2_1 WHERE col1 = ? AND (col2,col3) IN ?;">>,
         keyspace = test_keyspace_2,
-        values = [
+        values = maps:from_list([
             {col1, <<"test">>},
             {'in(col2,col3)', [
                 {<<"hello">>,<<"testing tuples">>},
                 {<<"nice to have">>,<<"custom encoder">>}
             ]}
-        ],
+        ]),
 
         % provide custom encoder for TupleType
         value_encode_handler = fun({{custom, <<"org.apache.cassandra.db.marshal.TupleType", _Rest/binary>>}, Tuple}, Query) ->
@@ -549,10 +549,10 @@ options(_Config) ->
 
     InsQ = #cql_query{statement = <<"INSERT INTO entries2_2(col1, col2) VALUES (?, ?)">>,
                       keyspace = test_keyspace_2},
-    {ok, void} = cqerl:run_query(InsQ#cql_query{values=[
+    {ok, void} = cqerl:run_query(InsQ#cql_query{values=maps:from_list([
         {col1, TimeUUID},
         {col2, UUID}
-    ]}),
+    ])}),
 
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = <<"SELECT * FROM entries2_2;">>,
                                                             keyspace = test_keyspace_2}),
@@ -571,68 +571,64 @@ collection_types(_Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries3">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
-        
+
     {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
-        values = [
+        values = maps:from_list([
             {key, "First collection"},
             {numbers, [1,2,3,4,5]},
             {names, ["matt", "matt", "yvon"]},
             {phones, [{<<"home">>, <<"418-123-4545">>}, {"work", "555-555-5555"}]}
-        ],
+        ]),
          keyspace = test_keyspace_2
     }),
-    
+
     {ok, void} = cqerl:run_query(#cql_query{
         statement = "UPDATE entries3 SET names = names + {'martin'} WHERE key = ?",
-        values = [{key, "First collection"}],
+        values = #{key => "First collection"},
          keyspace = test_keyspace_2
     }),
-    
+
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = "SELECT * FROM entries3;",
                                                             keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
-    <<"First collection">> = proplists:get_value(key, Row),
-    [1,2,3,4,5] = proplists:get_value(numbers, Row),
-    Names = proplists:get_value(names, Row),
+    <<"First collection">> = maps:get(key, Row),
+    [1,2,3,4,5] = maps:get(numbers, Row),
+    Names = maps:get(names, Row),
     3 = length(Names),
     true = lists:member(<<"matt">>, Names),
     true = lists:member(<<"yvon">>, Names),
     true = lists:member(<<"martin">>, Names),
-    lists:foreach(fun
-        ({<<"home">>, <<"418-123-4545">>}) -> ok;
-        ({<<"work">>, <<"555-555-5555">>}) -> ok;
-        (_) -> throw(unexpected_value)
-    end, proplists:get_value(phones, Row)),
+    #{<<"home">> := <<"418-123-4545">>, <<"work">> := <<"555-555-5555">>} = maps:get(phones, Row),
     Row.
 
 counter_type(_Config) ->
-    
+
     CreationQ = <<"CREATE TABLE entries4(key varchar, count counter, PRIMARY KEY(key));">>,
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries4">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
-    
+
     {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
-        values = [
+        values = maps:from_list([
             {key, "First counter"},
             {count, 18}
-        ],
+        ]),
          keyspace = test_keyspace_2
     }),
-    
+
     {ok, void} = cqerl:run_query(#cql_query{
         statement = "UPDATE entries4 SET count = count + 10 WHERE key = ?;",
-        values = [{key, "First counter"}],
+        values = #{key => "First counter"},
          keyspace = test_keyspace_2
     }),
-    
+
     {ok, Result=#cql_result{}} = cqerl:run_query(#cql_query{statement = "SELECT * FROM entries4;",
                                                             keyspace = test_keyspace_2}),
     Row = cqerl:head(Result),
-    <<"First counter">> = proplists:get_value(key, Row),
-    28 = proplists:get_value(count, Row),
+    <<"First counter">> = maps:get(key, Row),
+    28 = maps:get(count, Row),
     Row.
 
 
@@ -652,10 +648,10 @@ varint_type(_Config) ->
     lists:foreach(fun(K) ->
       {ok, void} =
       cqerl:run_query( #cql_query{statement = Statement,
-                                 values = [{key, K},
-                                           {sval,
-                                            integer_to_list(K)}
-                                          ],
+                                 values = maps:from_list(
+                                            [{key, K},
+                                             {sval, integer_to_list(K)}
+                                          ]),
                                   keyspace = test_keyspace_2})
       end,
       TestVals),
@@ -698,8 +694,8 @@ varint_test_ranges() ->
     lists:flatten([lists:seq(L, H) || {L, H} <- Ranges]).
 
 check_extract_varints(Rows) ->
-    Ints = [proplists:get_value(key, Row) || Row <- Rows],
-    CheckInts = [binary_to_integer(proplists:get_value(sval, Row))
+    Ints = [maps:get(key, Row) || Row <- Rows],
+    CheckInts = [binary_to_integer(maps:get(sval, Row))
                  || Row <- Rows],
     Ints = CheckInts,
     Ints.
@@ -722,10 +718,11 @@ decimal_type(_Config) ->
     lists:foreach(fun({U, S}) ->
       {ok, void} =
       cqerl:run_query(#cql_query{statement = Statement,
-                                 values = [{key, {U, S}},
-                                           {unscaled, U},
-                                           {scale, S}
-                                          ],
+                                 values = maps:from_list(
+                                            [{key, {U, S}},
+                                             {unscaled, U},
+                                             {scale, S}
+                                          ]),
                                  keyspace = test_keyspace_2})
       end,
       TestVals),
@@ -745,9 +742,9 @@ decimal_test_ranges() ->
                S <- lists:seq(-5, 5) ++ [2147483647, -2147483648]].
 
 check_extract_decimals(Rows) ->
-    Decimals = [proplists:get_value(key, Row) || Row <- Rows],
-    CheckUnScales = [proplists:get_value(unscaled, Row) || Row <- Rows],
-    CheckScales = [proplists:get_value(scale, Row) || Row <- Rows],
+    Decimals = [maps:get(key, Row) || Row <- Rows],
+    CheckUnScales = [maps:get(unscaled, Row) || Row <- Rows],
+    CheckScales = [maps:get(scale, Row) || Row <- Rows],
     {Unscales, Scales} = lists:unzip(Decimals),
     ct:log("Unscales: ~p~n", [Unscales]),
     Unscales = CheckUnScales,
@@ -759,11 +756,13 @@ inserted_rows(0, _Q, Acc) ->
     lists:reverse(Acc);
 inserted_rows(N, Q, Acc) ->
     ID = list_to_binary(io_lib:format("~B", [N])),
-    inserted_rows(N-1, Q, [ Q#cql_query{values=[
-        {id, ID}, 
-        {age, 10+N}, 
-        {email, list_to_binary(["test", ID, "@gmail.com"])}
-    ]} | Acc ]).
+    inserted_rows(N-1, Q, [ Q#cql_query{values=
+                                        maps:from_list(
+                                          [
+                                           {id, ID}, 
+                                           {age, 10+N}, 
+                                           {email, list_to_binary(["test", ID, "@gmail.com"])}
+                                          ])} | Acc ]).
 
 batches_and_pages(_Config) ->
     T1 = os:timestamp(),
@@ -776,11 +775,11 @@ batches_and_pages(_Config) ->
     {ok, void} = cqerl:run_query(Batch),
     AddIDs = fun (Result, IDs0) ->
         lists:foldr(fun (Row, IDs) ->
-                        ID = proplists:get_value(id, Row),
+                        ID = maps:get(id, Row),
                         {IDint, _} = string:to_integer(binary_to_list(ID)),
-                        IDint = proplists:get_value(age, Row) - 10,
+                        IDint = maps:get(age, Row) - 10,
                         IDsize = size(ID),
-                        << _:4/binary, ID:IDsize/binary, _Rest/binary >> = proplists:get_value(email, Row),
+                        << _:4/binary, ID:IDsize/binary, _Rest/binary >> = maps:get(email, Row),
                         gb_sets:add(ID, IDs) 
                     end, 
                     IDs0, cqerl:all_rows(Result))

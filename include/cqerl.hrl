@@ -96,7 +96,7 @@
 -record(cql_query, {
     statement   = <<>>      :: iodata(),
     keyspace    = undefined :: keyspace(),
-    values      = []        :: [ parameter() | named_parameter() ] | map(),
+    values      = #{}       :: map(),
 
     reusable    = undefined :: undefined | boolean(),
     named       = false     :: boolean(),

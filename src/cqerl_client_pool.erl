@@ -84,7 +84,6 @@ get_client(Node, Keyspace) ->
 get_client(Name) ->
     case ets:lookup(cqerl_named_clients, Name) of
         [] ->
-            ct:log("No clients in named table"),
             {error, no_clients};
         Clients -> get_named_client(Clients)
     end.
@@ -94,7 +93,6 @@ get_random_client(Keyspace) ->
                     cqerl_client_tables,
                     #client_table{key = #client_key{keyspace = Keyspace, _='_'},
                                   _='_'}),
-    ct:log("Valid tables: ~p ~p", [ValidTables, ets:tab2list(cqerl_client_tables)]),
     select_random_from_valid(ValidTables).
 
 wait_for_client(GroupName) ->
@@ -238,18 +236,14 @@ get_client_from_table(Table) ->
     N = erlang:phash2(self(), ets:info(Table, size)) + 1,
     case ets:lookup(Table, N) of
         [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
-        [] ->
-            ct:log("No clients in hash table: ~p ~p", [N, ets:tab2list(Table)]),
-            {error, no_clients}
+        [] -> {error, no_clients}
     end.
 
 select_random_from_valid([]) ->
-    ct:log("Exhaused valid tables"),
     {error, no_clients};
 
 select_random_from_valid(Tables) ->
     #client_table{table = T} = lists:nth(rand:uniform(length(Tables)), Tables),
-    ct:log("Checking table ~p ~p", [T, ets:tab2list(T)]),
     case get_client_from_table(T) of
         {ok, Client} -> {ok, Client};
         {error, _} -> select_random_from_valid(Tables -- [T])
