@@ -203,7 +203,7 @@ single_client(_Config) ->
               {ok, T} = orddict:find(Tag, Acc),
               F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
           send_request ->
-              Tag = cqerl:send_query(Q#cql_query{values=[{id, N}, {name, "test"}]}),
+              Tag = cqerl:send_query(Q#cql_query{values=#{id => N, name => "test"}}),
               F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
           OtherMsg ->
               ct:fail("Unexpected response ~p", [OtherMsg])
@@ -220,7 +220,7 @@ single_client(_Config) ->
 sync_insert() ->
     receive
         {Pid, {Client, Q}, Tag, N} ->
-            case cqerl:run_query(Client, Q#cql_query{values=[{id, N}, {name, "defaultvaluehere"}]}) of
+            case cqerl:run_query(Client, Q#cql_query{values=#{id => N, name => "defaultvaluehere"}}) of
                 {ok, void} ->
                     Pid ! {result, Tag},
                     ok;
@@ -257,7 +257,7 @@ concurrent_client(ReportTo, ID) ->
                    consistency=1,
                    keyspace = test_keyspace_1},
     lists:foreach(fun(I) ->
-                          {ok, void} = cqerl:run_query(Q#cql_query{values=[{id, ID}, {name, integer_to_list(I)}]})
+                          {ok, void} = cqerl:run_query(Q#cql_query{values=#{id => ID, name => integer_to_list(I)}})
                   end,
                   lists:seq(1, Iters)),
     ReportTo ! done.

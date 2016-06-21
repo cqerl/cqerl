@@ -73,7 +73,8 @@ groups() -> [
 %%      NB: By default, we export all 1-arity user defined functions
 %%--------------------------------------------------------------------
 all() ->
-    [{group, clients}
+    [
+     %{group, clients}
     ].
 
 %%--------------------------------------------------------------------

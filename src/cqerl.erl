@@ -18,7 +18,6 @@
     size/1,
 
     head/1,
-    head/2,
 
     tail/1,
     next/1,
@@ -88,9 +87,9 @@ has_more_pages(#cql_result{}) -> true.
 %% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
 %%            return with the result from Cassandra (synchronously).
 
--spec fetch_more(Continuation :: #cql_result{}) -> no_more_result | {ok, #cql_result{}}.
+-spec fetch_more(Continuation :: #cql_result{}) -> no_more_results | {ok, #cql_result{}}.
 fetch_more(#cql_result{cql_query=#cql_query{page_state=undefined}}) ->
-    no_more_result;
+    no_more_results;
 fetch_more(Continuation) ->
     cqerl_client:fetch_more(Continuation).
 
@@ -123,15 +122,14 @@ send_query(KS, Q) ->
 %% A success or error message will be sent in response some time later (see {@link send_query/1} for details) unless the
 %% connection is dropped.
 
--spec fetch_more_async(Continuation :: #cql_result{}) -> reference() | no_more_result.
+-spec fetch_more_async(Continuation :: #cql_result{}) -> reference() | no_more_results.
 fetch_more_async(#cql_result{cql_query=#cql_query{page_state=undefined}}) ->
-    no_more_result;
+    no_more_results;
 fetch_more_async(Continuation) ->
     cqerl_client:fetch_more_async(Continuation).
 
 %% @doc The number of rows in a result set
 
-size(#cql_result{dataset=[]}) -> 0;
 size(#cql_result{dataset=Dataset}) -> length(Dataset).
 
 %% @doc Returns the first row of result, as a property list
@@ -140,6 +138,7 @@ head(#cql_result{dataset=[]}) -> empty_dataset;
 head(Result) ->
     head(Result, get_options_list()).
 
+%% @private
 head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}, Opts) ->
     cqerl_protocol:decode_row(Row, ColumnSpecs, Opts).
 

@@ -91,10 +91,11 @@ The `name` and `opts` fields are optional; `hosts` and `clients_per_server` must
 
 ##### Application level options
 
-There are two application environment variables that may be set to change query behaviour:
+There are several application environment variables that may be set to change query behaviour:
 
 * `{text_uuids, true}` will cause `timeuuid` and `uuid` fields to be returned as binary strings in canonical form (eg `<<"5620c844-e98d-11e5-b97b-08002719e96e">>`) rather than pure binary.
-* {`strategy`, Strategy`} determines how nodes are chosen for queries. The default value of `token_aware` attempts to use [Token Aware Policy](#token-aware-policy). Setting this to `simple` will disable TAP.
+* `{strategy, Strategy}` determines how nodes are chosen for queries. The default value of `token_aware` attempts to use [Token Aware Policy](#token-aware-policy). Setting this to `simple` will disable TAP.
+* `{query_timeout, T}` provides a timeout in milliseconds after which a `run_query` call will timeout. This may be `infinity`.
 
 ##### Performing queries
 

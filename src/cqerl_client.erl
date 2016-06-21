@@ -14,10 +14,7 @@
          batch_ready/2]).
 
 -define(QUERIES_MAX, 128).
--define(QUERY_TIMEOUT, case application:get_env(cqerl, query_timeout) of
-    undefined -> 30000;
-    {ok, Val} -> Val
-end).
+-define(DEFAULT_QUERY_TIMEOUT, 30000).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -66,7 +63,7 @@ start_link(Name, Inet, Opts) ->
     gen_server:start_link(?MODULE, [Name, Inet, Opts], []).
 
 run_query({ClientPid, ClientRef}, Query) ->
-    gen_server:call(ClientPid, {send_query, ClientRef, Query}, ?QUERY_TIMEOUT).
+    gen_server:call(ClientPid, {send_query, ClientRef, Query}, query_timeout()).
 
 query_async({ClientPid, ClientRef}, Query) ->
     QueryRef = make_ref(),
@@ -74,7 +71,7 @@ query_async({ClientPid, ClientRef}, Query) ->
     QueryRef.
 
 fetch_more(Continuation=#cql_result{client={ClientPid, ClientRef}}) ->
-    gen_server:call(ClientPid, {fetch_more, ClientRef, Continuation}, ?QUERY_TIMEOUT).
+    gen_server:call(ClientPid, {fetch_more, ClientRef, Continuation}, query_timeout()).
 
 fetch_more_async(Continuation=#cql_result{client={ClientPid, ClientRef}}) ->
     QueryRef = make_ref(),
@@ -726,3 +723,6 @@ handshake(State = #state{opts = Opts}) ->
                                  cqerl:get_protocol_version())),
     {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
     send_to_db(State, OptionsFrame).
+
+query_timeout() ->
+    application:get_env(cqerl, query_timeout, ?DEFAULT_QUERY_TIMEOUT).

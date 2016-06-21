@@ -3,14 +3,13 @@
 -include("cqerl.hrl").
 -include("cqerl_protocol.hrl").
 
--compile(export_all). % TODO: remove
-
 -behaviour(gen_server).
 
 -compile({parse_transform, do}).
 
 -export([start_link/0,
          add_node/2,
+         remove_node/1,
          select_client/1,
          force_refresh/0,
          handle_event/1
@@ -22,13 +21,6 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
-
--export([test_setup/0,
-         test/0,
-         test/1,
-         test1/0,
-         test2/1
-        ]).
 
 -record(token_node, {
           token :: integer() | '_',
@@ -76,7 +68,7 @@ handle_event(#keyspace_change{keyspace = Keyspace}) ->
     gen_server:cast(?MODULE, {refresh_keyspace, Keyspace});
 handle_event(#topology_change{type = ?CQERL_TOPOLOGY_CHANGE_TYPE_REMOVED_NODE,
                               node = Node}) ->
-    gen_server:cast(?MODULE, {node_removed, Node});
+    gen_server:cast(?MODULE, {remove_node, Node});
 % Ignore all others for now
 handle_event(_) ->
     ok.
@@ -113,7 +105,7 @@ handle_cast({refresh_table, Keyspace, Table}, State) ->
     ets:match_delete(cqerl_schema, #column{key = {Keyspace, Table}, _='_'}),
     handle_cast(refresh, State);
 
-handle_cast({node_removed, Node}, State) ->
+handle_cast({remove_node, Node}, State) ->
     ets:match_delete(token_nodes, #token_node{node = Node, _='_'}),
     {noreply, State};
 
@@ -233,74 +225,3 @@ get_node(Key) ->
         [] -> {error, no_node};
         [#token_node{node = Node} | _] -> {ok, Node}
     end.
-
-test_setup() ->
-    {ok, _} = application:ensure_all_started(cqerl),
-    G = cqerl:add_group(["10.1.1.107", "10.1.1.108", "10.1.1.109"], [{keyspace, xxxxx}], 1),
-    cqerl:wait_for_group(G).
-
-test() ->
-    test(uuid:uuid_to_string(uuid:get_v4())).
-
-test(IDStr) ->
-    Q = "INSERT INTO yyyyy (id, id2) VALUES (" ++ IDStr ++ ", 'test')",
-    {ok, void} = cqerl:run_query(xxxxx, Q),
-    {ok, PK} = get_partition_keys(xxxxx, <<"yyyyy">>),
-    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
-    {ok, Tok} = get_token(PKV),
-    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.yyyyy WHERE id = " ++ IDStr ++ " AND id2 = 'test';\""),
-    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
-    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]).
-
-test1() ->
-    test1(uuid:uuid_to_string(uuid:get_v4())).
-
-test1(IDStr) ->
-    Q = "INSERT INTO zzzzz (id, id2) VALUES (" ++ IDStr ++ ", 'test')",
-    {ok, void} = cqerl:run_query(xxxxx, Q),
-    {ok, PK} = get_partition_keys(xxxxx, <<"zzzzz">>),
-    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
-    {ok, Tok} = get_token(PKV),
-    Out = os:cmd("cqlsh -e \"SELECT token(id) FROM xxxxx.zzzzz WHERE id = " ++ IDStr ++ ";\""),
-    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
-    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
-    V = Tok.
-
-test2(IDStr) ->
-    Q = "INSERT INTO ttttt (id, id2) VALUES ('" ++ IDStr ++ "', 'test')",
-    {ok, void} = cqerl:run_query(xxxxx, Q),
-    {ok, PK} = get_partition_keys(xxxxx, <<"ttttt">>),
-    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
-    {ok, Tok} = get_token(PKV),
-    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.ttttt WHERE id = '" ++ IDStr ++ "' AND id2 = 'test';\""),
-    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
-    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
-    V = Tok.
-
-test3(IDStr) ->
-    Q = "INSERT INTO iiiii (id, id2) VALUES (" ++ integer_to_list(IDStr) ++ ", 'test')",
-    {ok, void} = cqerl:run_query(xxxxx, Q),
-    {ok, PK} = get_partition_keys(xxxxx, <<"iiiii">>),
-    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr, id2 => "test"}, x),
-    io:fwrite("~p\n", [PKV]),
-    {ok, Tok} = get_token(PKV),
-    Out = os:cmd("cqlsh -e \"SELECT token(id, id2) FROM xxxxx.iiiii WHERE id = " ++ integer_to_list(IDStr)++ " AND id2 = 'test';\""),
-    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
-    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
-    V = Tok.
-
-test4(IDStr) ->
-    Q = "INSERT INTO jjjjj (id) VALUES (" ++ integer_to_list(IDStr) ++ ")",
-    {ok, void} = cqerl:run_query(xxxxx, Q),
-    {ok, PK} = get_partition_keys(xxxxx, <<"jjjjj">>),
-    {ok, PKV} = get_partition_key_value(PK, #{id => IDStr}, x),
-    {ok, Tok} = get_token(PKV),
-    Out = os:cmd("cqlsh -e \"SELECT token(id) FROM xxxxx.jjjjj WHERE id = " ++ integer_to_list(IDStr)++ ";\""),
-    V = list_to_integer(string:strip(lists:nth(3, string:tokens(Out, "\n")))),
-    io:fwrite("~p\n~p\n~p\n", [IDStr, Tok, V]),
-    V = Tok.
-
-pretty_bin(<<>>) -> io:fwrite("\n");
-pretty_bin(<< A, Rest/binary>>) ->
-    io:fwrite("~.16B ", [A]),
-    pretty_bin(Rest).
