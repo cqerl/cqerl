@@ -103,7 +103,9 @@ init([Name, Node, Opts]) ->
                      false -> [];
                      true -> [register]
                  end,
-    SetupTasks2 = case proplists:get_value(keyspace, Opts) of
+
+    Keyspace = proplists:get_value(keyspace, Opts),
+    SetupTasks2 = case Keyspace of
                       undefined -> SetupTasks;
                       _ -> [set_keyspace | SetupTasks]
                   end,
@@ -112,7 +114,7 @@ init([Name, Node, Opts]) ->
                    group_name = Name,
                    node = Node,
                    opts = Opts,
-                   keyspace = cqerl:normalise_keyspace(proplists:get_value(keyspace, Opts)),
+                   keyspace = cqerl:normalise_keyspace(Keyspace),
                    authmod = AuthHandler,
                    authargs = AuthArgs,
                    setup_tasks = SetupTasks2,

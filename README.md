@@ -1,16 +1,8 @@
 # CQErl
 
-
-Changes in cqerl2:
-
-* maps only - proplist support removed
-* API change: `get_client` call no longer required
-* 18.3+ only
-* Token aware policy
-
 Native Erlang client for CQL3 over Cassandra's latest binary protocol v4.
 
-[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Clusters](#clusters) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)
+[**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Clusters](#clusters) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types) &middot; [Token aware policy](#token-aware-policy)
 
 [**Installation**](#installation) &middot; [**Compatibility**](#compatibility) &middot; [**Tests**](#tests) &middot; [**License**](#license)
 
@@ -32,47 +24,39 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 * Pluggable authentication (as long as it's [SASL][2]-based)
 * Token Aware Policy support
 
-CQErl was designed to be as simple as possible on your side. You just provide the configuration you want as environment variables. Under the hood, CQErl maintains a pool of persistent connections with Cassandra and select the client to use based on a hash of the requsting PID. This ensures relatively even distribution of work amongst clients when there is a lot of concurrent activity (where distribution is most important).
+CQErl was designed to be as simple as possible on your side. You just provide the configuration you want as environment variables. Under the hood, CQErl maintains a pool of persistent connections with Cassandra and select the client to use based on a hash of the requsting PID (and, optionally, the connected node if Token Aware Policy is enabled - see below). This ensures relatively even distribution of work amongst clients when there is a lot of concurrent activity (where distribution is most important).
 
 ### Usage
 
 ##### Connecting
 
-If you installed cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
+If you installed Cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
 
 ```erlang
 G = cqerl:add_group(["localhost"], [], 1),
 cqerl:wait_for_group(G).
 ```
 
-1. The first argument to `cqerl:get_client/2,1` or `cqerl:new_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
-
+1. The first argument to `cqerl:add_group/3` is the set of nodes to which you wish to connect in the form `{IP, Port}`, `IP`, or `Hostname`. `IP` may be a string, binary or tuple as described in the `inet` manual.
     - If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
-    - If both the default port and localhost are used, you can just provide an empty tuple as the first argument.
 
-2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include:
+2. The second argument is a proplist of options. Valid options are:
 
     - `keyspace` which determines in which keyspace all subsequent requests operate, on that connection.
-    - `auth` (mentionned below)
-    - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). 
+    - `auth` (described below)
     - `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
-
-    Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options)
-
-
+    - `ssl` if present, is either `true` or a list of options to be passed to `ssl:connect/4`. If absent or `false`, SSL will not be used.
+    - `tcp_opts` allows you to specify extra options to be passed to `gen_tcp:connect/4` when the client connects. If SSL is enabled, this will be ignored.
 
     If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
     ```erlang
-    {ok, Client} = cqerl:get_client({}, [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
+    {ok, Client} = cqerl:add_group(["localhost"], [{auth, {cqerl_auth_plain_handler, [{"test", "aaa"}]}}]).
     ```
 
     Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
 
-3. You can leverage one or more clusters of cassandra nodes by setting up [clusters](#clusters). When set up, you can use 
-
-    1. `cqerl:get_client()` if you have just a single main cluster
-    2. `cqerl:get_client(ClusterKey)` if you want to get a client from a specific, identified cluster
+3. The third argument is the number of clients to start *per node*.
 
 #### Using environment variables
 
@@ -178,13 +162,13 @@ end.
 2. The name of the `keyspace` where the change happened, as a binary
 3. If applicable, the name of `table` on which the change was applied, as a binary
 
-##### Providing options along queries
+##### Providing options to queries
 
 When performing queries, you can provide more information than just the query statement using the `#cql_query{}` record, which includes the following fields:
 
 1. The query `statement`, as a string or binary
 2. `values` for binding variables from the query statement (see next section).
-3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`. 
+3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`.
 4. You can specify how many rows you want in every result page using the `page_size` (integer) field. The devs at Cassandra recommend a value of 100 (which is the default).
 5. You can also specify what `consistency` you want the query to be executed under. Possible values include:
 
@@ -205,16 +189,16 @@ When performing queries, you can provide more information than just the query st
 
 ##### Variable bindings
 
-In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**.
+In the `#cql_query{}` record, you can provide `values` as a map, where the keys match the column names or binding variable names in the statement, in **lowercase**.
 
 Example:
 
 ```erlang
 % Deriving the value key from the column name
-#cql_query{statement="SELECT * FROM table1 WHERE id = ?", values=[{id, SomeId}]},
+#cql_query{statement = "SELECT * FROM table1 WHERE id = ?", values = #{id => SomeId}},
 
 % Explicitly providing a binding variable name
-#cql_query{statement="SELECT * FROM table1 WHERE id = :id_value", values=[{id_value, SomeId}]},
+#cql_query{statement = "SELECT * FROM table1 WHERE id = :id_value", values = #{id_value => SomeId}},
 ```
 
 Special cases include:
@@ -244,9 +228,9 @@ InsertQ = #cql_query{statement = "INSERT INTO users(id, name, password) VALUES(?
 {ok, void} = cqerl:run_query(Client, #cql_query_batch{
   mode=unlogged,
   queries=[
-    InsertQ#cql_query{values = [{id, new},{name, "sean"},{password, "12312"}]},
-    InsertQ#cql_query{values = [{id, new},{name, "jenna"},{password, "11111"}]},
-    InsertQ#cql_query{values = [{id, new},{name, "kate"},{password, "foobar"}]}
+    InsertQ#cql_query{values = #{id => new, name => "sean", password => "12312"}},
+    InsertQ#cql_query{values = #{id => new, name => "jenna", password => "11111"}},
+    InsertQ#cql_query{values = #{id => new, name => "kate", password => "foobar"}}
   ]
 }).
 ```
@@ -261,7 +245,7 @@ If any of the following is true:
 
 the query is considered *reusable*. This means that the first time this query will be performed, CQErl will ask the connected Cassandra node to prepare the query, after which, internally, a query ID will be used instead of the query statement when executing it. That particular cassandra node will hold on to the prepared query on its side and subsequent queries *that use exactly the same statement* [will be performed faster and with less network traffic][7].
 
-CQErl can tell which query has been previously prepared on which node by keeping a local cache, so all of this happens correctly and transparently.
+CQErl can tell which query has been previously prepared on which node by keeping a local cache, so this happens transparently. Note that prepared queries are stored per-connection, so each client process will need to prepare its own copy of any given query (though this also occurs transparently).
 
 ##### Data types
 
@@ -284,6 +268,7 @@ varchar               | **binary**, string
 varint                | **integer** (arbitrary precision)
 timeuuid              | **binary**, `now`
 inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
+
 
 
 ### Connecting to older Cassandra instances
@@ -316,7 +301,37 @@ As noted earlier, this library uses Cassandra's newest native protocol versions 
 All this means is that this library works with Cassandra 2.1.x (2.2+ or 3+ recommended), configured to enable the native protocol. [This documentation page][8] gives details about the how to configure this protocol. In the `cassandra.yaml` configuration file of your Cassandra installation, the `start_native_transport` need to be set to true and you need to take note of the value for `native_transport_port`, which is the port used by this library.
 
 ### Token Aware Policy
-This library implementes Token Aware Policy (TAP) for improved query efficincy. TAP allows the client to calculate which node(s) hold the data being read/written and use a direct connection to that node when available. By contrast, a non-TAP client will talk to any node it happens to be connected to, and rely on that node to in turn contact the node holding the data.
+This library implementes Token Aware Policy (TAP) for improved query efficincy. TAP allows the client to calculate which node(s) hold the data being read/written and use a direct connection to that node when available. By contrast, without TAP a node will be randomly chosen from all available and, if that node does not contain the data, it will forward on the query to the appropriate node, increasing load, network traffic and latency. If, for any reason, the TAP algorithm cannot determine or access the appropriate node, it will automatically fall back to non-TAP operation for that query.
+
+The current TAP implementation has the following limitations:
+* Functions only on single queries, not batches.
+* Will attempt to connect to the first node in the ring with the data, but not to any replicas if that node is down (the query will still succeed if the data is available, just not in TAP mode). This also means it does not account for topology to try to select the "closest" valid node.
+* Key values must be provided in a value map, rather than being hardcoded into the query string. For example, the following will provide a TAP lookup:
+
+```erlang
+cqerl:run_query(#cqerl_query{statement = "SELECT * FROM user WHERE id = ?",
+                             values = #{id => 'user1'},
+                             keyspace = user_db})
+```
+However this will not:
+```erlang
+cqerl:run_query(user_db, "SELECT * FROM user WHERE id = 'user1')
+```
+
+* The keyspace must be specified outside of the query statement, and a group configured for that keyspace must be available (as created with either `cqerl:add_group/3 or though the application configuration). For example, the following will *not* provide a TAP lookup:
+
+```erlang
+cqerl:run_query(#cqerl_query{statement = "SELECT * FROM user_db.user WHERE id = ?",
+                             values = #{id => 'user1'})
+```
+
+### Changes from cqerl
+This rework contains a number of compatability-breaking changes from the original `cqerl`. Specifically:
+
+* Proplist support for value lists and returned rows has been removed. Only maps are now used.
+* The `get_client` and `clsoe_client` calls no longer exist nor are needed. Instead, see `add_group` and `wait_for_group`.
+* It is no longer compatible with Erlang versions prior to 18.3.
+* rebar3 is now used as the build system, replacing the older version.
 
 ### Tests
 
@@ -349,7 +364,6 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-[1]: https://github.com/seth/pooler
 [2]: http://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer
 [3]: https://github.com/rebar/rebar
 [4]: http://www.datastax.com/documentation/cassandra/2.0/webhelp/index.html#cassandra/dml/dml_about_transactions_c.html
