@@ -83,7 +83,7 @@
 -export([
     start_link/0,
     client_started/1,
-    get_client/1
+    get_client/2
 ]).
 
 -export([
@@ -127,14 +127,15 @@ init(_) ->
 client_started(Key) ->
     gen_server:cast(cqerl, {add_client, Key, self()}).
 
-handle_call({start_clients, Key}, From, State = #state{pending = Pending}) ->
+handle_call({start_clients, Node, Opts}, From, State = #state{pending = Pending}) ->
+    Key = cqerl_client:make_key(Node, Opts),
     case ets:lookup(cqerl_client_tables, Key) of
         [#client_table{}] ->
             {reply, ok, State};
         [] ->
             case lists:keytake(Key, #pending.key, Pending) of
                 false ->
-                    start_clients_impl(Key, From, State);
+                    start_clients_impl(Node, Opts, From, State);
                 {value, PendingItem, OtherPending} ->
                     NewPending = PendingItem#pending{reply_to = [From | PendingItem#pending.reply_to]},
                     {noreply, State#state{pending = [NewPending | OtherPending]}}
@@ -173,20 +174,20 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-get_client(Key) ->
-    NKey = normalise_keyspace(Key),
-    case get_table(NKey) of
+get_client(Node, Opts) ->
+    Key = cqerl_client:make_key(Node, Opts),
+    case get_table(Key) of
         {ok, T} ->
             N = erlang:phash2(self(), ets:info(T, size)),
             [{_, Pid}] = ets:lookup(T, N+1),
             {ok, {Pid, make_ref()}};
         _ ->
-            start_clients(NKey)
+            start_clients(Node, Opts)
     end.
 
-start_clients(Key) ->
-    case gen_server:call(cqerl, {start_clients, Key}, infinity) of
-        ok -> get_client(Key);
+start_clients(Node, Opts) ->
+    case gen_server:call(cqerl, {start_clients, Node, Opts}, infinity) of
+        ok -> get_client(Node, Opts);
         {error, E} -> {error, E}
     end.
 
@@ -196,13 +197,14 @@ get_table(Key) ->
         [] -> {error, clients_not_started}
     end.
 
-start_clients_impl({Node, Opts}, From, State) ->
+start_clients_impl(Node, Opts, From, State) ->
     ClientTable = ets:new(cqerl_clients, [{read_concurrency, true}, protected]),
     case cqerl_client_sup:add_clients(Node, Opts) of
         {error, E} -> {reply, {error, E}, State};
         {ok, {Num, SupPid}} ->
             monitor(process, SupPid),
-            NewPending = #pending{key = {Node, Opts}, reply_to = [From], remaining = Num, table = ClientTable, sup_pid = SupPid},
+            Key = cqerl_client:make_key(Node, Opts),
+            NewPending = #pending{key = Key, reply_to = [From], remaining = Num, table = ClientTable, sup_pid = SupPid},
             {noreply, State#state{pending = [NewPending  | State#state.pending]}}
     end.
 
@@ -239,15 +241,6 @@ find_empty_index(Table) ->
 
 find_empty([A|Tail], [A|Tail2]) -> find_empty(Tail, Tail2);
 find_empty(_, [A|_]) -> A.
-
-normalise_keyspace({Node, Opts}) ->
-    KS = proplists:get_value(keyspace, Opts),
-    NewOpts = [{keyspace, normalise_to_atom(KS)} | proplists:delete(keyspace, Opts)],
-    {Node, NewOpts}.
-
-normalise_to_atom(KS) when is_list(KS) -> list_to_atom(KS);
-normalise_to_atom(KS) when is_binary(KS) -> binary_to_atom(KS, latin1);
-normalise_to_atom(KS) when is_atom(KS) -> KS.
 
 clear_pending(Pid, Reason, State = #state{pending = Pending}) ->
     NewPending =

@@ -8,10 +8,9 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/2, start_link/3, new_user/2, remove_user/1,
+-export([start_link/3, start_link/4, new_user/2, remove_user/1,
          run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
-         prepare_query/2,
-         batch_ready/2]).
+         prepare_query/2, batch_ready/2, make_key/2]).
 
 %% ------------------------------------------------------------------
 %% gen_fsm Function Exports
@@ -70,11 +69,11 @@ end).
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start_link(Inet, Opts) ->
-    gen_fsm:start_link(?MODULE, [Inet, Opts, undefined], []).
+start_link(Inet, Opts, OptGetter) ->
+    gen_fsm:start_link(?MODULE, [Inet, Opts, OptGetter, undefined], []).
 
-start_link(Inet, Opts, Key) ->
-    gen_fsm:start_link(?MODULE, [Inet, Opts, Key], []).
+start_link(Inet, Opts, OptGetter, Key) ->
+    gen_fsm:start_link(?MODULE, [Inet, Opts, OptGetter, Key], []).
 
 new_user(Pid, From) ->
     case cqerl_app:mode() of
@@ -128,23 +127,39 @@ prepare_query(ClientPid, Query) ->
 batch_ready({ClientPid, Call}, QueryBatch) ->
     gen_fsm:send_event(ClientPid, {batch_ready, Call, QueryBatch}).
 
+make_key(Node, Opts) ->
+    SafeOpts =
+    case lists:keytake(auth, 1, Opts) of
+        {value, {auth, Auth}, Opts1} -> [{auth_hash, erlang:phash2(Auth)} | Opts1];
+        false -> Opts
+    end,
+    NormalisedOpts = normalise_keyspace(SafeOpts),
+    {Node, lists:usort(NormalisedOpts)}.
+
+normalise_keyspace(Opts) ->
+    KS = proplists:get_value(keyspace, Opts),
+    [{keyspace, normalise_to_atom(KS)} | proplists:delete(keyspace, Opts)].
+
+normalise_to_atom(KS) when is_list(KS) -> list_to_atom(KS);
+normalise_to_atom(KS) when is_binary(KS) -> binary_to_atom(KS, latin1);
+normalise_to_atom(KS) when is_atom(KS) -> KS.
+
 %% ------------------------------------------------------------------
 %% gen_fsm Function Definitions
 %% ------------------------------------------------------------------
 
-init([Inet, Opts, Key]) ->
+init([Inet, Opts, OptGetter, Key]) ->
     case create_socket(Inet, Opts) of
         {ok, Socket, Transport} ->
-            {auth, {AuthHandler, AuthArgs}} = proplists:lookup(auth, Opts),
-            cqerl:put_protocol_version(proplists:get_value(protocol_version, Opts, cqerl:get_protocol_version())),
+            {AuthHandler, AuthArgs} = OptGetter(auth),
+            cqerl:put_protocol_version(OptGetter(protocol_version)),
             {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
-            put(uuidstate, uuid:new(self())),
             State = #client_state{
                 socket=Socket, trans=Transport, inet=Inet,
                 authmod=AuthHandler, authargs=AuthArgs,
                 users=[],
                 sleep=get_sleep_duration(Opts),
-                keyspace=proplists:get_value(keyspace, Opts),
+                keyspace=normalise_to_atom(proplists:get_value(keyspace, Opts)),
                 key=Key,
                 mode=cqerl_app:mode()
             },
