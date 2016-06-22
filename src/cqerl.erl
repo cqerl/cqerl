@@ -264,8 +264,10 @@ select_client(Query = #cql_query{keyspace = Keyspace}) ->
             random_select_client(Keyspace)
     end.
 
-normalise_query(Batch = #cql_query_batch{queries = Queries}) ->
-    Batch#cql_query_batch{queries = [normalise_query(Q) || Q <- Queries]};
+normalise_query(Batch = #cql_query_batch{queries = Queries,
+                                         keyspace = Keyspace}) ->
+    Batch#cql_query_batch{queries = [normalise_query(Q) || Q <- Queries],
+                          keyspace = normalise_keyspace(Keyspace)};
 
 normalise_query(Statement) when is_list(Statement); is_binary(Statement) ->
     normalise_query(#cql_query{statement = iolist_to_binary(Statement)});
@@ -288,10 +290,5 @@ ta_select_client(Query = #cql_query{keyspace = Keyspace}) ->
         {error, _} -> random_select_client(Keyspace)
     end.
 
-random_select_client(undefined) ->
-    cqerl_client_pool:get_random_client(undefined);
 random_select_client(Keyspace) ->
-    case cqerl_client_pool:get_random_client(Keyspace) of
-        {ok, Client} -> {ok, Client};
-        {error, no_clients} -> random_select_client(undefined)
-    end.
+    cqerl_client_pool:get_random_client(Keyspace).
