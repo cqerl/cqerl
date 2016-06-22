@@ -539,40 +539,8 @@ response_frame(_, Binary) ->
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Body/binary >>) ->
     {ok, ErrorDescription, Rest} = cqerl_datatypes:decode_string(Body),
-    case ErrorCode of
-        _EmptyError when ErrorCode == 0;              % Server Error
-                         ErrorCode == 16#000A;        % Protocol Error
-                         ErrorCode == 16#0100;        % Bad credentials
-                         ErrorCode >= 16#1001 andalso ErrorCode =< 16#1003;    % Overloaded, bootstrapping or truncate error
-                         ErrorCode >= 16#2000 andalso ErrorCode =< 16#2300 ->  % Syntactically incorrect, unauthorized or incorrect query
-            {ok, {ErrorCode, ErrorDescription, undefined}};
-
-        16#1000 -> % Unavailability Exception
-            << Availability:?SHORT, Required:?INT, Alive:?INT, _Rest/binary >> = Rest,
-            {ok, {ErrorCode, ErrorDescription, {Availability, Required, Alive}}};
-
-        16#1100 -> % Write Timeout Exception
-            << Availability:?SHORT, Received:?INT, Required:?INT, Rest1/binary >> = Rest,
-            {ok, WriteType, _Rest} = cqerl_datatypes:decode_string(Rest1),
-            {ok, {ErrorCode, ErrorDescription, {Availability, Received, Required, WriteType}}};
-
-        16#1200 -> % Read Timeout Exception
-            << Availability:?SHORT, Received:?INT, Required:?INT, DataPresent:?CHAR, _Rest/binary >> = Rest,
-            {ok, {ErrorCode, ErrorDescription, {Availability, Received, Required, DataPresent}}};
-
-        16#2400 -> % Already Existing Key Space or Table
-            {ok, KeySpace, Rest1} = cqerl_datatypes:decode_string(Rest),
-            {ok, Table, _Rest} = cqerl_datatypes:decode_string(Rest1),
-            ErrorData = case Table of
-                <<>> -> {key_space, KeySpace};
-                _ -> {table, KeySpace, Table}
-            end,
-            {ok, {ErrorCode, ErrorDescription, ErrorData}};
-
-        16#2500 -> % Unprepared Query
-            {ok, QueryID, _Rest} = cqerl_datatypes:decode_short_bytes(Rest),
-            {ok, {ErrorCode, ErrorDescription, QueryID}}
-    end;
+    Data = decode_error(ErrorCode, Rest),
+    {ok, {ErrorCode, ErrorDescription, Data}};
 
 decode_response_term(#cqerl_frame{opcode=?CQERL_OP_READY}, _Body) ->
     {ok, undefined};
@@ -707,4 +675,62 @@ decode_row(Row, ColumnSpecs, Opts) ->
             {Data, _Rest} = cqerl_datatypes:decode_data({Type, Size, ValueBin}, Opts),
             {Name, Data}
     end, lists:zip(Row, ColumnSpecs))).
+
+% Errors with no additional data
+decode_error(ErrorCode, _Body)
+  when ErrorCode =:= ?CQERL_ERROR_SERVER;
+       ErrorCode =:= ?CQERL_ERROR_PROTOCOL;
+       ErrorCode =:= ?CQERL_ERROR_AUTH;
+       ErrorCode =:= ?CQERL_ERROR_PROTOCOL;
+       ErrorCode =:= ?CQERL_ERROR_OVERLOADED;
+       ErrorCode =:= ?CQERL_ERROR_BOOTSTRAPPING;
+       ErrorCode =:= ?CQERL_ERROR_TRUNCATE;
+       ErrorCode =:= ?CQERL_ERROR_SYNTAX;
+       ErrorCode =:= ?CQERL_ERROR_UNAUTHORIZED;
+       ErrorCode =:= ?CQERL_ERROR_INVALID;
+       ErrorCode =:= ?CQERL_ERROR_CONFIG ->
+    undefined;
+
+decode_error(?CQERL_ERROR_UNAVAILABLE, Body) ->
+    << Availability:?SHORT, Required:?INT, Alive:?INT, _Rest/binary >> = Body,
+    {Availability, Required, Alive};
+
+decode_error(?CQERL_ERROR_WTIMEOUT, Body) ->
+    << Consistency:?SHORT, Received:?INT, BlockFor:?INT, Rest/binary >> = Body,
+    {ok, WriteType, _Rest} = cqerl_datatypes:decode_string(Rest),
+    {Consistency, Received, BlockFor, WriteType};
+
+decode_error(?CQERL_ERROR_RTIMEOUT, Body) ->
+    << Consistency:?SHORT, Received:?INT, BlockFor:?INT,
+       DataPresent:?CHAR, _Rest/binary >> = Body,
+    {Consistency, Received, BlockFor, DataPresent};
+
+decode_error(?CQERL_ERROR_RFAILURE, Body) ->
+    << Consistency:?SHORT, Received:?INT, BlockFor:?INT,
+       NumFailures:?INT, DataPresent:?CHAR, _Rest/binary >> = Body,
+    {Consistency, Received, BlockFor, NumFailures, DataPresent};
+
+decode_error(?CQERL_ERROR_FUN_FAILURE, Body) ->
+    {ok, Keyspace, Rest1} = cqerl_datatypes:decode_string(Body),
+    {ok, Function, Rest2} = cqerl_datatypes:decode_string(Rest1),
+    {ok, ArgTypes, _Rest} = cqerl_datatypes:decode_string_list(Rest2),
+    {Keyspace, Function, ArgTypes};
+
+decode_error(?CQERL_ERROR_WFAILURE, Body) ->
+    << Consistency:?SHORT, Received:?INT, BlockFor:?INT,
+       NumFailures:?INT, Rest/binary >> = Body,
+    {ok, WriteType, _Rest} = cqerl_datatypes:decode_string(Rest),
+    {Consistency, Received, BlockFor, NumFailures, WriteType};
+
+decode_error(?CQERL_ERROR_ALREADY_EXISTS, Body) ->
+    {ok, KeySpace, Rest} = cqerl_datatypes:decode_string(Body),
+    {ok, Table, _Rest} = cqerl_datatypes:decode_string(Rest),
+    case Table of
+        <<>> -> {key_space, KeySpace};
+        _ -> {table, KeySpace, Table}
+    end;
+
+decode_error(?CQERL_ERROR_UNPREPARED, Body) ->
+    {ok, QueryID, _Rest} = cqerl_datatypes:decode_short_bytes(Body),
+    QueryID.
 

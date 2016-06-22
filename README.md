@@ -33,8 +33,7 @@ CQErl was designed to be as simple as possible on your side. You just provide th
 If you installed Cassandra and didn't change any configuration related to authentication or SSL, you should be able to connect like this
 
 ```erlang
-G = cqerl:add_group(["localhost"], [], 1),
-cqerl:wait_for_group(G).
+cqerl:add_group(["localhost"], [], 1).
 ```
 
 * The first argument to `cqerl:add_group/3` is the set of nodes to which you wish to connect in the form `{IP, Port}`, `IP`, or `Hostname`. `IP` may be a string, binary or tuple as described in the `inet` manual.
@@ -58,9 +57,9 @@ cqerl:wait_for_group(G).
 
 * The third argument is the number of clients to start *per node*.
 
-* The `cqerl:wait_for_group/1` call blocks until *at least one* client from the group is connected and available. Attempts to run queries before this point may procude `no_clients` errors.
+* The `cqerl:add_group/[3,4]` call blocks until *at least one* client from the group is connected and available. Once the call returns, queries should be able to be run using clients from it.
 
-* Groups may be named, using `cqerl:add_group/4` and supplying a name (any term) as the first parameter. This name may be passed to `cqerl:wait_for_group/1`.
+* Groups may be named, using `cqerl:add_group/4` and supplying a name (any term) as the first parameter. See [Named Groups](#named-groups) below.
 
 #### Using environment variables
 
@@ -85,7 +84,7 @@ Groups of clients may be configured though the application config, for example:
   ]}
 ```
 
-Doing so will fire up connection pools as soon as the CQErl application is started. `cqerl:wait_for_group/1` is automatically called in this case, so once cqerl has started, clients should be available immediately.
+Doing so will fire up connection pools as soon as the CQErl application is started. Once cqerl has started, clients should be available immediately.
 
 The `name` and `opts` fields are optional; `hosts` and `clients_per_server` must be included.
 
@@ -342,11 +341,16 @@ cqerl:run_query(#cqerl_query{statement = "SELECT * FROM user_db.user WHERE id = 
                              values = #{id => 'user1'})
 ```
 
+### Named Groups
+As an alternative to client groups that are selected based on keyspace, groups may also be assigned a name. This is done either by using `cqerl:add_group/4` or by including the `name` attribute in the `client_group` configuration item.
+
+Named groups are never automatically used by - instead
+
 ### Changes from cqerl
 This rework contains a number of compatability-breaking changes from the original `cqerl`. Specifically:
 
 * Proplist support for value lists and returned rows has been removed. Only maps are now used.
-* The `get_client` and `close_client` calls no longer exist nor are needed. Instead, see `add_group` and `wait_for_group`.
+* The `get_client` and `close_client` calls no longer exist nor are needed. Instead, see `add_group`.
 * It is no longer compatible with Erlang versions prior to 18.3.
 * rebar3 is now used as the build system, replacing the older version.
 

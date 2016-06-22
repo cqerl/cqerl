@@ -89,13 +89,11 @@ all() ->
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
     Config2 = test_helper:standard_setup(Config),
-    G = cqerl:add_group(["localhost"], Config, 1),
-    cqerl:wait_for_group(G),
+    cqerl:add_group(["localhost"], Config, 1),
 
     test_helper:create_keyspace(<<"test_keyspace_1">>, Config2),
 
-    G2 = cqerl:add_group(["localhost"], [{keyspace, "test_keyspace_1"} | Config], 10),
-    cqerl:wait_for_group(G2),
+    cqerl:add_group(["localhost"], [{keyspace, "test_keyspace_1"} | Config], 10),
 
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =
@@ -203,12 +201,12 @@ single_client(_Config) ->
               {ok, T} = orddict:find(Tag, Acc),
               F(F, N, M-1, orddict:store(Tag, timer:now_diff(os:timestamp(), T), Acc));
           send_request ->
-              Tag = cqerl:send_query(Q#cql_query{values=#{id => N, name => "test"}}),
+              {ok, Tag} = cqerl:send_query(Q#cql_query{values=#{id => N, name => "test"}}),
               F(F, N-1, M, orddict:store(Tag, os:timestamp(), Acc));
           OtherMsg ->
               ct:fail("Unexpected response ~p", [OtherMsg])
 
-      after 1000 -> 
+      after 1000 ->
                 ct:fail("All delayed messages did not arrive in time")
       end
                   end,

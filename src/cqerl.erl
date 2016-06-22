@@ -11,6 +11,9 @@
     run_query/2,
     send_query/2,
 
+    run_query_named/2,
+    send_query_named/2,
+
     has_more_pages/1,
     fetch_more/1,
     fetch_more_async/1,
@@ -30,10 +33,11 @@
 
     add_group/3,
     add_group/4,
-    wait_for_group/1,
 
     get_protocol_version/0,
-    put_protocol_version/1
+    put_protocol_version/1,
+
+    wait_for_schema_agreement/0
 ]).
 
 -include("cqerl.hrl").
@@ -65,16 +69,21 @@ start() ->
 %% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
 %% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
 
--spec run_query(Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+-spec run_query(query()) -> query_result().
 run_query(Query) ->
     NQuery = normalise_query(Query),
-    case select_client(NQuery) of
-        {error, E} -> {error, E};
-        {ok, Client} -> cqerl_client:run_query(Client, NQuery)
-    end.
+    Client = select_client(NQuery),
+    maybe_run_query_with_client(Client, NQuery).
 
+-spec run_query(keyspace(), query_statement()) -> query_result().
 run_query(KS, Q) ->
     run_query(#cql_query{keyspace = KS, statement = Q}).
+
+-spec run_query_named(term(), query()) -> query_result().
+run_query_named(Name, Query) ->
+    NQuery = normalise_query(Query),
+    Client = cqerl_client_pool:get_client(Name),
+    maybe_run_query_with_client(Client, NQuery).
 
 %% @doc Check to see if there are more result available
 
@@ -106,16 +115,22 @@ fetch_more(Continuation) ->
 %% Neither of these messages will be sent if the connection is dropped before receiving a response (see {@link new_client/0} for
 %% how to handle this case).
 
--spec send_query(Query :: binary() | string() | #cql_query{}) -> reference().
+-spec send_query(query()) -> async_query_result().
 send_query(Query) ->
     NQuery = normalise_query(Query),
-    case select_client(NQuery) of
-        {error, E} -> {error, E};
-        {ok, Client} -> cqerl_client:query_async(Client, NQuery)
-    end.
+    Client = select_client(NQuery),
+    maybe_send_query_with_client(Client, NQuery).
 
+-spec send_query(keyspace(), query_statement()) -> async_query_result().
 send_query(KS, Q) ->
     send_query(#cql_query{keyspace = KS, statement = Q}).
+
+-spec send_query_named(term(), query()) -> async_query_result().
+send_query_named(Name, Query) ->
+    NQuery = normalise_query(Query),
+    Client = cqerl_client_pool:get_client(Name),
+    maybe_send_query_with_client(Client, NQuery).
+
 
 %% @doc Asynchronously fetch the next page of result from cassandra for a given continuation.
 %%
@@ -206,11 +221,12 @@ add_group(Name, Hosts, Opts, ClientsPerServer) ->
                           Name, normalise_node(Host), FullOpts, ClientsPerServer)
       end,
       Hosts),
+    cqerl_client_pool:wait_for_client(Name),
     Name.
 
--spec wait_for_group(group_name()) -> ok.
-wait_for_group(Name) ->
-    cqerl_client_pool:wait_for_client(Name).
+-spec wait_for_schema_agreement() -> ok.
+wait_for_schema_agreement() ->
+    cqerl_schema:wait_for_schema_agreement().
 
 %% =================
 %% Private functions
@@ -252,6 +268,13 @@ get_protocol_version() ->
 put_protocol_version(Val) when is_integer(Val) ->
     put(protocol_version, Val).
 
+maybe_run_query_with_client({error, E}, _) -> {error, E};
+maybe_run_query_with_client({ok, Client}, Query) ->
+    cqerl_client:run_query(Client, Query).
+
+maybe_send_query_with_client({error, E}, _) -> {error, E};
+maybe_send_query_with_client({ok, Client}, Query) ->
+    {ok, cqerl_client:query_async(Client, Query)}.
 
 select_client(#cql_query_batch{keyspace = Keyspace}) ->
     random_select_client(Keyspace);
@@ -292,3 +315,5 @@ ta_select_client(Query = #cql_query{keyspace = Keyspace}) ->
 
 random_select_client(Keyspace) ->
     cqerl_client_pool:get_random_client(Keyspace).
+
+

@@ -148,13 +148,11 @@ end_per_suite(_Config) ->
 %%--------------------------------------------------------------------
 
 init_per_group(init, Config) ->
-    G = cqerl:add_group(["localhost"], Config, 10),
-    cqerl:wait_for_group(G),
+    cqerl:add_group(["localhost"], Config, 10),
     Config;
 init_per_group(main_tests, Config) ->
     NewConfig = [{keyspace, "test_keyspace_2"} | Config],
-    G = cqerl:add_group(["localhost"], NewConfig, 10),
-    cqerl:wait_for_group(G),
+    cqerl:add_group(["localhost"], NewConfig, 10),
     NewConfig;
 init_per_group(_, Config) ->
     Config.
@@ -220,7 +218,8 @@ create_keyspace(Config) ->
 create_table(_Config) ->
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries1">>}} =
-    cqerl:run_query(#cql_query{statement = Q, keyspace = test_keyspace_2}).
+    cqerl:run_query(#cql_query{statement = Q, keyspace = test_keyspace_2}),
+    cqerl:wait_for_schema_agreement().
 
 simple_insertion_roundtrip(_Config) ->
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
@@ -285,7 +284,7 @@ missing_prepared_batch(_Config) ->
     {ok, _Result} = cqerl:run_query(Batch).
 
 async_insertion_roundtrip(_Config) ->
-    Ref = cqerl:send_query(#cql_query{
+    {ok, Ref} = cqerl:send_query(#cql_query{
         statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
         values = maps:from_list([
             {id, "1234123"},
@@ -296,7 +295,7 @@ async_insertion_roundtrip(_Config) ->
     }),
     receive {cqerl_result, Ref, void} -> ok end,
 
-    Ref2 = cqerl:send_query(#cql_query{statement = <<"SELECT * FROM entries1;">>, keyspace = test_keyspace_2}),
+    {ok, Ref2} = cqerl:send_query(#cql_query{statement = <<"SELECT * FROM entries1;">>, keyspace = test_keyspace_2}),
     receive
         {cqerl_result, Ref2, Result=#cql_result{}} ->
             {_Row, Result2} = cqerl:next(Result),
@@ -440,6 +439,7 @@ all_datatypes(Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow2}),
     {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1}),
@@ -494,6 +494,7 @@ custom_encoders(_Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2_1">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     InsQ = #cql_query{statement = <<"INSERT INTO entries2_1(col1, col2, col3) VALUES (?, ?, ?)">>, keyspace = test_keyspace_2},
     {ok, void} = cqerl:run_query(InsQ#cql_query{values=RRow1=maps:from_list([
@@ -542,6 +543,7 @@ options(_Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries2_2">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     UUIDState = uuid:new(self()),
     {TimeUUID, _} = uuid:get_v1(UUIDState),
@@ -571,6 +573,7 @@ collection_types(_Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries3">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"INSERT INTO entries3(key, numbers, names, phones) values (?, ?, ?, ?);">>,
@@ -608,6 +611,7 @@ counter_type(_Config) ->
     ct:log("Executing : ~s~n", [CreationQ]),
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries4">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     {ok, void} = cqerl:run_query(#cql_query{
         statement = <<"UPDATE entries4 SET count = count + ? WHERE key = ?;">>,
@@ -641,6 +645,7 @@ varint_type(_Config) ->
                              keyspace = <<"test_keyspace_2">>,
                              name = <<"varint_test">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     Statement = "INSERT INTO varint_test(key, sval) VALUES (?, ?)",
 
@@ -651,15 +656,14 @@ varint_type(_Config) ->
                                  values = maps:from_list(
                                             [{key, K},
                                              {sval, integer_to_list(K)}
-                                          ]),
+                                            ]),
                                   keyspace = test_keyspace_2})
       end,
       TestVals),
 
     Statement2 = "SELECT * FROM varint_test",
-    {ok, Result} = cqerl:run_query(#cql_query{statement =
-                                                      Statement2,
-                                                     page_size = 2000,
+    {ok, Result} = cqerl:run_query(#cql_query{statement = Statement2,
+                                              page_size = 2000,
                                               keyspace = test_keyspace_2}),
     Rows = cqerl:all_rows(Result),
     Vals = lists:sort(check_extract_varints(Rows)),
@@ -676,7 +680,7 @@ varint_test_ranges() ->
               {65530, 65540},
               % Huge ints:
               {100000000000000000000000, 100000000000000000000099},
-              % Super Huge ints - way more than 2^64: 
+              % Super Huge ints - way more than 2^64:
               {100000000000000000000000000000000000000000000000,
                100000000000000000000000000000000000000000000099},
               % Small negative:
@@ -710,6 +714,7 @@ decimal_type(_Config) ->
                              keyspace = <<"test_keyspace_2">>,
                              name = <<"decimal_test">>}} =
         cqerl:run_query(test_keyspace_2, CreationQ),
+    cqerl:wait_for_schema_agreement(),
 
     Statement = "INSERT INTO decimal_test(key, scale, unscaled)
                  VALUES (?, ?, ?)",

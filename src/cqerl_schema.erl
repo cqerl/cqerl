@@ -12,7 +12,8 @@
          remove_node/1,
          select_client/1,
          force_refresh/0,
-         handle_event/1
+         handle_event/1,
+         wait_for_schema_agreement/0
         ]).
 
 -export([init/1,
@@ -34,8 +35,13 @@
           type :: atom() | '_'
          }).
 
+-record(node, {
+          node :: cqerl_node(),
+          schema_version :: binary()
+         }).
+
 -record(state, {
-          nodes = [] :: [cqerl_node()]
+          schema_waiters = [] :: [term()]
          }).
 
 start_link() ->
@@ -73,6 +79,9 @@ handle_event(#topology_change{type = ?CQERL_TOPOLOGY_CHANGE_TYPE_REMOVED_NODE,
 handle_event(_) ->
     ok.
 
+wait_for_schema_agreement() ->
+    gen_server:call(?MODULE, wait_for_schema_agreement, infinity).
+
 init(_) ->
     _ = ets:new(token_nodes, [protected, named_table, ordered_set,
                               {read_concurrency, true},
@@ -80,22 +89,22 @@ init(_) ->
     _ = ets:new(cqerl_schema, [protected, named_table, bag,
                                {read_concurrency, true},
                                {keypos, #column.key}]),
+    _ = ets:new(cqerl_nodes, [protected, named_table, set,
+                              {keypos, #node.node}]),
     {ok, #state{}}.
 
-handle_cast({add_node, Node, Opts}, State = #state{nodes = Nodes}) ->
-    NewNodes =
-    case lists:member(Node, Nodes) of
-        true ->
-            Nodes;
-        false ->
-            do_add_node(Node, Opts),
-            [Node | Nodes]
+handle_cast({add_node, Node, Opts}, State = #state{}) ->
+    NewState = case ets:lookup(cqerl_nodes, Node) of
+        [] ->
+            do_add_node(Node, Opts, State);
+        _ ->
+            State
     end,
-    {noreply, State#state{nodes = NewNodes}};
+    {noreply, NewState};
 
-handle_cast(refresh, State = #state{nodes = Nodes}) ->
-    lists:foreach(fun read_metadata/1, Nodes),
-    {noreply, State};
+handle_cast(refresh, State) ->
+    NewState = lists:foldl(fun read_metadata/2, State, known_nodes()),
+    {noreply, NewState};
 
 handle_cast({refresh_keyspace, Keyspace}, State) ->
     ets:match_delete(cqerl_schema, #column{key = {Keyspace, '_'}, _='_'}),
@@ -107,11 +116,18 @@ handle_cast({refresh_table, Keyspace, Table}, State) ->
 
 handle_cast({remove_node, Node}, State) ->
     ets:match_delete(token_nodes, #token_node{node = Node, _='_'}),
+    ets:delete(cqerl_nodes, Node),
     {noreply, State};
 
 handle_cast(_, State) ->
     {noreply, State}.
 
+handle_call(wait_for_schema_agreement, From,
+            State = #state{schema_waiters = Waiters}) ->
+    case schemas_agree() of
+        true -> {reply, ok, State};
+        false -> {noreply, State#state{schema_waiters = [From | Waiters]}}
+    end;
 
 handle_call(_, _, State) ->
     {reply, {error, bad_call}, State}.
@@ -126,28 +142,28 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-do_add_node(Node, Opts) ->
+do_add_node(Node, Opts, State) ->
     GroupName = schema_group_name(Node),
     NoKeyspace = proplists:delete(keyspace, Opts),
     FullOpts = [register_for_events | NoKeyspace],
     cqerl:add_group(GroupName, [Node], FullOpts, 1),
-    cqerl:wait_for_group(GroupName),
-    read_metadata(Node).
+    read_metadata(Node, State).
 
 schema_group_name(Node) ->
     {schema_reader, Node}.
 
-read_metadata(Node) ->
+read_metadata(Node, State) ->
     {ok, Client} = cqerl_client_pool:get_client(schema_group_name(Node)),
-    read_tokens(Node, Client),
-    read_schema(Client).
+    read_schema(Client),
+    read_node_data(Node, Client, State).
 
-read_tokens(Node, Client) ->
-    Q = "SELECT partitioner, tokens FROM system.local",
+read_node_data(Node, Client, State) ->
+    Q = "SELECT partitioner, tokens, schema_version FROM system.local",
     {ok, Result} = cqerl_client:run_query(
                      Client, #cql_query{statement = Q, keyspace = system}),
     Row = cqerl:head(Result),
-    process_tokens(Node, Row).
+    process_tokens(Node, Row),
+    update_node_data(Node, Row, State).
 
 process_tokens(Node, #{tokens := Tokens}) ->
     lists:foreach(
@@ -156,6 +172,23 @@ process_tokens(Node, #{tokens := Tokens}) ->
               ets:insert(token_nodes,
                          #token_node{token = TokenInt, node = Node})
       end, Tokens).
+
+update_node_data(Node, #{schema_version := SchemaVersion}, State) ->
+    ets:insert(cqerl_nodes, #node{node = Node, schema_version = SchemaVersion}),
+    process_schema_waiters(State).
+
+process_schema_waiters(State = #state{schema_waiters = Waiters}) ->
+    case schemas_agree() of
+        true ->
+            notify_waiters(Waiters),
+            State#state{schema_waiters = []};
+        false ->
+            State
+    end.
+
+notify_waiters(Waiters) ->
+    lists:foreach(fun(W) -> gen_server:reply(ok, W) end,
+                  Waiters).
 
 read_schema(Client) ->
     Q = "SELECT keyspace_name, table_name, column_name, position, type FROM "
@@ -225,3 +258,10 @@ get_node(Key) ->
         [] -> {error, no_node};
         [#token_node{node = Node} | _] -> {ok, Node}
     end.
+
+known_nodes() ->
+    [Node#node.node || Node <- ets:tab2list(cqerl_nodes)].
+
+schemas_agree() ->
+    Schemas = [Node#node.schema_version || Node <- ets:tab2list(cqerl_nodes)],
+    length(lists:usort(Schemas)) =:= 1.

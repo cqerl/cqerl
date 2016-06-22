@@ -26,8 +26,7 @@ start_group({client_group, Opts}) ->
     Hosts = proplists:get_value(hosts, Opts),
     ClientsPerServer = proplists:get_value(clients_per_server, Opts),
     GroupOpts = proplists:get_value(opts, Opts, []),
-    G = cqerl:add_group(Name, Hosts, GroupOpts, ClientsPerServer),
-    cqerl:wait_for_group(G);
+    cqerl:add_group(Name, Hosts, GroupOpts, ClientsPerServer);
 
 start_group(_) ->
     error(bad_group_config).
