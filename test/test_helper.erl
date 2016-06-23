@@ -45,6 +45,7 @@ create_keyspace(KS, _Config) ->
         {ok, #cql_schema_changed{change_type=created, keyspace = KS}} -> ok;
         {error, {16#2400, _, {key_space, KS}}} ->
             {ok, #cql_schema_changed{change_type=dropped, keyspace = KS}} = cqerl:run_query(D),
+            cqerl:wait_for_schema_agreement(),
             {ok, #cql_schema_changed{change_type=created, keyspace = KS}} = cqerl:run_query(Q)
     end,
     cqerl:wait_for_schema_agreement().
@@ -54,7 +55,6 @@ requirements() ->
      {require, ssl, cqerl_test_ssl},
      {require, protocol_version, cqerl_protocol_version},
      {require, auth, cqerl_test_auth},
-     % {require, keyspace, cqerl_test_keyspace},
-     {require, host, cqerl_host}
+     {require, host, cqerl_hosts}
     ].
 

@@ -148,11 +148,13 @@ end_per_suite(_Config) ->
 %%--------------------------------------------------------------------
 
 init_per_group(init, Config) ->
-    cqerl:add_group(["localhost"], Config, 10),
+    Hosts = ct:get_config(cqerl_hosts),
+    cqerl:add_group(Hosts, Config, 10),
     Config;
 init_per_group(main_tests, Config) ->
     NewConfig = [{keyspace, "test_keyspace_2"} | Config],
-    cqerl:add_group(["localhost"], NewConfig, 10),
+    Hosts = ct:get_config(cqerl_hosts),
+    cqerl:add_group(Hosts, NewConfig, 10),
     NewConfig;
 init_per_group(_, Config) ->
     Config.
@@ -777,7 +779,7 @@ inserted_rows(N, Q, Acc) ->
 
 batches_and_pages(_Config) ->
     T1 = os:timestamp(),
-    N = 100,
+    N = 80,
     Bsz = 25,
     {ok, void} = cqerl:run_query(test_keyspace_2, "TRUNCATE entries1;"),
     Q = #cql_query{statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},

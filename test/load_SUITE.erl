@@ -89,11 +89,12 @@ all() ->
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
     Config2 = test_helper:standard_setup(Config),
-    cqerl:add_group(["localhost"], Config, 1),
+    Hosts = ct:get_config(cqerl_hosts),
+    cqerl:add_group(Hosts, Config, 1),
 
     test_helper:create_keyspace(<<"test_keyspace_1">>, Config2),
 
-    cqerl:add_group(["localhost"], [{keyspace, "test_keyspace_1"} | Config], 10),
+    cqerl:add_group(Hosts, [{keyspace, "test_keyspace_1"} | Config], 10),
 
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =

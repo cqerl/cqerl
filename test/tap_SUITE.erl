@@ -27,10 +27,10 @@ groups() ->
 init_per_suite(Config) ->
     application:ensure_started(cqerl),
     Config2 = test_helper:standard_setup(Config),
-    cqerl:add_group(["localhost"], Config, 1),
+    Hosts = ct:get_config(cqerl_hosts),
+    cqerl:add_group(Hosts, Config, 1),
     test_helper:create_keyspace(?KEYSPACE, Config2),
-    cqerl:add_group(["localhost", "10.1.1.32"],
-                    [{keyspace, ?KEYSPACE} | Config], 10),
+    cqerl:add_group(Hosts, [{keyspace, ?KEYSPACE} | Config], 10),
     UUIDs = [uuid:get_v4() || _ <- lists:seq(1, 10000)],
     [{uuids, UUIDs} | Config2].
 
