@@ -47,8 +47,7 @@ create_keyspace(KS, _Config) ->
             {ok, #cql_schema_changed{change_type=dropped, keyspace = KS}} = cqerl:run_query(D),
             {ok, #cql_schema_changed{change_type=created, keyspace = KS}} = cqerl:run_query(Q)
     end,
-    timer:sleep(3000). % C* can take a while on clusters to deal witha drop/create
-    % on a keyspace, leading to timeouts if we don't sleep
+    cqerl:wait_for_schema_agreement().
 
 requirements() ->
     [

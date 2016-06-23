@@ -22,7 +22,7 @@
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
 suite() ->
-  [{timetrap, {seconds, 20}} | test_helper:requirements()].
+  [{timetrap, {seconds, 40}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -60,11 +60,11 @@ database_tests() ->
      missing_prepared_query,
      missing_prepared_batch,
      options,
-     {transactions, [parallel],
+     {transactions,
       [
-       {types, [parallel],
+       {types,
         [
-         all_datatypes, 
+         all_datatypes,
          % custom_encoders,
          collection_types,
          counter_type,
@@ -219,9 +219,12 @@ create_table(_Config) ->
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries1">>}} =
     cqerl:run_query(#cql_query{statement = Q, keyspace = test_keyspace_2}),
-    cqerl:wait_for_schema_agreement().
+    ct:log("Agreement wait: ~p", [timer:tc(fun cqerl:wait_for_schema_agreement/0)]),
+    ct:log("Schemas: ~p", [ets:tab2list(cqerl_nodes)]).
 
 simple_insertion_roundtrip(_Config) ->
+    timer:sleep(3000),
+    ct:log("Schemas: ~p", [ets:tab2list(cqerl_nodes)]),
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
     {ok, void} = cqerl:run_query(#cql_query{
                                     statement=Q,
@@ -259,6 +262,7 @@ missing_prepared_query(_Config) ->
                                                keyspace = test_keyspace_2}),
     %% This query causes prepared queries on the table to be invalidated:
     {ok, _} = cqerl:run_query(test_keyspace_2, "ALTER TABLE entries1 ADD newcol int"),
+    cqerl:wait_for_schema_agreement(),
     %% This query will attempt to use the prepared query and fail, falling back to re-preparing it:
     {ok, _Result2} = cqerl:run_query(#cql_query{statement = Q,
                                                 values = #{id => "def",
@@ -280,6 +284,7 @@ missing_prepared_batch(_Config) ->
     {ok, _Result} = cqerl:run_query(Batch),
     %% This query causes prepared queries on the table to be invalidated:
     {ok, _} = cqerl:run_query(test_keyspace_2, "ALTER TABLE entries1 ADD newcol2 int"),
+    cqerl:wait_for_schema_agreement(),
     %% This query will attempt to use the prepared queries and fail, falling back to re-preparing them:
     {ok, _Result} = cqerl:run_query(Batch).
 
@@ -651,6 +656,7 @@ varint_type(_Config) ->
 
     TestVals = varint_test_ranges(),
     lists:foreach(fun(K) ->
+                          ct:log("Running for ~p", [K]),
       {ok, void} =
       cqerl:run_query( #cql_query{statement = Statement,
                                  values = maps:from_list(

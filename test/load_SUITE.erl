@@ -50,7 +50,7 @@ tests() ->
 
 groups() ->
     [
-     {hash, [sequence], tests()}
+     {hash, tests()}
     ].
 
 %%--------------------------------------------------------------------
@@ -98,7 +98,7 @@ init_per_suite(Config) ->
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =
     cqerl:run_query(test_keyspace_1, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
-
+    cqerl:wait_for_schema_agreement(),
     Config2.
 
 %%--------------------------------------------------------------------

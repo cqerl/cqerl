@@ -7,6 +7,8 @@
 
 -compile({parse_transform, do}).
 
+-define(SCHEMA_POLL_INTERVAL, 500).
+
 -export([start_link/0,
          add_node/2,
          remove_node/1,
@@ -37,7 +39,8 @@
 
 -record(node, {
           node :: cqerl_node(),
-          schema_version :: binary()
+          schema_version :: binary(),
+          peers = [] :: [{cqerl_node(), binary()}]
          }).
 
 -record(state, {
@@ -103,7 +106,7 @@ handle_cast({add_node, Node, Opts}, State = #state{}) ->
     {noreply, NewState};
 
 handle_cast(refresh, State) ->
-    NewState = lists:foldl(fun read_metadata/2, State, known_nodes()),
+    NewState = refresh_metadata(State),
     {noreply, NewState};
 
 handle_cast({refresh_keyspace, Keyspace}, State) ->
@@ -124,14 +127,18 @@ handle_cast(_, State) ->
 
 handle_call(wait_for_schema_agreement, From,
             State = #state{schema_waiters = Waiters}) ->
-    case schemas_agree() of
-        true -> {reply, ok, State};
-        false -> {noreply, State#state{schema_waiters = [From | Waiters]}}
-    end;
+    Waiters =:= [] andalso self() ! poll_schema,
+    {noreply, State#state{schema_waiters = [From | Waiters]}};
 
 handle_call(_, _, State) ->
     {reply, {error, bad_call}, State}.
 
+handle_info(poll_schema, State = #state{schema_waiters = []}) ->
+    {noreply, State};
+
+handle_info(poll_schema, State) ->
+    NewState = refresh_metadata(State),
+    {noreply, NewState};
 
 handle_info(_, State) ->
     {noreply, State}.
@@ -149,6 +156,9 @@ do_add_node(Node, Opts, State) ->
     cqerl:add_group(GroupName, [Node], FullOpts, 1),
     read_metadata(Node, State).
 
+refresh_metadata(State) ->
+    lists:foldl(fun read_metadata/2, State, known_nodes()).
+
 schema_group_name(Node) ->
     {schema_reader, Node}.
 
@@ -160,10 +170,14 @@ read_metadata(Node, State) ->
 read_node_data(Node, Client, State) ->
     Q = "SELECT partitioner, tokens, schema_version FROM system.local",
     {ok, Result} = cqerl_client:run_query(
-                     Client, #cql_query{statement = Q, keyspace = system}),
+                     Client, #cql_query{statement = Q}),
     Row = cqerl:head(Result),
+    Q2 = "SELECT peer, schema_version FROM system.peers",
+    {ok, Result2} = cqerl_client:run_query(
+                     Client, #cql_query{statement = Q2}),
+    Peers = cqerl:all_rows(Result2),
     process_tokens(Node, Row),
-    update_node_data(Node, Row, State).
+    update_node_data(Node, Row, Peers, State).
 
 process_tokens(Node, #{tokens := Tokens}) ->
     lists:foreach(
@@ -173,8 +187,12 @@ process_tokens(Node, #{tokens := Tokens}) ->
                          #token_node{token = TokenInt, node = Node})
       end, Tokens).
 
-update_node_data(Node, #{schema_version := SchemaVersion}, State) ->
-    ets:insert(cqerl_nodes, #node{node = Node, schema_version = SchemaVersion}),
+update_node_data(Node, #{schema_version := SchemaVersion}, Peers, State) ->
+    PeerList = [{Peer, PeerSchemaVersion} ||
+                #{peer := Peer, schema_version := PeerSchemaVersion} <- Peers],
+    ets:insert(cqerl_nodes, #node{node = Node,
+                                  schema_version = SchemaVersion,
+                                  peers = PeerList}),
     process_schema_waiters(State).
 
 process_schema_waiters(State = #state{schema_waiters = Waiters}) ->
@@ -183,11 +201,12 @@ process_schema_waiters(State = #state{schema_waiters = Waiters}) ->
             notify_waiters(Waiters),
             State#state{schema_waiters = []};
         false ->
+            erlang:send_after(?SCHEMA_POLL_INTERVAL, self(), poll_schema),
             State
     end.
 
 notify_waiters(Waiters) ->
-    lists:foreach(fun(W) -> gen_server:reply(ok, W) end,
+    lists:foreach(fun(W) -> gen_server:reply(W, ok) end,
                   Waiters).
 
 read_schema(Client) ->
@@ -263,5 +282,8 @@ known_nodes() ->
     [Node#node.node || Node <- ets:tab2list(cqerl_nodes)].
 
 schemas_agree() ->
-    Schemas = [Node#node.schema_version || Node <- ets:tab2list(cqerl_nodes)],
-    length(lists:usort(Schemas)) =:= 1.
+    Nodes = ets:tab2list(cqerl_nodes),
+    LocalSchemas = [Node#node.schema_version || Node <- Nodes],
+    Peers = lists:append([Node#node.peers || Node <- Nodes]),
+    RemoteSchemas = [Schema || {_Node, Schema} <- Peers],
+    length(lists:usort(LocalSchemas ++ RemoteSchemas)) =:= 1.
