@@ -94,7 +94,7 @@
 -type keyspace() :: binary() | atom() | string().
 
 -record(cql_query, {
-    statement   = <<>>      :: iodata(),
+    statement   = <<>>      :: query_statement(),
     keyspace    = undefined :: keyspace(),
     values      = #{}       :: map(),
 
@@ -139,9 +139,9 @@
     args        :: [ binary() ]
 }).
 
--type query_statement() :: binary() | string().
+-type query_statement() :: iodata().
 -type query() :: query_statement() | #cql_query{} | #cql_query_batch{}.
 -type query_result() :: {ok, void | #cql_result{}} | {error, term()}.
--type async_query_result() :: {ok, reference()} | {error, term()}.
+-type async_query_result() :: {ok, reference()} | {error, no_clients}.
 
 -endif. % _CQERL_HRL_
