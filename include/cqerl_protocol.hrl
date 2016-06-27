@@ -50,9 +50,6 @@
 
 -include("cqerl.hrl").
 
-
--include("cqerl.hrl").
-
 -type compression_type() :: lz4 | snappy | undefined.
 
 -record(cqerl_frame, {
