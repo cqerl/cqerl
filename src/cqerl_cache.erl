@@ -123,8 +123,40 @@ init(_Args) ->
                                               ])
     }}.
 
-handle_call({remove, ClientPid, Statements}, _From, State = #state{cached_queries = Cache}) ->
-    lists:foreach(fun(Statement) -> ets:delete(Cache, {ClientPid, Statement}) end, Statements),
+handle_call({remove, _ClientPid, Statements}, _From, State = #state{cached_queries = Cache}) ->
+    %% This is a mildly inefficient but quite effective workaround to the prepared query
+    %% stale column spec bug.  https://issues.apache.org/jira/browse/CASSANDRA-10786
+    %% Here's the catch...this is from the CQL binary protocol spec:
+    %%
+    %% "Note that the prepared query ID returned is global to the node on which the query
+    %%  has been prepared. It can be used on any connection to that node
+    %%  until the node is restarted (after which the query must be reprepared)."
+    %%
+    %% Until v5, Query IDs *don't change* when reprepared for the same statement, and that
+    %% causes much turmoil here...here's why:
+    %%
+    %% Say we have multiple connections (cqerl_clients) to the same node, and they've all
+    %% prepared the same query and have it cached -- all with the same Query ID.  Now say
+    %% we ALTER TABLE.  The next client to send the query will get 0x2500 and end up here.
+    %% Remove the query from cache and reprepare.  But the _other_ clients all have that
+    %% same query -- with the same Query ID -- cached with incorrect column specs.  And
+    %% since the Cassandra node thinks it's _done_ once it has reprepared the query, it
+    %% can't tell the difference down the line between client A and client B sending the
+    %% same Query ID.  And that's why we crash.
+    %%
+    %% I'm left to assume that the Cassandra authors intended for all drivers to utilize
+    %% a shared query cache.  And...that would probably be a better long-term change here,
+    %% but it would be a pretty massive change.  Short of that, we can get the "shared"
+    %% effect by removing a given query for _all_ clients when removing it for one.
+    %%
+    %% The net effect is that all of the clients would subsequently need to reprepare
+    %% the next time they send that query.  It's a small price to pay for stability, and
+    %% technically it reduces some round trips anyway -- the other clients no longer need
+    %% to "discover" the 0x2500 on their own.  Again, I think a shared query cache would
+    %% be a better solution, but this works for now.
+    lists:foreach(fun(Statement) ->
+                          ets:match_delete(Cache, #cqerl_cached_query{key = {'_', Statement}, _='_'})
+                  end, Statements),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
