@@ -24,7 +24,7 @@
   0},
  {<<"snappy">>,
   {git,"https://github.com/fdmanana/snappy-erlang-nif",
-       {ref,"76417d16a8d39e04d66114d8f8a3c75df19474f0"}},
+       {ref,"c4cd1bb35f3a3a399737d64bd03b479817b90e75"}},
   0},
  {<<"uuid">>,
   {git,"https://github.com/okeuday/uuid",
