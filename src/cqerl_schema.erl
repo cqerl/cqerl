@@ -27,7 +27,7 @@
 
 -record(token_node, {
           token :: integer() | '_',
-          node :: cqerl_node()
+          node :: cqerl:cqerl_node()
          }).
 
 -record(column, {
@@ -38,9 +38,9 @@
          }).
 
 -record(node, {
-          node :: cqerl_node(),
+          node :: cqerl:cqerl_node(),
           schema_version :: binary(),
-          peers = [] :: [{cqerl_node(), binary()}]
+          peers = [] :: [{cqerl:cqerl_node(), binary()}]
          }).
 
 -record(state, {

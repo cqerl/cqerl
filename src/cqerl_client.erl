@@ -39,7 +39,7 @@
     authargs :: list(any()),
 
     %% Information about the connection
-    node :: cqerl_node(),
+    node :: cqerl:cqerl_node(),
     trans :: atom(),
     socket :: gen_tcp:socket() | ssl:sslsocket(),
     compression_type :: undefined | snappy | lz4,

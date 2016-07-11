@@ -37,7 +37,7 @@
 
 -include("cqerl.hrl").
 
--callback auth_init([any()], binary(), cqerl_node()) ->
+-callback auth_init([any()], binary(), cqerl:cqerl_node()) ->
   {reply, Response :: binary(), State :: any()} | {close, Reason :: any()}.
 
 -callback auth_handle_challenge(binary(), State :: any()) ->

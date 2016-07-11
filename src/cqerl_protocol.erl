@@ -41,7 +41,7 @@ encode_query_valuelist(Values) when is_list(Values) ->
     << ValuesLength:?SHORT, BytesSequence/binary >>.
 
 
--spec encode_consistency_name(consistency_level() | consistency_level_int()) -> consistency_level_int().
+-spec encode_consistency_name(cqerl:consistency_level() | cqerl:consistency_level_int()) -> cqerl:consistency_level_int().
 encode_consistency_name(Name) when is_integer(Name) -> Name;
 encode_consistency_name(any)          -> ?CQERL_CONSISTENCY_ANY;
 encode_consistency_name(one)          -> ?CQERL_CONSISTENCY_ONE;
@@ -53,7 +53,7 @@ encode_consistency_name(local_quorum) -> ?CQERL_CONSISTENCY_LOCAL_QUORUM;
 encode_consistency_name(each_quorum)  -> ?CQERL_CONSISTENCY_EACH_QUORUM;
 encode_consistency_name(local_one)    -> ?CQERL_CONSISTENCY_LOCAL_ONE.
 
--spec encode_serial_consistency_name(serial_consistency() | serial_consistency_int() | undefined) -> 0 | serial_consistency_int().
+-spec encode_serial_consistency_name(cqerl:serial_consistency() | cqerl:serial_consistency_int() | undefined) -> 0 | cqerl:serial_consistency_int().
 encode_serial_consistency_name(Name) when is_integer(Name) -> Name;
 encode_serial_consistency_name(undefined)    -> 0;
 encode_serial_consistency_name(serial)       -> ?CQERL_CONSISTENCY_SERIAL;
@@ -426,7 +426,7 @@ prepare_frame(Frame, CQLStatement) when is_binary(CQLStatement) ->
 %% @doc Given frame options and the list of events, produce a 'REGISTER' request
 %%            frame encoded in the protocol format.
 
--spec register_frame(RequestFrame :: #cqerl_frame{}, EventList :: [event_type()]) ->
+-spec register_frame(RequestFrame :: #cqerl_frame{}, EventList :: [cqerl:event_type()]) ->
     {ok, binary()}.
 
 register_frame(Frame=#cqerl_frame{}, EventList) when is_list(EventList) ->
@@ -469,7 +469,7 @@ execute_frame(Frame=#cqerl_frame{},
                                 << QueryIDBin/binary, QueryParametersBin/binary >>).
 
 
--spec encode_mode_name(batch_mode() | batch_mode_int()) -> batch_mode_int().
+-spec encode_mode_name(cqerl:batch_mode() | cqerl:batch_mode_int()) -> cqerl:batch_mode_int().
 encode_mode_name(Mode) when is_integer(Mode) -> Mode;
 encode_mode_name(logged)   -> ?CQERL_BATCH_LOGGED;
 encode_mode_name(unlogged) -> ?CQERL_BATCH_UNLOGGED;

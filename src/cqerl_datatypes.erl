@@ -7,6 +7,11 @@
 -define(INT,   32/big-signed-integer).
 -define(MAX_SHORT, 65535).
 
+-define(CQERL_PARSE_ADDR (Addr), case erlang:function_exported(inet, parse_address, 1) of
+    true -> inet:parse_address(Addr);
+    false -> inet_parse:address(Addr)
+  end).
+
 -export([encode_string/1,
          encode_long_string/1,
          encode_bytes/1,
@@ -243,7 +248,7 @@ decode_multimap_to_proplist(Binary, Num, Acc) when is_binary(Binary) ->
 
 
 
--spec encode_data({Type :: datatype() | {datatype(), term()}, Value :: term()}, Query :: #cql_query{}) -> binary().
+-spec encode_data({Type :: cqerl:datatype() | {cqerl:datatype(), term()}, Value :: term()}, Query :: #cql_query{}) -> binary().
 
 encode_data({_Type, null}, _Query) ->
     null;
@@ -448,7 +453,7 @@ encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_f
 
 encode_data({Type, Rest}, _Query) -> throw({bad_param_type, Type, Rest}).
 
--spec decode_data({Type :: datatype(), NullSize :: integer(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
+-spec decode_data({Type :: cqerl:datatype(), NullSize :: integer(), Buffer :: binary()}, Opts :: [{ atom(), any() } | atom()]) -> {Value :: term(), Rest :: binary()}.
 
 decode_data({_Type, NullSize, Bin}, _Opts) when NullSize < 0 ->
     {null, Bin};
