@@ -267,7 +267,8 @@ encode_data({uuid, new}, _Query) ->
 encode_data({uuid, strong}, _Query) ->
     uuid:get_v4(strong);
 encode_data({uuid, weak}, _Query) ->
-    uuid:get_v4(weak);
+    %% The 'weak' option is no longer supported by the uuid library.
+    uuid:get_v4(strong);
 
 encode_data({UuidType, Uuid}, _Query) when UuidType == uuid orelse UuidType == timeuuid ->
     case Uuid of
