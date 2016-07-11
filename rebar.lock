@@ -4,7 +4,7 @@
   0},
  {<<"erlang_murmurhash">>,
   {git,"https://github.com/hippware/erlang-murmurhash",
-       {ref,"9c495541353e617fa96d11d1ba2c18d1eeef42e1"}},
+       {ref,"73fe63aad252c9d503c889935f30370995026403"}},
   0},
  {<<"lz4">>,
   {git,"https://github.com/szktty/erlang-lz4",
