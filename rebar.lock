@@ -12,7 +12,7 @@
   0},
  {<<"quickrand">>,
   {git,"https://github.com/okeuday/quickrand.git",
-       {ref,"3eadabe05bddbffe9e3d5cf17a9384319d8756a1"}},
+       {ref,"8b6810b73427745bb6d4f10ae9bfc66983b3b2a1"}},
   1},
  {<<"re2">>,
   {git,"https://github.com/tuncer/re2",
@@ -28,5 +28,5 @@
   0},
  {<<"uuid">>,
   {git,"https://github.com/okeuday/uuid",
-       {ref,"41e4e0edc4fe6291227b3fe74f7c2362f2525b21"}},
+       {ref,"4b705b22f5d095970558d904e43c4354bd0e0a7f"}},
   0}].
