@@ -233,10 +233,14 @@ new_client_table(Key) ->
     ClientTable.
 
 get_client_from_table(Table) ->
-    N = erlang:phash2(self(), ets:info(Table, size)) + 1,
-    case ets:lookup(Table, N) of
-        [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
-        [] -> {error, no_clients}
+    case ets:info(Table, size) of
+        0 -> {error, no_clients};
+        Size ->
+            N = erlang:phash2(self(), Size) + 1,
+            case ets:lookup(Table, N) of
+                [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
+                [] -> {error, no_clients}
+            end
     end.
 
 select_random_from_valid([]) ->
