@@ -32,13 +32,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 add_nodes(ClientKeys) ->
-    gen_server:cast(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}).
+    gen_server:call(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}).
 
 add_nodes(ClientKeys, Opts) when is_list(ClientKeys) ->
     add_nodes(?PRIMARY_CLUSTER, ClientKeys, Opts);
 
 add_nodes(Key, ClientKeys) when is_atom(Key) ->
-    gen_server:cast(?MODULE, {add_to_cluster, Key, ClientKeys}).
+    gen_server:call(?MODULE, {add_to_cluster, Key, ClientKeys}).
 
 add_nodes(Key, ClientKeys, Opts0) ->
 	add_nodes(Key, lists:map(fun
@@ -65,21 +65,7 @@ init(_) ->
                              {keypos, #cluster_table.key}, bag]),
     {ok, undefined, 0}.
 
-handle_cast({add_to_cluster, ClusterKey, ClientKeys}, State) ->
-	Tables = ets:lookup(cqerl_clusters, ClusterKey),
-    GlobalOpts = application:get_all_env(cqerl),
-    AlreadyStarted = sets:from_list(lists:map(fun
-    	(#cluster_table{client_key=ClientKey}) -> ClientKey
-    end, Tables)),
-    NewClients = sets:subtract(sets:from_list(ClientKeys), AlreadyStarted),
-    lists:map(fun (Key = {Node, Opts}) ->
-        case cqerl_hash:get_client(Node, Opts) of
-            {ok, _} ->
-                ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
-            {error, Reason} ->
-                io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
-        end
-    end, prepare_client_keys(sets:to_list(NewClients), GlobalOpts)),
+handle_cast(_Msg, State) -> 
     {noreply, State}.
 
 handle_info(timeout, State) ->
@@ -113,6 +99,23 @@ handle_info(timeout, State) ->
 
 handle_info(_Msg, State) ->
     {noreply, State}.
+
+handle_call({add_to_cluster, ClusterKey, ClientKeys}, _From, State) ->
+    Tables = ets:lookup(cqerl_clusters, ClusterKey),
+    GlobalOpts = application:get_all_env(cqerl),
+    AlreadyStarted = sets:from_list(lists:map(fun
+        (#cluster_table{client_key=ClientKey}) -> ClientKey
+    end, Tables)),
+    NewClients = sets:subtract(sets:from_list(ClientKeys), AlreadyStarted),
+    lists:map(fun (Key = {Node, Opts}) ->
+        case cqerl_hash:get_client(Node, Opts) of
+            {ok, _} ->
+                ets:insert(cqerl_clusters, #cluster_table{key=ClusterKey, client_key=Key});
+            {error, Reason} ->
+                io:format(standard_error, "Error while starting client ~p for cluster ~p:~n~p", [Key, ClusterKey, Reason])
+        end
+    end, prepare_client_keys(sets:to_list(NewClients), GlobalOpts)),
+    {reply, ok, State};
 
 handle_call(_Msg, _From, State) -> 
     {reply, {error, unexpected_message}, State}.
