@@ -304,15 +304,55 @@ emptiness(Config) ->
     cqerl:close_client(Client).
 
 missing_prepared_query(Config) ->
-    Client = get_client(Config),
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
-    {ok, _Result} = cqerl:run_query(Client, #cql_query{statement = Q, values =
-                                                       [{id, "abc"}, {age, 22}, {email, "me@here.com"}]}),
+    InsertQuery = #cql_query{statement = Q, values =
+                                 [{id, "abc"}, {age, 22}, {email, "me@here.com"}]},
+    with_client(Config, fun(Client) -> {ok, _Result} = cqerl:run_query(Client, InsertQuery) end),
+
+    %% SELECT * is particularly good at exposing stale cached metadata bugs
+    Q2 = <<"SELECT * FROM entries1 WHERE id = ?">>,
+    SelectQuery = #cql_query{statement = Q2, values = [{id, "abc"}]},
+
+    %% Spawn a bunch of clients in order to utilize the full pool's worth of connections
+    Pid = self(),
+    SelectFun = fun(Client) ->
+                        try
+                            Pid ! cqerl:run_query(Client, SelectQuery)
+                        catch
+                            C:R ->
+                                Pid ! {error, {C, R}}
+                        end
+                end,
+    SpawnSelectFun = fun() -> with_client(Config, SelectFun) end,
+    NumToSpawn = 200,
+    [erlang:spawn(SpawnSelectFun) || _ <- lists:seq(1, NumToSpawn)],
+    ok = expect_ok_results(NumToSpawn),
+
     %% This query causes prepared queries on the table to be invalidated:
-    {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol int"),
-    %% This query will attempt to use the prepared query and fail, falling back to re-preparing it:
-    {ok, _Result2} = cqerl:run_query(Client, #cql_query{statement = Q, values =
-                                                       [{id, "def"}, {age, 22}, {email, "me@here.com"}]}).
+    with_client(Config, fun(Client) ->
+                                {ok, _} = cqerl:run_query(Client, "ALTER TABLE entries1 ADD newcol int")
+                        end),
+
+    [erlang:spawn(SpawnSelectFun) || _ <- lists:seq(1, NumToSpawn)],
+    ok = expect_ok_results(NumToSpawn).
+
+with_client(Config, Fun) ->
+    Client = get_client(Config),
+    try
+        Fun(Client)
+    after
+        cqerl:close_client(Client)
+    end.
+
+expect_ok_results(0) ->
+    ok;
+expect_ok_results(Num) ->
+    receive
+        {ok, _Result} ->
+            expect_ok_results(Num - 1);
+        Error ->
+            Error
+    end.
 
 missing_prepared_batch(Config) ->
     Client = get_client(Config),
