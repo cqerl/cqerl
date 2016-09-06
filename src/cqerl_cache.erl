@@ -55,11 +55,11 @@ lookup(_ClientPid, #cql_query{reusable=false}) ->
 lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
-            {ok, RE} = re2:compile(?NAMED_BINDINGS_RE),
+            {ok, RE} = re:compile(?NAMED_BINDINGS_RE),
             put(?NAMED_BINDINGS_RE_KEY, RE);
         RE -> ok
     end,
-    case re2:match(Statement, RE) of
+    case re:run(Statement, RE) of
         nomatch ->
             lookup(ClientPid, Query#cql_query{reusable=false, named=false});
 

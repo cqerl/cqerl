@@ -2,7 +2,7 @@
              [{description,"CQErl client for Cassandra"},
               {vsn,"1.0.1"},
               {registered,[cqerl,cqerl_sup,cqerl_cache,cqerl_batch_sup]},
-              {applications,[kernel,stdlib,ssl,pooler,re2,semver,snappy,lz4,
+              {applications,[kernel,stdlib,ssl,pooler,semver,snappy,lz4,
                              uuid]},
               {mod,{cqerl_app,[]}},
               {env,[]}]}.
