@@ -39,7 +39,7 @@
     authargs :: list(any()),
 
     %% Information about the connection
-    node :: cqerl_node(),
+    node :: cqerl:cqerl_node(),
     trans :: atom(),
     socket :: gen_tcp:socket() | ssl:sslsocket(),
     compression_type :: undefined | snappy | lz4,
@@ -460,6 +460,10 @@ dequeue_query(State0=#state{queued=Queue0}) ->
     case queue:out(Queue0) of
         {{value, {Call, Batch=#cql_query_batch{}}}, Queue1} ->
             State1 = process_outgoing_query(Call, Batch, State0),
+            {true, State1#state{queued=Queue1}};
+
+        {{value, {prepare, Query}}, Queue1} when is_binary(Query) ->
+            State1 = process_outgoing_query(prepare, Query, State0),
             {true, State1#state{queued=Queue1}};
 
         {{value, {Call, Item}}, Queue1} ->

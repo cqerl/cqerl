@@ -25,8 +25,8 @@
 ]).
 
 -record(client_key, {
-          node     :: cqerl_node() | '_',
-          keyspace :: keyspace()
+          node     :: cqerl:cqerl_node() | '_',
+          keyspace :: cqerl:keyspace()
          }).
 
 -record(client_table, {
@@ -59,7 +59,7 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec client_started(term(), cqerl_node(), keyspace(), proplists:proplist()) -> ok.
+-spec client_started(term(), cqerl:cqerl_node(), cqerl:keyspace(), proplists:proplist()) -> ok.
 client_started(Name, Node, Keyspace, Opts) ->
     Key = make_client_key(Node, Keyspace),
     gen_server:cast(?MODULE, {add_client, Name, Key, Opts, self()}).
@@ -68,8 +68,8 @@ remove_client(Node, Keyspace) ->
     Key = make_client_key(Node, Keyspace),
     gen_server:cast(?MODULE, {remove_client, Key, self()}).
 
--spec get_client(cqerl_node(), keyspace()) -> {ok, {pid(), reference()}} |
-                                              {error, client_not_configured}.
+-spec get_client(cqerl:cqerl_node(), cqerl:keyspace()) ->
+    {ok, {pid(), reference()}} | {error, client_not_configured}.
 get_client(Node, Keyspace) ->
     Key = make_client_key(Node, Keyspace),
     case get_existing_table(Key) of
@@ -79,8 +79,8 @@ get_client(Node, Keyspace) ->
             {error, client_not_configured}
     end.
 
--spec get_client(group_name()) -> {ok, {pid(), reference()}} |
-                                  {error, no_clients}.
+-spec get_client(cqerl:group_name()) -> {ok, {pid(), reference()}} |
+                                        {error, no_clients}.
 get_client(Name) ->
     case ets:lookup(cqerl_named_clients, Name) of
         [] ->
@@ -233,10 +233,14 @@ new_client_table(Key) ->
     ClientTable.
 
 get_client_from_table(Table) ->
-    N = erlang:phash2(self(), ets:info(Table, size)) + 1,
-    case ets:lookup(Table, N) of
-        [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
-        [] -> {error, no_clients}
+    case ets:info(Table, size) of
+        0 -> {error, no_clients};
+        Size ->
+            N = erlang:phash2(self(), Size) + 1,
+            case ets:lookup(Table, N) of
+                [#client{pid = Pid}] -> {ok, {Pid, make_ref()}};
+                [] -> {error, no_clients}
+            end
     end.
 
 select_random_from_valid([]) ->

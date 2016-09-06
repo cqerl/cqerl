@@ -42,11 +42,122 @@
 
 -include("cqerl.hrl").
 
+
+-type event_type()      :: ?CQERL_EVENT_TOPOLOGY_CHANGE
+                         | ?CQERL_EVENT_STATUS_CHANGE
+                         | ?CQERL_EVENT_SCHEMA_CHANGE.
+
+-type topology_change() :: ?CQERL_TOPOLOGY_CHANGE_TYPE_NEW_NODE
+                         | ?CQERL_TOPOLOGY_CHANGE_TYPE_REMOVED_NODE.
+
+-type status_change()   :: ?CQERL_STATUS_CHANGE_TYPE_UP
+                         | ?CQERL_STATUS_CHANGE_TYPE_DOWN.
+
+-type schema_change()   :: ?CQERL_EVENT_CHANGE_TYPE_CREATED
+                         | ?CQERL_EVENT_CHANGE_TYPE_DROPPED
+                         | ?CQERL_EVENT_CHANGE_TYPE_UPDATED.
+
+-type change_target()   :: ?CQERL_EVENT_CHANGE_TARGET_KEYSPACE
+                         | ?CQERL_EVENT_CHANGE_TARGET_TABLE
+                         | ?CQERL_EVENT_CHANGE_TARGET_TYPE
+                         | ?CQERL_EVENT_CHANGE_TARGET_FUNCTION
+                         | ?CQERL_EVENT_CHANGE_TARGET_AGGREGATE.
+
+-export_type([event_type/0, topology_change/0, status_change/0,
+              schema_change/0, change_target/0]).
+
+
+-type consistency_level_int()  :: ?CQERL_CONSISTENCY_ANY
+                               .. ?CQERL_CONSISTENCY_EACH_QUORUM
+                                | ?CQERL_CONSISTENCY_LOCAL_ONE.
+
+-type consistency_level()      :: any
+                                | one
+                                | two
+                                | three
+                                | quorum
+                                | all
+                                | local_quorum
+                                | each_quorum
+                                | local_one.
+
+-type serial_consistency_int() :: ?CQERL_CONSISTENCY_SERIAL
+                                | ?CQERL_CONSISTENCY_LOCAL_SERIAL.
+
+-type serial_consistency()     :: serial | local_serial.
+
+-type batch_mode_int()         :: ?CQERL_BATCH_LOGGED
+                                | ?CQERL_BATCH_UNLOGGED
+                                | ?CQERL_BATCH_COUNTER.
+
+-type batch_mode()             :: logged | unlogged | counter.
+
+-export_type([consistency_level_int/0, consistency_level/0,
+              serial_consistency_int/0, serial_consistency/0,
+              batch_mode_int/0, batch_mode/0]).
+
+
+-type datatype()               :: ascii
+                                | bigint
+                                | blob
+                                | boolean
+                                | counter
+                                | decimal
+                                | double
+                                | float
+                                | int
+                                | timestamp
+                                | uuid
+                                | varchar
+                                | varint
+                                | timeuuid
+                                | inet.
+
+-type column_type()            :: {custom, binary()}
+                                | {map, column_type(), column_type()}
+                                | {set | list, column_type()}
+                                | datatype().
+
+-type parameter_val()          :: number()
+                                | binary()
+                                | list()
+                                | atom()
+                                | boolean().
+
+-type parameter()              :: { datatype(), parameter_val() }.
+
+-type named_parameter()        :: { atom(), parameter_val() }.
+
+-type keyspace()               :: binary() | atom() | string().
+
+-type query_statement()        :: iodata().
+
+-type query()                  :: query_statement()
+                                | #cql_query{}
+                                | #cql_query_batch{}.
+
+-export_type([datatype/0, column_type/0, parameter_val/0, parameter/0,
+              named_parameter/0, keyspace/0, query_statement/0, query/0]).
+
+
+-type group_name() :: term().
+-type cqerl_node() :: {inet:ip_address() | inet:hostname(), inet:port_number()}.
+-type host()       :: cqerl_node() | inet:hostname().
+
+-export_type([group_name/0, cqerl_node/0, host/0]).
+
+
+-type query_result() :: {ok, void | #cql_result{}} | {error, term()}.
+-type async_query_result() :: {ok, reference()} | {error, no_clients}.
+
+-export_type([query_result/0, async_query_result/0]).
+
+
 start() ->
     application:ensure_all_started(cqerl).
 
-%% @doc Fetch the next page of result from Cassandra for a given continuation. The function will
-%%            return with the result from Cassandra (synchronously).
+%% @doc Send a query to cassandra for execution. The function will return with the result from Cassandra (synchronously).
+%%
 %% The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record
 %%
 %% <pre>#cql_query{
@@ -65,9 +176,9 @@ start() ->
 %% <code>two</code>, <code>three</code>, <code>quorum</code>, <code>all</code>, <code>local_quorum</code>, <code>each_quorum</code>, <code>serial</code>,
 %% <code>local_serial</code> or <code>local_one</code>.
 %%
-%% How <em>bindings</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
-%% they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
-%% parameter names. In the latter case, <em>bindings</em> should be a simple list of values.
+%% How <em>values</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
+%% they are assumed to be positional (<code>?</code>). In both cases, <em>values</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) or map, where keys match the
+%% parameter names. 
 
 -spec run_query(query()) -> query_result().
 run_query(Query) ->
@@ -315,5 +426,3 @@ ta_select_client(Query = #cql_query{keyspace = Keyspace}) ->
 
 random_select_client(Keyspace) ->
     cqerl_client_pool:get_random_client(Keyspace).
-
-

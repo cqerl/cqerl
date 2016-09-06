@@ -66,11 +66,11 @@
 }).
 
 -record(cqerl_query_parameters, {
-    consistency         = any :: consistency_level() | consistency_level_int(),
+    consistency         = any :: cqerl:consistency_level() | cqerl:consistency_level_int(),
     skip_metadata       = false :: boolean(),
     page_state          = undefined :: binary() | undefined,
     page_size           = undefined :: integer() | undefined,
-    serial_consistency  = undefined :: serial_consistency() | serial_consistency_int() | undefined
+    serial_consistency  = undefined :: cqerl:serial_consistency() | cqerl:serial_consistency_int() | undefined
 }).
 
 -record(cqerl_query, {
@@ -85,7 +85,7 @@
     keyspace = <<>>        :: binary(),
     table_name = <<>>      :: binary(),
     name = undefined       :: atom(),
-    type = undefined       :: column_type()
+    type = undefined       :: cqerl:column_type()
 }).
 
 -record(cqerl_result_metadata, {
@@ -103,23 +103,23 @@
 }).
 
 -record(topology_change, {
-    type :: topology_change(),
-    node :: cqerl_node()
+    type :: cqerl:topology_change(),
+    node :: cqerl:cqerl_node()
 }).
 
 -record(status_change, {
-    type :: status_change(),
-    node :: cqerl_node()
+    type :: cqerl:status_change(),
+    node :: cqerl:cqerl_node()
 }).
 
 -record(keyspace_change, {
-    type :: schema_change(),
-    keyspace :: keyspace()
+    type :: cqerl:schema_change(),
+    keyspace :: cqerl:keyspace()
 }).
 
 -record(table_change, {
-    type :: schema_change(),
-    keyspace :: keyspace(),
+    type :: cqerl:schema_change(),
+    keyspace :: cqerl:keyspace(),
     table :: binary()
 }).
 
