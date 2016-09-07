@@ -135,8 +135,10 @@ handle_cast({batch_ready, Call, QueryBatch}, State=#state{available_slots=[], qu
 handle_cast({batch_ready, Call, QueryBatch}, State) ->
     {noreply, process_outgoing_query(Call, QueryBatch, State)};
 
-handle_cast({send_query, Tag, Ref, Batch=#cql_query_batch{}}, State) ->
-    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=async, caller=Tag, client=Ref}, Batch),
+handle_cast({send_query, Tag, Ref, Batch=#cql_query_batch{}},
+            State = #state{node = Node}) ->
+    cqerl_batch_sup:new_batch_coordinator(
+      #cql_call{type=async, caller=Tag, client=Ref}, Node, Batch),
     {noreply, State};
 
 handle_cast({Msg, Tag, Ref, Query}, State=#state{available_slots=[], queued=Queue0})
@@ -145,13 +147,14 @@ handle_cast({Msg, Tag, Ref, Query}, State=#state{available_slots=[], queued=Queu
         queued=queue:in({#cql_call{type=async, caller=Tag, client=Ref}, Query}, Queue0)
     }};
 
-handle_cast({Msg, Tag, Ref, Item}, State) when Msg == send_query orelse
-                                               Msg == fetch_more ->
+handle_cast({Msg, Tag, Ref, Item}, State = #state{node = Node})
+  when Msg == send_query orelse
+       Msg == fetch_more ->
     Query = case Item of
         #cql_query{} -> Item;
         #cql_result{cql_query=Q} -> Q
     end,
-    CacheResult = cqerl_cache:lookup(Query),
+    CacheResult = cqerl_cache:lookup(Node, Query),
     {noreply, process_outgoing_query(#cql_call{type=async, caller=Tag, client=Ref}, {CacheResult, Item}, State)};
 
 handle_cast(_Event, State) ->
@@ -160,8 +163,10 @@ handle_cast(_Event, State) ->
 handle_call(_, _, State = #state{state = starting}) ->
     {reply, {error, not_ready}, State};
 
-handle_call({send_query, Ref, Batch=#cql_query_batch{}}, From, State) ->
-    cqerl_batch_sup:new_batch_coordinator(#cql_call{type=sync, caller=From, client=Ref}, Batch),
+handle_call({send_query, Ref, Batch=#cql_query_batch{}}, From,
+            State = #state{node = Node}) ->
+    cqerl_batch_sup:new_batch_coordinator(
+      #cql_call{type=sync, caller=From, client=Ref}, Node, Batch),
     {noreply, State};
 
 handle_call({Msg, Ref, Query}, From, State=#state{available_slots=[], queued=Queue0})
@@ -169,13 +174,14 @@ handle_call({Msg, Ref, Query}, From, State=#state{available_slots=[], queued=Que
     NewQueue = queue:in({#cql_call{type=sync, caller=From, client=Ref}, Query}, Queue0),
     {noreply, State#state{queued = NewQueue}};
 
-handle_call({Msg, Ref, Item}, From, State) when Msg == send_query orelse
-                                                Msg == fetch_more ->
+handle_call({Msg, Ref, Item}, From, State = #state{node = Node})
+  when Msg == send_query orelse
+       Msg == fetch_more ->
     Query = case Item of
         Q=#cql_query{} -> Q;
         #cql_result{cql_query=Q=#cql_query{}} -> Q
     end,
-    CacheResult = cqerl_cache:lookup(Query),
+    CacheResult = cqerl_cache:lookup(Node, Query),
     NewState = process_outgoing_query(#cql_call{type=sync, caller=From, client=Ref},
                                       {CacheResult, Item},
                                       State),
@@ -338,7 +344,10 @@ handle_info({ rows, Call, Result }, State) ->
     respond_to_user(Call, Result),
     {noreply, State};
 
-handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, trans=Transport, delayed=Delayed0, state = live}) ->
+handle_info({ Transport, Socket, BinaryMsg },
+            State = #state{ socket=Socket, trans=Transport,
+                            delayed=Delayed0, state = live,
+                            node = Node}) ->
     {Result, Rest} = cqerl_protocol:response_frame(base_frame(State), << Delayed0/binary, BinaryMsg/binary >>),
     Resp = case Result of
         incomplete ->
@@ -355,7 +364,9 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
             case orddict:find(StreamID, State#state.queries) of
                 {ok, undefined} -> ok;
                 {ok, UserQuery} ->
-                    cqerl_processor_sup:new_processor(UserQuery, {rows, RawMsg}, cqerl:get_protocol_version())
+                    cqerl_processor_sup:new_processor(
+                      Node, UserQuery, {rows, RawMsg},
+                      cqerl:get_protocol_version())
             end,
             {continue, release_stream_id(StreamID, State)};
 
@@ -369,7 +380,9 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
         {ok, #cqerl_frame{opcode=?CQERL_OP_RESULT, stream_id=StreamID}, {prepared, RawMsg}} ->
             case orddict:find(StreamID, State#state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_processor_sup:new_processor(Query, {prepared, RawMsg}, cqerl:get_protocol_version());
+                    cqerl_processor_sup:new_processor(
+                      Node, Query, {prepared, RawMsg},
+                      cqerl:get_protocol_version());
                 {ok, undefined} -> ok
             end,
             {continue, release_stream_id(StreamID, State)};
@@ -387,17 +400,17 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
             FinalState = case orddict:find(StreamID, State#state.queries) of
                 %% For single queries, just remove from our cache and re-issue it
                 {ok, {Call, {Query = #cql_query{}, _ColumnSpecs}}} ->
-                    cqerl_cache:remove(Query),
-                    CacheResult = cqerl_cache:lookup(Query),
+                    cqerl_cache:remove(Node, Query),
+                    CacheResult = cqerl_cache:lookup(Node, Query),
                     process_outgoing_query(Call, {CacheResult, Query}, NewState);
                 %% For batch queries, don't bother trying to parse out and match the ID, just
                 %% treat all queries as uncached and re-prepare them. This should happen
                 %% rarely enough that it shouldn't be a performance issue.
                 {ok, {Call, Batch = #cql_query_batch{queries = Queries}}} ->
                     SourceQueries = [Q || #cqerl_query{source_query = Q} <- Queries],
-                    cqerl_cache:remove(SourceQueries),
+                    cqerl_cache:remove(Node, SourceQueries),
                     RestartedBatch = Batch#cql_query_batch{queries = SourceQueries},
-                    cqerl_batch_sup:new_batch_coordinator(Call, RestartedBatch),
+                    cqerl_batch_sup:new_batch_coordinator(Call, Node, RestartedBatch),
                     NewState;
                 {ok, undefined} ->
                     NewState
@@ -407,7 +420,7 @@ handle_info({ Transport, Socket, BinaryMsg }, State = #state{ socket=Socket, tra
         {ok, #cqerl_frame{opcode=?CQERL_OP_ERROR, stream_id=StreamID}, ErrorTerm} when StreamID >= 0 ->
             case orddict:find(StreamID, State#state.queries) of
                 {ok, {preparing, Query}} ->
-                    cqerl_cache:query_preparation_failed(Query, ErrorTerm);
+                    cqerl_cache:query_preparation_failed(Node, Query, ErrorTerm);
                 {ok, {Call, _}} -> respond_to_user(Call, {error, ErrorTerm});
                 {ok, undefined} -> ok
             end,
@@ -456,7 +469,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 
-dequeue_query(State0=#state{queued=Queue0}) ->
+dequeue_query(State0=#state{queued = Queue0, node = Node}) ->
     case queue:out(Queue0) of
         {{value, {Call, Batch=#cql_query_batch{}}}, Queue1} ->
             State1 = process_outgoing_query(Call, Batch, State0),
@@ -471,7 +484,7 @@ dequeue_query(State0=#state{queued=Queue0}) ->
                 #cql_query{} -> Item;
                 #cql_result{cql_query=Q} -> Q
             end,
-            CacheResult = cqerl_cache:lookup(Query),
+            CacheResult = cqerl_cache:lookup(Node, Query),
             State1 = process_outgoing_query(Call, {CacheResult, Item}, State0),
             {true, State1#state{queued=Queue1}};
 
@@ -522,7 +535,7 @@ process_outgoing_query(Call,
 
 process_outgoing_query(Call,
                        {CachedResult, Item},
-                       State=#state{queries=Queries}) ->
+                       State=#state{queries = Queries, node = Node}) ->
 
     {BaseFrame, State1} = seq_frame(State),
     I = BaseFrame#cqerl_frame.stream_id,
@@ -539,6 +552,7 @@ process_outgoing_query(Call,
             orddict:store(I, {Call, {Query, CachedColumnSpecs}}, Queries)
     end,
     cqerl_processor_sup:new_processor(
+        Node,
         { State1#state.trans, State1#state.socket, CachedResult },
         { send, BaseFrame, Values, Query, SkipMetadata, Tracing },
         cqerl:get_protocol_version()

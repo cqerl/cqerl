@@ -96,7 +96,7 @@
 }).
 
 -record(cqerl_cached_query, {
-    key :: {pid(), binary() | '_'},
+    key :: {cqerl:cqerl_node(), binary() | '_'},
     query_ref = <<>> :: binary() | '_',
     params_metadata :: #cqerl_result_metadata{} | '_',
     result_metadata :: #cqerl_result_metadata{} | '_'

@@ -3,29 +3,44 @@
 
 -define(INT,   32/big-signed-integer).
 
--export([start_link/4, process/4]).
+-export([start_link/5, process/5]).
 
-start_link(ClientPid, UserQuery, Msg, ProtocolVersion) ->
-    Pid = spawn_link(?MODULE, process, [ClientPid, UserQuery, Msg, ProtocolVersion]),
+-type processor_message() :: {prepared | rows, binary()} |
+                             {send, #cqerl_frame{}, map(), #cql_query{},
+                              boolean(), boolean()}.
+
+-export_type([processor_message/0]).
+
+start_link(ClientPid, Node, UserQuery, Msg, ProtocolVersion) ->
+    Pid = spawn_link(?MODULE, process, [ClientPid, Node, UserQuery, Msg, ProtocolVersion]),
     {ok, Pid}.
 
-process(ClientPid, A, B, ProtocolVersion) ->
+-spec process(ClientPid :: pid(),
+              Node :: cqerl:cqerl_node(),
+              UserQuery :: term(),
+              Msg :: cqerl_processor:processor_message(),
+              ProtocolVersion :: non_neg_integer()) -> any().
+
+process(ClientPid, Node, UserQuery, Msg, ProtocolVersion) ->
     cqerl:put_protocol_version(ProtocolVersion),
-    try do_process(ClientPid, A, B) of
+    try do_process(ClientPid, Node, UserQuery, Msg) of
         Result -> Result
     catch
         ErrorClass:Error ->
-            ClientPid ! {processor_threw, {{ErrorClass, {Error, erlang:get_stacktrace()}}, {A, B}}}
+            ClientPid ! {processor_threw,
+                         {{ErrorClass, {Error, erlang:get_stacktrace()}},
+                          {UserQuery, Msg}}}
     end.
 
-do_process(ClientPid, Query, { prepared, Msg }) ->
+do_process(_ClientPid, Node, UserQuery, { prepared, Msg }) ->
     {ok, QueryID, Rest0} = cqerl_datatypes:decode_short_bytes(Msg),
     {ok, QueryMetadata, Rest1} = cqerl_protocol:decode_prepared_metadata(Rest0),
     {ok, ResultMetadata, _Rest} = cqerl_protocol:decode_result_metadata(Rest1),
-    cqerl_cache:query_was_prepared({ClientPid, Query}, {QueryID, QueryMetadata, ResultMetadata}),
+    cqerl_cache:query_was_prepared(Node, UserQuery,
+                                   {QueryID, QueryMetadata, ResultMetadata}),
     ok;
 
-do_process(ClientPid, UserQuery, { rows, Msg }) ->
+do_process(ClientPid, _Node, UserQuery, { rows, Msg }) ->
     {Call=#cql_call{client=ClientRef}, {Query, ColumnSpecs}} = UserQuery,
     {ok, Metadata, << RowsCount:?INT, Rest0/binary >>} = cqerl_protocol:decode_result_metadata(Msg),
     {ok, ResultSet, _Rest} = cqerl_protocol:decode_result_matrix(RowsCount, Metadata#cqerl_result_metadata.columns_count, Rest0, []),
@@ -43,7 +58,7 @@ do_process(ClientPid, UserQuery, { rows, Msg }) ->
     ClientPid ! {rows, Call, Result},
     ok;
 
-do_process(_ClientPid, {Trans, Socket, CachedResult},
+do_process(_ClientPid, _Node, {Trans, Socket, CachedResult},
            { send, BaseFrame, Values, Query, SkipMetadata, Tracing }) ->
     {ok, Frame} = case CachedResult of
         uncached ->

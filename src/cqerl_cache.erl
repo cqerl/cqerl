@@ -8,8 +8,8 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0, lookup/1, lookup/2, lookup_many/2, remove/1,
-         query_was_prepared/2, query_preparation_failed/2]).
+-export([start_link/0, lookup/2, lookup/3, lookup_many/3, remove/2,
+         query_was_prepared/3, query_preparation_failed/3]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -24,8 +24,7 @@
 
 -record(state, {
     cached_queries :: ets:tid(),
-    queued = [] :: list(tuple()),
-    monitored_clients = [] :: list(pid())
+    queued = [] :: list(tuple())
 }).
 
 %% ------------------------------------------------------------------
@@ -35,24 +34,26 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec lookup(Query :: #cql_query{}) -> queued | uncached | #cqerl_cached_query{}.
+-spec lookup(Node :: cqerl:cqerl_node(), Query :: #cql_query{}) ->
+    queued | uncached | #cqerl_cached_query{}.
 
-lookup(Query) ->
-    lookup(self(), Query).
+lookup(Node, Query) ->
+    lookup(self(), Node, Query).
 
-lookup(ClientPid, #cql_query{reusable=true, statement=Statement}) ->
-    case ets:lookup(?QUERIES_TAB, {ClientPid, Statement}) of
+lookup(ClientPid, Node, #cql_query{reusable=true, statement=Statement}) ->
+    case ets:lookup(?QUERIES_TAB, {Node, Statement}) of
         [] ->
-            gen_server:cast(?SERVER, {lookup, Statement, ClientPid, self()}),
+            gen_server:cast(?SERVER,
+                            {lookup, Statement, Node, ClientPid, self()}),
             queued;
         [CachedQuery] ->
             CachedQuery
     end;
-lookup(ClientPid, Query = #cql_query{named=true}) ->
-    lookup(ClientPid, Query#cql_query{reusable=true});
-lookup(_ClientPid, #cql_query{reusable=false}) ->
+lookup(ClientPid, Node, Query = #cql_query{named=true}) ->
+    lookup(ClientPid, Node, Query#cql_query{reusable=true});
+lookup(_ClientPid, _Node, #cql_query{reusable=false}) ->
     uncached;
-lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
+lookup(ClientPid, Node, Query = #cql_query{statement=Statement}) ->
     RegEx = case get(?NAMED_BINDINGS_RE_KEY) of
         undefined ->
             {ok, RE} = re2:compile(?NAMED_BINDINGS_RE),
@@ -62,21 +63,23 @@ lookup(ClientPid, Query = #cql_query{statement=Statement}) ->
     end,
     case re2:match(Statement, RegEx) of
         nomatch ->
-            lookup(ClientPid, Query#cql_query{reusable=false, named=false});
+            lookup(ClientPid, Node,
+                   Query#cql_query{reusable=false, named=false});
 
         %% In the case reusable is not set, and the query contains ? bindings,
         %% we make it reusable
         {match, [{_, 1}]} when Query#cql_query.reusable == undefined ->
-            lookup(ClientPid, Query#cql_query{reusable=true, named=false});
+            lookup(ClientPid, Node,
+                   Query#cql_query{reusable=true, named=false});
 
         %% In the case the query contains :named bindings,
         %% we make it reusable no matter what
         {match, _} ->
-            lookup(ClientPid, Query#cql_query{reusable=true, named=true})
+            lookup(ClientPid, Node, Query#cql_query{reusable=true, named=true})
     end.
 
 
-lookup_many(ClientPid, Queries) ->
+lookup_many(ClientPid, Node, Queries) ->
     { States, _ } = lists:foldr(fun
         (#cql_query{reusable=false}, { States0, Statements }) ->
             { [uncached | States0], Statements };
@@ -84,7 +87,7 @@ lookup_many(ClientPid, Queries) ->
         (Query=#cql_query{statement=Statement}, { States0, Statements }) ->
             case orddict:find(Statement, Statements) of
                 error ->
-                    Value = lookup(ClientPid, Query),
+                    Value = lookup(ClientPid, Node, Query),
                     { [Value | States0],
                        orddict:store(Statement, Value, Statements)};
 
@@ -94,22 +97,20 @@ lookup_many(ClientPid, Queries) ->
     end, {[], orddict:new()}, Queries),
     States.
 
--spec remove(#cql_query{} | [#cql_query{}]) -> ok.
-remove(Q = #cql_query{}) ->
-    remove([Q]);
-remove(Queries) ->
+-spec remove(cqerl:cqerl_node(), #cql_query{} | [#cql_query{}]) -> ok.
+remove(Node, Q = #cql_query{}) ->
+    remove(Node, [Q]);
+remove(Node, Queries) ->
     Statements = [S || #cql_query{statement = S} <- Queries],
-    gen_server:call(?SERVER, {remove, self(), Statements}).
+    gen_server:call(?SERVER, {remove, Node, Statements}).
 
-query_was_prepared({Pid, _Query}=Key, Result) when is_pid(Pid) ->
-    gen_server:cast(?SERVER, {query_prepared, Key, Result});
+-spec query_was_prepared(cqerl:cqerl_node(), #cql_query{}, term()) -> ok.
+query_was_prepared(Node, Query, Result) ->
+    gen_server:cast(?SERVER, {query_prepared, {Node, Query}, Result}).
 
-query_was_prepared(Query, Result) ->
-    query_was_prepared({self(), Query}, Result).
-
-
-query_preparation_failed(Query, Reason) ->
-    gen_server:cast(?SERVER, {preparation_failed, {self(), Query}, Reason}).
+-spec query_preparation_failed(cqerl:cqerl_node(), #cql_query{}, term()) -> ok.
+query_preparation_failed(Node, Query, Reason) ->
+    gen_server:cast(?SERVER, {preparation_failed, {Node, Query}, Reason}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -126,9 +127,9 @@ init(_Args) ->
                                  ])
     }}.
 
-handle_call({remove, ClientPid, Statements}, _From, State = #state{cached_queries = Cache}) ->
+handle_call({remove, Node, Statements}, _From, State = #state{cached_queries = Cache}) ->
     lists:foreach(fun(Statement) ->
-                          ets:delete(Cache, {ClientPid, Statement})
+                          ets:delete(Cache, {Node, Statement})
                   end, Statements),
     {reply, ok, State};
 
@@ -146,7 +147,7 @@ handle_cast({preparation_failed, Key, Reason}, State=#state{queued=Queue}) ->
             {noreply, State}
     end;
 
-handle_cast({query_prepared, Key = {ClientPid, _Query},
+handle_cast({query_prepared, Key,
              {QueryID, QueryMetadata, ResultMetadata}},
             State=#state{queued=Queue, cached_queries=Cache}) ->
 
@@ -156,16 +157,16 @@ handle_cast({query_prepared, Key = {ClientPid, _Query},
 
     case orddict:find(Key, Queue) of
         {ok, Waiting} ->
-            NewState = maybe_monitor(ClientPid, State),
             lists:foreach(fun (Client) -> Client ! {prepared, CachedQuery} end, Waiting),
             ets:insert(Cache, CachedQuery),
-            {noreply, NewState#state{queued=orddict:erase(Key, Queue)}};
+            {noreply, State#state{queued=orddict:erase(Key, Queue)}};
         error ->
             {noreply, State}
     end;
 
-handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cached_queries=Cache}) ->
-    Key = {ClientPid, Query},
+handle_cast({lookup, Query, Node, ClientPid, Sender},
+            State=#state{queued=Queue, cached_queries=Cache}) ->
+    Key = {Node, Query},
     NewQueue = case orddict:find(Key, Queue) of
         {ok, _} ->
             orddict:append(Key, Sender, Queue);
@@ -184,11 +185,6 @@ handle_cast({lookup, Query, ClientPid, Sender}, State=#state{queued=Queue, cache
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', _Ref, process, Pid, _},
-            State=#state{cached_queries=Cache, monitored_clients = MonitoredClients}) ->
-    ets:match_delete(Cache, #cqerl_cached_query{key = {Pid, '_'}, _='_'}),
-    {noreply, State#state{monitored_clients = lists:delete(Pid, MonitoredClients)}};
-
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -197,17 +193,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%% ------------------------------------------------------------------
-%% Internal Function Definitions
-%% ------------------------------------------------------------------
-
-maybe_monitor(Pid, State = #state{monitored_clients = Monitored}) ->
-    case lists:member(Pid, Monitored) of
-        true ->
-            State;
-        false ->
-            monitor(process, Pid),
-            State#state{monitored_clients = [Pid | Monitored]}
-    end.
-
