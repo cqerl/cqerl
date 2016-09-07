@@ -1,13 +1,13 @@
 -module(cqerl_batch).
 -include("cqerl_protocol.hrl").
 
--export([start_link/2, init/3]).
+-export([start_link/3, init/4]).
 -export([system_continue/3]).
 
-start_link(Call, Batch=#cql_query_batch{}) ->
-    proc_lib:start_link(?MODULE, init, [Call, Batch, self()]).
+start_link(Call, Node, Batch=#cql_query_batch{}) ->
+    proc_lib:start_link(?MODULE, init, [Call, Node, Batch, self()]).
 
-init(Call={ClientPid, _}, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
+init(Call={ClientPid, _}, Node, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
     Debug = sys:debug_options([]),
     proc_lib:init_ack(Parent, {ok, self()}),
     Queries = lists:map(fun
@@ -16,7 +16,7 @@ init(Call={ClientPid, _}, Batch=#cql_query_batch{queries=Queries0}, Parent) ->
     end, Queries0),
     QueryStates = lists:zip(
         Queries,
-        cqerl_cache:lookup_many(ClientPid, Queries)
+        cqerl_cache:lookup_many(ClientPid, Node, Queries)
     ),
     loop(Call, Batch#cql_query_batch{queries=QueryStates}, Debug, Parent).
 
