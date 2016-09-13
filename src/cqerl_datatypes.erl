@@ -459,6 +459,18 @@ encode_data({{udt, Types}, Values}, _Query) when is_list(Values) ->
     end,
     << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
 
+encode_data({{udt, Types}, Values}, _Query) ->
+    GetValueBinary = fun({Name, Type}) ->
+        Value = case maps:get(Name, Values, undefined) of
+            undefined -> maps:get(binary_to_atom(Name, utf8), Values, null);
+            Value0 -> Value0
+        end,
+        Bin = encode_data({Type, Value}, _Query),
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
+    end,
+    << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
+
 encode_data(Val, Query = #cql_query{ value_encode_handler = Handler }) when is_function(Handler) ->
     Handler(Val, Query);
 
