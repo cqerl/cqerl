@@ -276,7 +276,9 @@ encode_data({UuidType, Uuid}, _Query) when UuidType == uuid orelse UuidType == t
             Uuid;
         UuidList when is_list(UuidList) andalso length(UuidList) == 36;
                       is_binary(UuidList) andalso size(UuidList) == 36 ->
-            uuid:string_to_uuid(UuidList)
+            uuid:string_to_uuid(UuidList);
+        _ ->
+            throw({bad_param_type, UuidType, Uuid})
     end;
 
 encode_data({ascii, Data}, _Query) when is_list(Data) ->
@@ -284,7 +286,7 @@ encode_data({ascii, Data}, _Query) when is_list(Data) ->
         (Int) when is_integer(Int) -> Int >= 0 andalso Int < 128;
         (_) -> false
     end, Data) of
-        false -> throw(invalid_ascii);
+        false -> throw({bad_param_type, ascii, Data});
         true -> list_to_binary(Data)
     end;
 
@@ -396,7 +398,10 @@ encode_data({inet, Addr}, _Query) when is_tuple(Addr) ->
             << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR,
                E:?CHAR, F:?CHAR, G:?CHAR, H:?CHAR,
                I:?CHAR, J:?CHAR, K:?CHAR, L:?CHAR,
-               M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>
+               M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>;
+
+        true ->
+            throw({bad_param_type, inet, Addr})
     end;
 
 encode_data({inet, Addr}, _Query) when is_list(Addr) ->
