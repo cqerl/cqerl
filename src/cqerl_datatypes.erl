@@ -358,9 +358,15 @@ encode_data({date, Date={_Year, _Month, _Day}}, _Query) ->
     << ThisDayCount:32/big-unsigned-integer >>;
 
 encode_data({TextType, Val}, _Query) when TextType == text orelse TextType == varchar ->
-    Res = if  is_binary(Val) -> Val;
-        is_list(Val) -> list_to_binary(Val);
-        is_atom(Val) -> atom_to_binary(Val, utf8)
+    Res = if  
+        is_binary(Val) -> 
+            Val;
+        is_list(Val) -> 
+            list_to_binary(Val);
+        is_atom(Val) -> 
+            atom_to_binary(Val, utf8);
+        true ->
+            throw({bad_param_type, TextType, Val})
     end,
     Res;
 
