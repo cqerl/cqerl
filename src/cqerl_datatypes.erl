@@ -403,18 +403,17 @@ encode_data({inet, Addr}, _Query) when is_list(Addr) ->
     {ok, AddrTuple} = ?CQERL_PARSE_ADDR(Addr),
     encode_data({inet, AddrTuple}, _Query);
 
-encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == set ->
-    List2 = case ColType of
-        list -> List;
-        set -> ordsets:from_list(List)
-    end,
-    Length = length(List2),
+encode_data({{set, Type}, Set}, Query) ->
+    encode_data({{list, Type}, ordsets:from_list(Set)}, Query);
+
+encode_data({{list, Type}, List}, _Query) ->
+    Length = length(List),
     GetValueBinary = fun(Value) ->
         Bin = encode_data({Type, Value}, _Query),
         Bytes = encode_bytes(Bin),
         Bytes
     end,
-    Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
+    Entries = << << (GetValueBinary(Value))/binary >> || Value <- List >>,
     << Length:?INT, Entries/binary >>;
 
 encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
@@ -428,14 +427,14 @@ encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?INT, Entries/binary >>;
 
-encode_data({{map, KeyType, ValType}, List}, _Query) ->
-    Length = map_size(List),
+encode_data({{map, KeyType, ValType}, Map}, _Query) ->
+    Length = map_size(Map),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
         encode_bytes(Bin)
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
-                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(List) >>,
+                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(Map) >>,
     << Length:?INT, Entries/binary >>;
 
 encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
