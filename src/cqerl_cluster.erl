@@ -63,39 +63,11 @@ get_any_client() ->
 init(_) ->
     ets:new(cqerl_clusters, [named_table, {read_concurrency, true}, protected, 
                              {keypos, #cluster_table.key}, bag]),
-    {ok, undefined, 0}.
+    load_initial_clusters(),
+    {ok, undefined}.
 
 handle_cast(_Msg, State) -> 
     {noreply, State}.
-
-handle_info(timeout, State) ->
-	case application:get_env(cqerl, cassandra_clusters, undefined) of
-    	undefined ->
-    		case application:get_env(cqerl, cassandra_nodes, undefined) of
-    			undefined -> ok;
-    			ClientKeys when is_list(ClientKeys) ->
-    				handle_call({add_to_cluster, ?PRIMARY_CLUSTER, prepare_client_keys(ClientKeys)}, undefined, undefined)
-    		end;
-
-        Clusters when is_list(Clusters) ->
-            lists:foreach(fun
-                ({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
-                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined, undefined);
-
-                ({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
-                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined, undefined)
-            end, Clusters);
-
-    	Clusters ->
-    		maps:map(fun
-    			(ClusterKey, {ClientKeys, Opts0}) when is_list(ClientKeys) ->
-    				handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined, undefined);
-
-				(ClusterKey, ClientKeys) when is_list(ClientKeys) ->
-    				handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined, undefined)
-    		end, Clusters)
-    end,
-    {noreply, State};
 
 handle_info(_Msg, State) ->
     {noreply, State}.
@@ -136,3 +108,31 @@ prepare_client_keys(ClientKeys, SharedOpts) ->
         (Inet) ->
             {cqerl:prepare_node_info(Inet), SharedOpts}
     end, ClientKeys).
+
+load_initial_clusters() ->
+    case application:get_env(cqerl, cassandra_clusters, undefined) of
+        undefined ->
+            case application:get_env(cqerl, cassandra_nodes, undefined) of
+                undefined -> ok;
+                ClientKeys when is_list(ClientKeys) ->
+                    handle_call({add_to_cluster, ?PRIMARY_CLUSTER, prepare_client_keys(ClientKeys)}, undefined, undefined)
+            end;
+
+        Clusters when is_list(Clusters) ->
+            lists:foreach(fun
+                ({ClusterKey, {ClientKeys, Opts0}}) when is_list(ClientKeys) ->
+                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined, undefined);
+
+                ({ClusterKey, ClientKeys}) when is_list(ClientKeys) ->
+                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined, undefined)
+            end, Clusters);
+
+        Clusters ->
+            maps:map(fun
+                (ClusterKey, {ClientKeys, Opts0}) when is_list(ClientKeys) ->
+                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys, Opts0)}, undefined, undefined);
+
+                (ClusterKey, ClientKeys) when is_list(ClientKeys) ->
+                    handle_call({add_to_cluster, ClusterKey, prepare_client_keys(ClientKeys)}, undefined, undefined)
+            end, Clusters)
+    end.
