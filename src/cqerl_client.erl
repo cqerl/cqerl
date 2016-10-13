@@ -197,7 +197,7 @@ handle_info(do_startup, State) ->
 handle_info({processor_threw, {Error, {Query, Call}}},
             State=#state{queries=Queries0, state = live}) ->
     case Call of
-        {send, #cqerl_frame{stream_id=I}, _, _, _} ->
+        {send, #cqerl_frame{stream_id=I}, _, _, _, _} ->
             case orddict:find(I, Queries0) of
                 {ok, {UserCall, _}} ->
                     respond_to_user(UserCall, {error, Error});

@@ -276,7 +276,9 @@ encode_data({UuidType, Uuid}, _Query) when UuidType == uuid orelse UuidType == t
             Uuid;
         UuidList when is_list(UuidList) andalso length(UuidList) == 36;
                       is_binary(UuidList) andalso size(UuidList) == 36 ->
-            uuid:string_to_uuid(UuidList)
+            uuid:string_to_uuid(UuidList);
+        _ ->
+            throw({bad_param_type, UuidType, Uuid})
     end;
 
 encode_data({ascii, Data}, _Query) when is_list(Data) ->
@@ -284,7 +286,7 @@ encode_data({ascii, Data}, _Query) when is_list(Data) ->
         (Int) when is_integer(Int) -> Int >= 0 andalso Int < 128;
         (_) -> false
     end, Data) of
-        false -> throw(invalid_ascii);
+        false -> throw({bad_param_type, ascii, Data});
         true -> list_to_binary(Data)
     end;
 
@@ -358,9 +360,15 @@ encode_data({date, Date={_Year, _Month, _Day}}, _Query) ->
     << ThisDayCount:32/big-unsigned-integer >>;
 
 encode_data({TextType, Val}, _Query) when TextType == text orelse TextType == varchar ->
-    Res = if  is_binary(Val) -> Val;
-        is_list(Val) -> list_to_binary(Val);
-        is_atom(Val) -> atom_to_binary(Val, utf8)
+    Res = if  
+        is_binary(Val) -> 
+            Val;
+        is_list(Val) -> 
+            list_to_binary(Val);
+        is_atom(Val) -> 
+            atom_to_binary(Val, utf8);
+        true ->
+            throw({bad_param_type, TextType, Val})
     end,
     Res;
 
@@ -390,25 +398,27 @@ encode_data({inet, Addr}, _Query) when is_tuple(Addr) ->
             << A:?CHAR, B:?CHAR, C:?CHAR, D:?CHAR,
                E:?CHAR, F:?CHAR, G:?CHAR, H:?CHAR,
                I:?CHAR, J:?CHAR, K:?CHAR, L:?CHAR,
-               M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>
+               M:?CHAR, N:?CHAR, O:?CHAR, P:?CHAR >>;
+
+        true ->
+            throw({bad_param_type, inet, Addr})
     end;
 
 encode_data({inet, Addr}, _Query) when is_list(Addr) ->
     {ok, AddrTuple} = ?CQERL_PARSE_ADDR(Addr),
     encode_data({inet, AddrTuple}, _Query);
 
-encode_data({{ColType, Type}, List}, _Query) when ColType == list; ColType == set ->
-    List2 = case ColType of
-        list -> List;
-        set -> ordsets:from_list(List)
-    end,
-    Length = length(List2),
+encode_data({{set, Type}, Set}, Query) ->
+    encode_data({{list, Type}, ordsets:from_list(Set)}, Query);
+
+encode_data({{list, Type}, List}, _Query) ->
+    Length = length(List),
     GetValueBinary = fun(Value) ->
         Bin = encode_data({Type, Value}, _Query),
         Bytes = encode_bytes(Bin),
         Bytes
     end,
-    Entries = << << (GetValueBinary(Value))/binary >> || Value <- List2 >>,
+    Entries = << << (GetValueBinary(Value))/binary >> || Value <- List >>,
     << Length:?INT, Entries/binary >>;
 
 encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
@@ -422,14 +432,14 @@ encode_data({{map, KeyType, ValType}, List}, _Query) when is_list(List) ->
                     (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- List >>,
     << Length:?INT, Entries/binary >>;
 
-encode_data({{map, KeyType, ValType}, List}, _Query) ->
-    Length = map_size(List),
+encode_data({{map, KeyType, ValType}, Map}, _Query) ->
+    Length = map_size(Map),
     GetElementBinary = fun(Type, Value) ->
         Bin = encode_data({Type, Value}, _Query),
         encode_bytes(Bin)
     end,
     Entries = << << (GetElementBinary(KeyType, Key))/binary,
-                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(List) >>,
+                    (GetElementBinary(ValType, Value))/binary >> || {Key, Value} <- maps:to_list(Map) >>,
     << Length:?INT, Entries/binary >>;
 
 encode_data({{tuple, Types}, Tuple}, _Query) when is_tuple(Tuple) ->
@@ -446,6 +456,18 @@ encode_data({{udt, Types}, Values}, _Query) when is_list(Values) ->
         Value = proplists:get_value(binary_to_atom(Name, utf8), Values, null),
         Bin = encode_data({Type, Value}, _Query),
         encode_bytes(Bin)
+    end,
+    << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
+
+encode_data({{udt, Types}, Values}, _Query) ->
+    GetValueBinary = fun({Name, Type}) ->
+        Value = case maps:get(Name, Values, undefined) of
+            undefined -> maps:get(binary_to_atom(Name, utf8), Values, null);
+            Value0 -> Value0
+        end,
+        Bin = encode_data({Type, Value}, _Query),
+        {ok, Bytes} = encode_bytes(Bin),
+        Bytes
     end,
     << << (GetValueBinary(TypeValuePair))/binary >> || TypeValuePair <- Types >>;
 
@@ -557,7 +579,7 @@ decode_data({{tuple, ValueTypes}, Size, Bin}, Opts) ->
 
 decode_data({{udt, ValueTypes}, Size, Bin}, Opts) ->
     << CollectionBin:Size/binary, Rest/binary>> = Bin,
-    List0 = decode_column_collection_content(CollectionBin),
+    List0 = column_for_udt_definition(ValueTypes, decode_column_collection_content(CollectionBin)),
     List1 = [ {Name, decode_data({ValueType, Size2, ValueBin}, Opts)} || {{Name, ValueType}, {Size2, ValueBin}} <- lists:zip(ValueTypes, List0) ],
     List2 = [ {binary_to_atom(Name, utf8), Value} || {Name, {Value, _Rest}} <- List1 ],
     {maps:from_list(List2), Rest};
@@ -585,6 +607,17 @@ decode_column_collection_content(<< Size1:?INT, ValueBin:Size1/binary, Rest/bina
 
 decode_column_collection_content(<< >>, Acc) ->
     Acc.
+
+column_for_udt_definition(ValueTypes, Values) ->
+    column_for_udt_definition(ValueTypes, Values, []).
+
+column_for_udt_definition([], _, Acc) ->
+    lists:reverse(Acc);
+column_for_udt_definition([_|Rest], [Value|Values], Acc) ->
+    column_for_udt_definition(Rest, Values, [Value | Acc]);
+column_for_udt_definition([_|Rest], [], Acc) ->
+    column_for_udt_definition(Rest, [], [null | Acc]).
+
 
 % The first inclination here would be to use math:log2(X), but there's a good
 % reason not to: It's implemented as a IEEE floating point operation and so,
