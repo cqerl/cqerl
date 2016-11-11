@@ -15,9 +15,10 @@ CQErl offers a simple Erlang interface to Cassandra using the latest CQL version
 * Batched queries
 * Variable bindings in CQL queries (named or positional)
 * Automatic query reuse when including variable bindings
-* Collection type support
+* Collection types support
 * User-defined type support
 * Tunable consistency level
+* [Automatic pagination support](#pagination)
 * Synchronous or asynchronous queries
 * Automatic compression (using lz4 or snappy if available)
 * SSL support
