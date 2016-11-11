@@ -265,7 +265,9 @@ empty_dataset = cqerl:next(Tail),
 <<"qwerty">> = proplists:get_value(password, Row).
 ```
 
-`#cql_result{}` can also be used to fetch more result, synchronously or asynchronously
+##### Pagination
+
+`#cql_result{}` can also be used to fetch the next page of result, if applicable, synchronously or asynchronously. This uses the automatic paging mechanism described [here][10].
 
 ```erlang
 
@@ -466,3 +468,4 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 [7]: http://www.datastax.com/dev/blog/client-side-improvements-in-cassandra-2-0
 [8]: http://www.datastax.com/documentation/cassandra/2.0/cassandra/configuration/configCassandra_yaml_r.html
 [9]: https://github.com/ferd/dispcount
+[10]: http://www.datastax.com/dev/blog/client-side-improvements-in-cassandra-2-0
