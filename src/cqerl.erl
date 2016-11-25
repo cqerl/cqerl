@@ -677,23 +677,23 @@ prepare_node_info(Addr) when is_atom(Addr);
     prepare_node_info({Addr, ?DEFAULT_PORT});
 
 prepare_node_info(Addr) when is_binary(Addr) ->
-    case re2:match(Addr, ?IPV4_RE) of
-        {match, [_, IP, <<>>]} ->
+    case re:split(Addr, ?IPV4_RE) of
+        [_, IP, <<>>, _] when length(IP) > 0 ->
             prepare_node_info({binary_to_list(IP), ?DEFAULT_PORT});
-        {match, [_, IP, Port]} ->
+        [_, IP, Port, _] when length(IP) > 0 andalso length(Port) > 0 ->
             {PortInt, []} = string:to_integer(binary_to_list(Port)),
             prepare_node_info({binary_to_list(IP), PortInt});
-        nomatch ->
+        _ ->
             prepare_node_info({binary_to_list(Addr), ?DEFAULT_PORT})
     end;
 prepare_node_info(Addr) when is_list(Addr) ->
-    case re2:match(Addr, ?IPV4_RE) of
-        {match, [_, IP, <<>>]} ->
+    case re:split(Addr, ?IPV4_RE) of
+        [_, IP, <<>>, _] when length(IP) > 0 ->
             prepare_node_info({binary_to_list(IP), ?DEFAULT_PORT});
-        {match, [_, IP, Port]} ->
+         [_, IP, Port, _] when length(IP) > 0 andalso length(Port) > 0 ->
             {PortInt, []} = string:to_integer(binary_to_list(Port)),
             prepare_node_info({binary_to_list(IP), PortInt});
-        nomatch ->
+        _ ->
             prepare_node_info({Addr, ?DEFAULT_PORT})
     end.
 
