@@ -319,7 +319,7 @@ When performing queries, you can provide more information than just the query st
     
 ##### Variable bindings
 
-In the `#cql_query{}` record, you can provide `values` as a `proplists`, where the keys match the column names or binding variable names in the statement, in **lowercase**.
+In the `#cql_query{}` record, you can provide `values` as a `proplists` or `map`, where the keys are all **atoms** and match the column names or binding variable names in the statement, in **lowercase**.
 
 Example:
 
