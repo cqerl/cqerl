@@ -37,7 +37,7 @@
     get_client/0,
     get_client/1,
     get_client/2,
-    
+
     get_global_opts/0,
     make_option_getter/2,
 
@@ -182,7 +182,7 @@ close_client(ClientRef) ->
 %%
 %% How <em>values</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
 %% they are assumed to be positional (<code>?</code>). In both cases, <em>values</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) or map, where keys match the
-%% parameter names. 
+%% parameter names.
 
 -spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
 run_query(ClientRef, Query) ->
@@ -200,7 +200,7 @@ run_query(ClientRef, Query, Retry) ->
         {error, {16#1200, _, _}} -> %% Read timeout
             error_logger:info_msg("Cassandra read timeout, retrying retry=~p", [Retry]),
             run_query(ClientRef, Query, Retry - 1);
-        Response -> 
+        Response ->
             Response
     end.
 
@@ -236,7 +236,7 @@ fetch_more(Continuation) ->
 %% Neither of these messages will be sent if the connection is dropped before receiving a response (see {@link new_client/0} for
 %% how to handle this case).
 
--spec send_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{}) -> reference().
+-spec send_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> reference().
 send_query(ClientRef, Query) ->
     cqerl_client:query_async(ClientRef, Query).
 
@@ -716,7 +716,7 @@ get_protocol_version() ->
             ProtocolVersion0 = application:get_env(cqerl, protocol_version, ?DEFAULT_PROTOCOL_VERSION),
             put(protocol_version, ProtocolVersion0),
             ProtocolVersion0;
-        ProtocolVersion0 -> 
+        ProtocolVersion0 ->
             ProtocolVersion0
     end.
 
