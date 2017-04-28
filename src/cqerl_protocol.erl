@@ -250,7 +250,7 @@ decode_prepared_metadata(<< Flags:?INT, ColumnCount:?INT, Rest/binary >>) ->
     {ok, [GlobalTableSpec]} = decode_flags(Flags, [0]),
 
     Rest1 = case get(protocol_version) of
-        3 -> 
+        3 ->
             Rest;
         4 ->
             % TODO: Take the following into account.
@@ -583,6 +583,22 @@ decode_response_term(#cqerl_frame{opcode=?CQERL_OP_ERROR}, << ErrorCode:?INT, Bo
         16#1200 -> % Read Timeout Exception
             << Availability:?SHORT, Received:?INT, Required:?INT, DataPresent:?CHAR, _Rest/binary >> = Rest,
             {ok, {ErrorCode, ErrorDescription, {Availability, Received, Required, DataPresent}}};
+
+        16#1300 -> % Read Failure: A non-timeout exception during a read request.
+            << Availability:?SHORT, Received:?INT, _Rest/binary >> = Rest,
+            {ok, {ErrorCode, ErrorDescription, {Availability, Received}}};
+
+        16#2000 -> % Syntax Error: The submitted query has a syntax error.
+            {ok, {ErrorCode, ErrorDescription}};
+
+        16#2100 -> % Unauthorized: The logged user doesn't have the right to perform the query.
+            {ok, {ErrorCode, ErrorDescription}};
+
+        16#2200 -> % Invalid: The query is syntactically correct but invalid.
+            {ok, {ErrorCode, ErrorDescription}};
+
+        16#2300 -> % The query is invalid because of some configuration issue
+            {ok, {ErrorCode, ErrorDescription}};
 
         16#2400 -> % Already Existing Key Space or Table
             {ok, KeySpace, Rest1} = ?DATA:decode_string(Rest),
