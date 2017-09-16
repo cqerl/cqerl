@@ -60,7 +60,7 @@ long_string_test() ->
 
 bytes_test() ->
   % Test that encoding a proper byte sequence returns a properly encoded binary
-  Bytes1 = crypto:rand_bytes(100000),
+  Bytes1 = crypto:strong_rand_bytes(100000),
   {ok, EncodedBytes1} = cqerl_datatypes:encode_bytes(Bytes1),
   case size(Bytes1) + ?INT_LENGTH of
     Size2 when Size2 == size(EncodedBytes1) -> ok
@@ -75,7 +75,7 @@ bytes_test() ->
 short_bytes_test() ->
   
   % Test that encoding a proper byte sequence returns a properly encoded binary
-  Bytes1 = crypto:rand_bytes(5000),
+  Bytes1 = crypto:strong_rand_bytes(5000),
   {ok, EncodedBytes1} = cqerl_datatypes:encode_short_bytes(Bytes1),
   case size(Bytes1) + ?SHORT_LENGTH of
     Size2 when Size2 == size(EncodedBytes1) -> ok
