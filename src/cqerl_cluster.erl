@@ -57,7 +57,7 @@ get_any_client(Key) ->
 		[] -> {error, cluster_not_configured};
 		Nodes ->
             #cluster_table{client_key = {Node, Opts}} =
-                           lists:nth(random:uniform(length(Nodes)), Nodes),
+                           lists:nth(rand:uniform(length(Nodes)), Nodes),
 			cqerl_hash:get_client(Node, Opts)
 	end.
 
