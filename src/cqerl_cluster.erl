@@ -21,7 +21,11 @@
     add_nodes/3
 ]).
 
--define (PRIMARY_CLUSTER, '$primary_cluster').
+-define(PRIMARY_CLUSTER, '$primary_cluster').
+-define(ADD_NODES_TIMEOUT, case application:get_env(cqerl, add_nodes_timeout) of
+    undefined -> 30000;
+    {ok, Val} -> Val
+end).
 
 -record(cluster_table, {
           key :: cqerl_hash:key(),
@@ -32,13 +36,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 add_nodes(ClientKeys) ->
-    gen_server:call(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}).
+    gen_server:call(?MODULE, {add_to_cluster, ?PRIMARY_CLUSTER, ClientKeys}, ?ADD_NODES_TIMEOUT).
 
 add_nodes(ClientKeys, Opts) when is_list(ClientKeys) ->
     add_nodes(?PRIMARY_CLUSTER, ClientKeys, Opts);
 
 add_nodes(Key, ClientKeys) when is_atom(Key) ->
-    gen_server:call(?MODULE, {add_to_cluster, Key, ClientKeys}).
+    gen_server:call(?MODULE, {add_to_cluster, Key, ClientKeys}, ?ADD_NODES_TIMEOUT).
 
 add_nodes(Key, ClientKeys, Opts0) ->
 	add_nodes(Key, lists:map(fun
@@ -53,7 +57,7 @@ get_any_client(Key) ->
 		[] -> {error, cluster_not_configured};
 		Nodes ->
             #cluster_table{client_key = {Node, Opts}} =
-                           lists:nth(random:uniform(length(Nodes)), Nodes),
+                           lists:nth(rand:uniform(length(Nodes)), Nodes),
 			cqerl_hash:get_client(Node, Opts)
 	end.
 

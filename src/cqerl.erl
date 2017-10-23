@@ -313,7 +313,7 @@ start_link() ->
 
 
 init([]) ->
-    random:seed(?SEED),
+    rand:seed(?SEED),
     process_flag(trap_exit, true),
     BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
         client_stats = [],
@@ -335,7 +335,7 @@ handle_call(Req={get_client, Node, Opts}, From,
     NodeKey = if
         is_atom(Node) ->
             {ok, Nodes} = orddict:find(Node, NamedNodes),
-            lists:nth(random:uniform(length(Nodes)), Nodes);
+            lists:nth(rand:uniform(length(Nodes)), Nodes);
         true ->
             node_key(Node, {Opts, GlobalOpts})
     end,
@@ -619,7 +619,7 @@ make_option_getter(Local, Global) ->
 select_client(Clients, MatchClient = #cql_client{node=Node}, User, _State) ->
     case ets:match_object(Clients, MatchClient) of
         AvailableClients when length(AvailableClients) > 0 ->
-            RandIdx = random:uniform(length(AvailableClients)),
+            RandIdx = rand:uniform(length(AvailableClients)),
             #cql_client{pid=Pid, node=NodeKey} = lists:nth(RandIdx, AvailableClients),
             case cqerl_client:new_user(Pid, User) of
                 ok -> {existing, Pid, NodeKey};
