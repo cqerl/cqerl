@@ -329,7 +329,10 @@ handle_info({ tcp_closed, _Socket }, starting, State) ->
     stop_during_startup({error, connection_closed}, State);
 
 handle_info({ tcp_closed, _Socket }, _, State = #client_state{ queries = Queries }) ->
-    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, connection_closed});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
     {stop, connection_closed, State};
 
 handle_info({ ssl_closed, _Socket }, starting, State) ->
@@ -340,7 +343,10 @@ handle_info({ ssl_closed, _Socket }, live, State = #client_state{ queries = Quer
     {stop, connection_closed, State};
 
 handle_info({tcp_error, _Socket, _Reason}, _, State = #client_state{ queries = Queries }) ->
-    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, connection_closed});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
     {stop, connection_closed, State};
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
