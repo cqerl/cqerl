@@ -149,7 +149,7 @@ normalise_to_atom(KS) when is_atom(KS) -> KS.
 %% ------------------------------------------------------------------
 
 init([Inet, Opts, OptGetter, Key]) ->
-    case create_socket(Inet, Opts) of
+    case create_socket(Inet, OptGetter) of
         {ok, Socket, Transport} ->
             {AuthHandler, AuthArgs} = OptGetter(auth),
             cqerl:put_protocol_version(OptGetter(protocol_version)),
@@ -796,15 +796,15 @@ send_to_db(#client_state{trans=ssl, socket=Socket}, Data) when is_binary(Data) -
 
 
 
-create_socket({Addr, Port}, Opts) ->
+create_socket({Addr, Port}, OptGetter) ->
     BaseOpts = [{active, false}, {mode, binary}],
-    Result = case proplists:lookup(ssl, Opts) of
+    Result = case {ssl, OptGetter(ssl)} of
         {ssl, false} ->
             Transport = tcp,
-            case proplists:lookup(tcp_opts, Opts) of
-                none ->
+            case {tcp_opts, OptGetter(tcp_opts)} of
+                {tcp_opts, undefined} ->
                     gen_tcp:connect(Addr, Port, BaseOpts, 2000);
-                {tcp_opts, TCPOpts} ->
+                {tcp_opts, TCPOpts} when is_list(TCPOpts) ->
                     gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000)
             end;
 
