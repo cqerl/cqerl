@@ -43,7 +43,7 @@ init([key, Key = {Node, _Opts}, FullOpts, OptGetter, ChildCount]) ->
      {
       #{
        strategy => one_for_one,
-       intensity => 5,
+       intensity => ChildCount + 5,
        period => 10
       },
       [
