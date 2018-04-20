@@ -607,7 +607,8 @@ make_option_getter(Local, Global) ->
                             ssl -> false;
                             keyspace -> undefined;
                             name -> undefined;
-                            protocol_version -> ?DEFAULT_PROTOCOL_VERSION
+                            protocol_version -> ?DEFAULT_PROTOCOL_VERSION;
+                            tcp_opts -> []
                         end;
                     GlobalVal -> GlobalVal
                 end;

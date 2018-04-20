@@ -811,12 +811,8 @@ create_socket({Addr, Port}, OptGetter) ->
     Result = case {ssl, OptGetter(ssl)} of
         {ssl, false} ->
             Transport = tcp,
-            case {tcp_opts, OptGetter(tcp_opts)} of
-                {tcp_opts, undefined} ->
-                    gen_tcp:connect(Addr, Port, BaseOpts, 2000);
-                {tcp_opts, TCPOpts} when is_list(TCPOpts) ->
-                    gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000)
-            end;
+            Opts = BaseOpts ++ OptGetter(tcp_opts),
+            gen_tcp:connect(Addr, Port, Opts, 2000);
 
         {ssl = Transport, true} ->
             ssl:connect(Addr, Port, BaseOpts, 2000);
