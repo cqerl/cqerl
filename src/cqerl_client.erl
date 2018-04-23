@@ -149,7 +149,7 @@ normalise_to_atom(KS) when is_atom(KS) -> KS.
 %% ------------------------------------------------------------------
 
 init([Inet, Opts, OptGetter, Key]) ->
-    case create_socket(Inet, Opts) of
+    case create_socket(Inet, OptGetter) of
         {ok, Socket, Transport} ->
             {AuthHandler, AuthArgs} = OptGetter(auth),
             cqerl:put_protocol_version(OptGetter(protocol_version)),
@@ -325,20 +325,39 @@ handle_info({preparation_failed, {_Inet, Statement}, Reason}, live,
             {next_state, live, State}
     end;
 
-handle_info({ tcp_closed, _Socket }, starting, State) ->
-    stop_during_startup({error, connection_closed}, State);
+handle_info({tcp_closed, _Socket}, starting, State) ->
+    stop_during_startup({error, {connection_closed, normal}}, State);
 
-handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
-    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
+handle_info({tcp_closed, _Socket}, _, State = #client_state{queries = Queries}) ->
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, {connection_closed, normal}});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
+    {stop, {connection_closed, normal}, State};
+
+handle_info({tcp_error, _Socket, Reason}, _, State = #client_state{queries = Queries}) ->
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, {connection_closed, Reason}});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
+    {stop, {connection_closed, Reason}, State};
+
+handle_info({ssl_closed, _Socket}, starting, State) ->
+    stop_during_startup({error, {connection_closed, normal}}, State);
+
+handle_info({ssl_closed, _Socket}, _, State = #client_state{queries = Queries}) ->
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, {connection_closed, normal}});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
     {stop, connection_closed, State};
 
-handle_info({ ssl_closed, _Socket }, starting, State) ->
-    stop_during_startup({error, connection_closed}, State);
-
-handle_info({ ssl_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
-    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
-    {stop, connection_closed, State};
-
+handle_info({ssl_error, _Socket, Reason}, _, State = #client_state{queries = Queries}) ->
+    [ case Call of
+          #cql_call{} -> respond_to_user(Call, {error, {connection_closed, Reason}});
+          _ -> ok
+      end || {_, {Call, _}} <- Queries ],
+    {stop, {connection_closed, Reason}, State};
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
@@ -787,17 +806,13 @@ send_to_db(#client_state{trans=ssl, socket=Socket}, Data) when is_binary(Data) -
 
 
 
-create_socket({Addr, Port}, Opts) ->
+create_socket({Addr, Port}, OptGetter) ->
     BaseOpts = [{active, false}, {mode, binary}],
-    Result = case proplists:lookup(ssl, Opts) of
+    Result = case {ssl, OptGetter(ssl)} of
         {ssl, false} ->
             Transport = tcp,
-            case proplists:lookup(tcp_opts, Opts) of
-                none ->
-                    gen_tcp:connect(Addr, Port, BaseOpts, 2000);
-                {tcp_opts, TCPOpts} ->
-                    gen_tcp:connect(Addr, Port, BaseOpts ++ TCPOpts, 2000)
-            end;
+            Opts = BaseOpts ++ OptGetter(tcp_opts),
+            gen_tcp:connect(Addr, Port, Opts, 2000);
 
         {ssl = Transport, true} ->
             ssl:connect(Addr, Port, BaseOpts, 2000);
