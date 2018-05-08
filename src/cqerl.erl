@@ -98,6 +98,10 @@
 -define(DEFAULT_PORT, 9042).
 -define(LOCALHOST, "127.0.0.1").
 
+%% By default Cassandra closes connections after 1min.
+%% 30secs is a default heartbeat interval in native Java client
+-define(DEFAULT_HEARTBEAT_INTERVAL, timer:seconds(30)).
+
 -spec prepare_client(Inet :: inet(), Opts :: list(tuple() | atom())) -> ok.
 prepare_client(Inet, Opts) ->
     gen_server:cast(?MODULE, {prepare_client, prepare_node_info(Inet), Opts}).
@@ -608,7 +612,8 @@ make_option_getter(Local, Global) ->
                             keyspace -> undefined;
                             name -> undefined;
                             protocol_version -> ?DEFAULT_PROTOCOL_VERSION;
-                            tcp_opts -> []
+                            tcp_opts -> [];
+                            heartbeat_interval -> ?DEFAULT_HEARTBEAT_INTERVAL
                         end;
                     GlobalVal -> GlobalVal
                 end;

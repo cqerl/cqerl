@@ -25,11 +25,6 @@ end).
 
 -define(IS_IOLIST(L), is_list(L) orelse is_binary(L)).
 
--define(HEARTBEAT_MAX_INITIAL_CHECK_INTERVAL_MSECS, 90000). % (Max initial heartbeat interval / 2) - 1,5 min
--define(HEARTBEAT_CHECK_INTERVAL_MSECS, 180000). % Run heartbeat message every 3 minutes
--define(HEARTBEAT_MAX_IDLE_TIME_SECS, 180). % Check whether there was any activity on a socket in last 3 minutes
-
-
 -export([init/1, terminate/3,
          starting/2,    starting/3,
          live/2,        live/3,
@@ -62,7 +57,8 @@ end).
     waiting_preparation = [],
     mode :: hash | pooler,
     key :: {term(), term()},
-    last_socket_send_secs :: integer()
+    heartbeat_interval  :: non_neg_integer(), % in millisecond
+    last_socket_send    :: non_neg_integer()  % in millisecond
 }).
 
 -record(client_user, {
@@ -158,6 +154,7 @@ init([Inet, Opts, OptGetter, Key]) ->
     case create_socket(Inet, OptGetter) of
         {ok, Socket, Transport} ->
             {AuthHandler, AuthArgs} = OptGetter(auth),
+            HeartbeatInterval = OptGetter(heartbeat_interval),
             cqerl:put_protocol_version(OptGetter(protocol_version)),
             {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
             State0 = #client_state{
@@ -167,11 +164,11 @@ init([Inet, Opts, OptGetter, Key]) ->
                 sleep=get_sleep_duration(Opts),
                 keyspace=normalise_to_atom(proplists:get_value(keyspace, Opts)),
                 key=Key,
-                mode=cqerl_app:mode()
+                mode=cqerl_app:mode(),
+                heartbeat_interval = HeartbeatInterval
             },
             State = send_to_db(State0, OptionsFrame),
             activate_socket(State),
-            HeartbeatInterval = ?HEARTBEAT_MAX_INITIAL_CHECK_INTERVAL_MSECS + random:uniform(?HEARTBEAT_MAX_INITIAL_CHECK_INTERVAL_MSECS),
             erlang:send_after(HeartbeatInterval, self(), heartbeat_check),
             {ok, starting, State};
 
@@ -549,6 +546,12 @@ handle_info({ Transport, Socket, BinaryMsg }, sleep, State = #client_state{ sock
             end,
             {next_state, sleep, State#client_state{delayed=Delayed}, Duration1};
 
+        {ok, #cqerl_frame{opcode=?CQERL_OP_SUPPORTED}, _Payload, Delayed} ->
+            %% SUPPORTED is the message received from Cassandra for OPTIONS request,
+            %% which we use for heartbeats. We need to handle that for sleep state
+            %% in the same way as in live state.
+            handle_info({Transport, Socket, Delayed}, sleep, State#client_state{delayed = <<>>});
+
         %% While sleeping, any response to previously sent queries are ignored,
         %% but we still need to manage internal state accordingly
         {ok, #cqerl_frame{stream_id=StreamID}, _ResponseTerm, Delayed} when StreamID < ?QUERIES_MAX, StreamID >= 0 ->
@@ -572,17 +575,20 @@ handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, live, State=#client_stat
             end
     end;
 
-handle_info(heartbeat_check, StateName, State = #client_state{last_socket_send_secs = LastSocketSendSecs}) ->
-    State1 = case heartbeat_idle_time_exceeded(LastSocketSendSecs) of
-        true ->
-            %% OPTIONS frame is what Java driver sends as a heartbeat in case of idle connection
-            {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
-            send_to_db(State, OptionsFrame);
-        false ->
-            State
-    end,
+handle_info(heartbeat_check, StateName, State = #client_state{heartbeat_interval = HeartbeatInterval}) ->
+    TimeMargin = timer:seconds(1),
+    State1 =
+        case next_heartbeat_within(State) of
+            TimeLeft when TimeLeft < TimeMargin ->
+                %% OPTIONS frame is what Java driver sends as a heartbeat in case of idle connection
+                {ok, OptionsFrame} = cqerl_protocol:options_frame(#cqerl_frame{}),
+                erlang:send_after(HeartbeatInterval, self(), heartbeat_check),
+                send_to_db(State, OptionsFrame);
+            TimeLeft ->
+                erlang:send_after(TimeLeft, self(), heartbeat_check),
+                State
+        end,
 
-    erlang:send_after(?HEARTBEAT_CHECK_INTERVAL_MSECS, self(), heartbeat_check),
     {next_state, StateName, State1};
 
 handle_info(Info, StateName, State) ->
@@ -825,9 +831,8 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
 
 send_to_db(ClientState, Data) when is_binary(Data) ->
     do_send_to_db(ClientState, Data),
-    {Mega, Secs, _} = os:timestamp(),
-    LastSocketSendSecs = Mega * 1000000 + Secs,
-    ClientState#client_state{last_socket_send_secs = LastSocketSendSecs}.
+    LastSocketSend = os:system_time(millisecond),
+    ClientState#client_state{last_socket_send = LastSocketSend}.
 
 do_send_to_db(#client_state{trans=tcp, socket=Socket}, Data) when is_binary(Data) ->
     gen_tcp:send(Socket, Data);
@@ -971,7 +976,8 @@ stop_during_startup(Reason, State = #client_state{users = Users}) ->
     {stop, normal, State#client_state{socket=undefined}}.
 
 
-heartbeat_idle_time_exceeded(LastSocketSendSecs) ->
-    {Mega, Secs, _} = os:timestamp(),
-    CurrentSecs = Mega * 1000000 + Secs,
-    LastSocketSendSecs < (CurrentSecs - ?HEARTBEAT_MAX_IDLE_TIME_SECS).
+next_heartbeat_within(#client_state{last_socket_send = LastSocketSend,
+                                    heartbeat_interval = Interval}) ->
+    CurrentTime = os:system_time(millisecond),
+    TimeLeft = Interval - (CurrentTime - LastSocketSend),
+    max(0, TimeLeft).
