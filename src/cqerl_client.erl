@@ -575,6 +575,8 @@ handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, live, State=#client_stat
             end
     end;
 
+handle_info(heartbeat_check, StateName, State = #client_state{heartbeat_interval = 0}) ->
+    {next_state, StateName, State}; %% Disable heartbeat if interval is set to 0
 handle_info(heartbeat_check, StateName, State = #client_state{heartbeat_interval = HeartbeatInterval}) ->
     TimeMargin = timer:seconds(1),
     State1 =
