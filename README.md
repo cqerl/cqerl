@@ -41,7 +41,7 @@ You do not need to close the connection after you've finished using it.
 #### Legacy Mode (pooler)
 
 The default mode of operation uses a hash of the user process's PID to allocate
-clients, in a similar way to the system used by [dispcount][9]. 
+clients, in a similar way to the system used by [dispcount][9].
 
 The old mode used [pooler][1] to manage connections, and
 has been around for quite a while, so is reasonably well tested. It does,
@@ -70,7 +70,7 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
     - `keyspace` which determines in which keyspace all subsequent requests operate, on that connection.
     - `auth` (mentionned below)
-    - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). 
+    - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary).
     - `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
 
     Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options)
@@ -85,7 +85,7 @@ Calling `cqerl:close_client/1` *is* required in legacy mode.
 
     Since Cassandra implements pluggable authentication mechanisms, CQErl also allows you to provide custom authentication modules (here `cqerl_auth_plain_handler`). The options you pass along with it are given to the module's `auth_init/3` as its first argument.
 
-3. You can leverage one or more clusters of cassandra nodes by setting up [clusters](#clusters). When set up, you can use 
+3. You can leverage one or more clusters of cassandra nodes by setting up [clusters](#clusters). When set up, you can use
 
     1. `cqerl:get_client()` if you have just a single main cluster
     2. `cqerl:get_client(ClusterKey)` if you want to get a client from a specific, identified cluster
@@ -116,7 +116,7 @@ You can prepare a single cluster setup using this structure in your sys.config f
 
 ```erlang
 [
-  {cqerl, [ {cassandra_nodes, [ 
+  {cqerl, [ {cassandra_nodes, [
                 % You can use any of the forms below to specify a cassandra node
                 { "127.0.0.1", 9042 },
                 { {127, 0, 0, 2}, 9042 },
@@ -159,12 +159,12 @@ You can prepare multiple clusters using this structure in your sys.config file:
 [
   {cqerl, [ {cassandra_clusters, [
                 { config, {
-                    [ "127.0.0.1", "127.0.0.3" ], 
-                    [ { keyspace, config } ] 
+                    [ "127.0.0.1", "127.0.0.3" ],
+                    [ { keyspace, config } ]
                 }},
                 { operations, {
-                    [ "127.0.0.1:9042", {"127.0.0.1", 9042} ], 
-                    [ { keyspace, operations } ] 
+                    [ "127.0.0.1:9042", {"127.0.0.1", 9042} ],
+                    [ { keyspace, operations } ]
                 }}
             ]},
           ]},
@@ -233,7 +233,7 @@ the difference being that no response will be sent back to you.
 
 Here's a rundown of the possible return values
 
-* `SELECT` queries will yield result of type `#cql_result{}` (more details below). 
+* `SELECT` queries will yield result of type `#cql_result{}` (more details below).
 * Queries that change the database schema will yield result of type `#cql_schema_changed{type, keyspace, table}`
 * Other queries will yield `void` if everything worked correctly.
 * In any case, errors returned by cassandra in response to a query will be the return value (`{error, Reason}` in the synchronous case, and `{error, Tag, Reason}` in the asynchronous case).
@@ -297,26 +297,26 @@ When performing queries, you can provide more information than just the query st
 
 1. The query `statement`, as a string or binary
 2. `values` for binding variables from the query statement (see next section).
-    
-3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`. 
+
+3. You can tell CQErl to consider a query `reusable` or not (see below for what that means). By default, it will detect binding variables and consider it reusable if it contains (named or not) any. Queries containing *named* binding variables will be considered reusable no matter what you set `reusable` to. If you explicitely set `reusable` to `false` on a query having positional variable bindings (`?`), you would provide values with in `{Type, Value}` pairs instead of `{Key, Value}`.
 4. You can specify how many rows you want in every result page using the `page_size` (integer) field. The devs at Cassandra recommend a value of 100 (which is the default).
 5. You can also specify what `consistency` you want the query to be executed under. Possible values include:
 
     * `any`
-    * `one`       
-    * `two`        
+    * `one`
+    * `two`
     * `three`
-    * `quorum`     
-    * `all`        
+    * `quorum`
+    * `all`
     * `local_quorum`
     * `each_quorum`
     * `local_one`
-    
+
 6. In case you want to perform a [lightweight transaction][4] using `INSERT` or `UPDATE`, you can also specify the `serial_consistency` that will be use when performing it. Possible values are:
 
     * `serial`
     * `local_serial`
-    
+
 ##### Variable bindings
 
 In the `#cql_query{}` record, you can provide `values` as a `proplists` or `map`, where the keys are all **atoms** and match the column names or binding variable names in the statement, in **lowercase**.
@@ -331,7 +331,7 @@ Example:
 #cql_query{statement="SELECT * FROM table1 WHERE id = :id_value", values=[{id_value, SomeId}]},
 ```
 
-Special cases include: 
+Special cases include:
 
 - providing `TTL` and `TIMESTAMP` option in statements, in which case the proplist key would be `[ttl]` and `[timestamp]` respectively. Note that, while values for a column of type `timestamp` are provided in **milliseconds**, a value for the `TIMESTAMP` option is expected in **microseconds**.
 - `UPDATE keyspace SET set = set + ? WHERE id = 1;`. The name for this variable binding is `set`, the name of the column, and it's expected to be an erlang **list** of values.
@@ -342,7 +342,7 @@ Special cases include:
 - `SELECT * FROM keyspace LIMIT ?`. The name for the `LIMIT` variable is `[limit]`.
 
     Also, when providing the value for a `uuid`-type column, you can give the value `new`, `strong` or `weak`, in which case CQErl will generate a random UUID (v4), with either a *strong* or *weak* number random generator.
-    
+
     Finally, when providing the value for a `timeuuid` or `timestamp` column, you can give the value `now`, in which case CQErl will generate a normal timestamp, or a UUID (v1) matching the current date and time.
 
 ##### Batched queries
@@ -431,11 +431,20 @@ All this means is that this library works with Cassandra 2.1.x (2.2+ or 3+ recom
 
 ### Tests
 
-CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project. 
+CQErl includes a test suite that you can run yourself, especially if you plan to contribute to this project.
 
 1. Clone this repo on your machine
 2. Edit `test/test.config` and put your own cassandra's configurations
 3. At the project's top directory, run `make test`
+
+### Changelog
+
+* v1.0.8 released (ESL fork starts here)  
+* Fixed connection shutdown on TLS/SSL errors
+* Fixed connection shutdown on unknown TCP errors
+* Fixed `tcp_opts` handling
+* Fixed supervisor restart intensity which prevents connection pool from shutting down without a reason
+* Added `heartbeat` feature. This is enabled by default and can be disabled by adding `{heartbeat_interval, 0}` option. Value other then 0 for this option is an heartbeat interval in milliseconds.
 
 ### License
 
