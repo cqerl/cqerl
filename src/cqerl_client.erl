@@ -332,6 +332,13 @@ handle_info({ tcp_closed, _Socket }, live, State = #client_state{ queries = Quer
     [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
     {stop, connection_closed, State};
 
+handle_info({ ssl_closed, _Socket }, starting, State) ->
+    stop_during_startup({error, connection_closed}, State);
+
+handle_info({ ssl_closed, _Socket }, live, State = #client_state{ queries = Queries }) ->
+    [ respond_to_user(Call, {error, connection_closed}) || {_, {Call, _}} <- Queries ],
+    {stop, connection_closed, State};
+
 
 handle_info({ Transport, Socket, BinaryMsg }, starting, State = #client_state{ socket=Socket, trans=Transport, delayed=Delayed0 }) ->
     Resp = case cqerl_protocol:response_frame(#cqerl_frame{}, << Delayed0/binary, BinaryMsg/binary >>) of
