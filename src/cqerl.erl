@@ -267,6 +267,7 @@ head(#cql_result{dataset=[]}) -> empty_dataset;
 head(Result) ->
     head(Result, get_options_list()).
 
+head(#cql_result{dataset=[]}, _Opts) -> empty_dataset;
 head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}, Opts) ->
     cqerl_protocol:decode_row(Row, ColumnSpecs, Opts).
 
