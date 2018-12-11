@@ -396,7 +396,7 @@ many_sync_clients(Config) ->
     [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
 
 many_concurrent_clients(Config) ->
-    Procs = 200,
+    Procs = 100,
     Count = lists:seq(1, Procs),
     Me = self(),
     lists:foreach(fun(I) ->
@@ -411,7 +411,7 @@ many_concurrent_clients(Config) ->
                   Count).
 
 concurrent_client(ReportTo, ID, Config) ->
-    Iters = 500,
+    Iters = 200,
     Client = get_client(Config),
     Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
     lists:foreach(fun(I) ->
