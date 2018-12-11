@@ -6,8 +6,14 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Run Cassandra
+          command: cassandra -R
+          background: true
+          
+      - run:
           name: Build
           command: rebar3 compile
+
       - run:
           name: Common Test
           command: rebar3 ct --sys_config=test/test.config
