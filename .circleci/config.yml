@@ -3,13 +3,14 @@ jobs:
   build:
     docker:
       - image: matehat/erlang-and-cassandra
+        command: ["/bin/bash"]
     steps:
       - checkout
       - run:
           name: Run Cassandra
-          command: cassandra -R
+          command: cassandra -R -f
           background: true
-          
+
       - run:
           name: Build
           command: rebar3 compile
