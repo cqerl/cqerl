@@ -265,7 +265,7 @@ n_clients(Config) ->
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
         
-      after 1000 -> 
+      after 30000 -> 
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
@@ -308,7 +308,7 @@ many_clients(Config) ->
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
         
-      after 1000 -> 
+      after 30000 -> 
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
@@ -377,7 +377,7 @@ many_sync_clients(Config) ->
                     F(F, N-1, M, gb_trees:insert(Tag, {Now, Client}, Acc));
                 OtherMsg ->
                     ct:fail("Unexpected response ~p", [OtherMsg])
-            after 1000 ->
+            after 30000 ->
                 ct:fail("All delayed messages did not arrive in time~n")
             end
     end,
