@@ -1,5 +1,7 @@
 # CQErl
 
+[![CircleCI](https://circleci.com/gh/matehat/cqerl.svg?style=svg)](https://circleci.com/gh/matehat/cqerl)
+
 Native Erlang client for CQL3 over Cassandra's latest binary protocol v4.
 
 [**Usage**](#usage) &middot; [Connecting](#connecting) &middot; [Clusters](#clusters) &middot; [Performing queries](#performing-queries) &middot; [Query options](#providing-options-along-queries) &middot; [Batched queries](#batched-queries) &middot; [Reusable queries](#reusable-queries) &middot; [Data types](#data-types)
