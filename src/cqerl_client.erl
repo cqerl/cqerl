@@ -165,9 +165,11 @@ init([Inet, Opts, OptGetter, Key]) ->
             },
             send_to_db(State, OptionsFrame),
             activate_socket(State),
+            cqerl_cluster:node_up(Inet),
             {ok, starting, State};
 
         {error, Reason} ->
+            cqerl_cluster:node_down(Inet),
             {stop, {connection_error, Reason}}
     end.
 
