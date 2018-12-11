@@ -22,7 +22,7 @@
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
 suite() ->
-  [{timetrap, {seconds, 30}} | test_helper:requirements()].
+  [{timetrap, {seconds, 60}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
