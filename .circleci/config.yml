@@ -4,7 +4,6 @@ jobs:
     docker:
       - image: matehat/erlang-and-cassandra
         command: ["/bin/bash"]
-    parallelism: 4
     environment:
       JVM_OPTS: "-Xmn200M -Xms300M -Xmx512M"
 
