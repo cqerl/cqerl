@@ -66,7 +66,6 @@
 
 -export_type([client/0, inet/0]).
 
--define(SEED, {erlang:unique_integer([positive]), erlang:unique_integer([positive]), erlang:unique_integer([positive])}).
 -define(IPV4_RE, <<"^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(?::([0-9]{1,5}))?$">>).
 
 -record(cql_client_stats, {
@@ -267,6 +266,7 @@ head(#cql_result{dataset=[]}) -> empty_dataset;
 head(Result) ->
     head(Result, get_options_list()).
 
+head(#cql_result{dataset=[]}, _Opts) -> empty_dataset;
 head(#cql_result{dataset=[Row|_Rest], columns=ColumnSpecs}, Opts) ->
     cqerl_protocol:decode_row(Row, ColumnSpecs, Opts).
 
@@ -313,7 +313,7 @@ start_link() ->
 
 
 init([]) ->
-    rand:seed(?SEED),
+    rand:seed(exrop),
     process_flag(trap_exit, true),
     BaseState = #cqerl_state{clients = ets:new(clients, [set, private, {keypos, #cql_client.pid}]),
         client_stats = [],

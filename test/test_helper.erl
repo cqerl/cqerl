@@ -10,11 +10,12 @@
          set_mode/2
         ]).
 
+unroll({ok, Val}) -> Val.
 
 standard_setup(Keyspace, Config) ->
     application:ensure_all_started(cqerl),
     application:start(sasl),
-    RawSSL = ct:get_config(ssl),
+    {ok, RawSSL} = application:get_env(cqerl, test_ssl),
     DataDir = proplists:get_value(data_dir, Config),
     SSL = case RawSSL of
         undefined -> false;
@@ -35,14 +36,14 @@ standard_setup(Keyspace, Config) ->
                 (Opt) -> Opt
             end, RawSSL)
     end,
-    [ {auth, ct:get_config(auth)},
+    [ {auth, unroll(application:get_env(cqerl, test_auth))},
       {ssl, RawSSL},
       {prepared_ssl, SSL},
       {keyspace, Keyspace},
-      {host, ct:get_config(host)},
-      {pool_min_size, ct:get_config(pool_min_size)},
-      {pool_max_size, ct:get_config(pool_max_size)},
-      {protocol_version, ct:get_config(protocol_version)} ] ++ Config.
+      {host, unroll(application:get_env(cqerl, test_host))},
+      {pool_min_size, unroll(application:get_env(cqerl, test_pool_min_size))},
+      {pool_max_size, unroll(application:get_env(cqerl, test_pool_max_size))},
+      {protocol_version, unroll(application:get_env(cqerl, test_protocol_version))} ] ++ Config.
 
 % Call when you're expecting a valid client
 get_client(Config) ->
@@ -87,15 +88,7 @@ create_keyspace(KS, Config) ->
     cqerl:close_client(Client).
 
 requirements() ->
-    [
-     {require, ssl, cqerl_test_ssl},
-     {require, protocol_version, cqerl_protocol_version},
-     {require, auth, cqerl_test_auth},
-     % {require, keyspace, cqerl_test_keyspace},
-     {require, host, cqerl_host},
-     {require, pool_min_size, pool_min_size},
-     {require, pool_max_size, pool_max_size}
-    ].
+    [].
 
 set_mode(Mode, Config) ->
     application:stop(cqerl),

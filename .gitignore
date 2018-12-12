@@ -9,3 +9,5 @@ erl_crash.dump
 .rebar
 
 .DS_Store
+/rebar3.crashdump
+/_build

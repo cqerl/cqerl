@@ -1,5 +1,5 @@
 .PHONY: all test clean
-REBAR=./rebar
+REBAR=rebar3
 
 all: deps compile
 
@@ -13,7 +13,7 @@ recompile:
 	${REBAR} skip_deps=true compile
 
 test:
-	${REBAR} skip_deps=true ct
+	${REBAR} ct --sys_config=test/test.config
 
 clean:
 	${REBAR} clean

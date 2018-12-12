@@ -1,0 +1,23 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: matehat/erlang-and-cassandra
+        command: ["/bin/bash"]
+    environment:
+      JVM_OPTS: "-Xmn200M -Xms300M -Xmx512M"
+
+    steps:
+      - checkout
+      - run:
+          name: Run Cassandra
+          command: cassandra -R -f
+          background: true
+
+      - run:
+          name: Build
+          command: rebar3 compile
+
+      - run:
+          name: Common Test
+          command: rebar3 ct --sys_config=test/test.config

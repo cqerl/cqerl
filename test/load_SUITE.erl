@@ -22,7 +22,7 @@
 %% default data values, not perform any other operations.
 %%--------------------------------------------------------------------
 suite() ->
-  [{timetrap, {seconds, 30}} | test_helper:requirements()].
+  [{timetrap, {seconds, 60}} | test_helper:requirements()].
 
 %%--------------------------------------------------------------------
 %% Function: groups() -> [Group]
@@ -265,7 +265,7 @@ n_clients(Config) ->
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
         
-      after 1000 -> 
+      after 30000 -> 
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
@@ -308,7 +308,7 @@ many_clients(Config) ->
         OtherMsg ->
           ct:fail("Unexpected response ~p", [OtherMsg])
         
-      after 1000 -> 
+      after 30000 -> 
         ct:fail("All delayed messages did not arrive in time")
       end
   end,
@@ -377,7 +377,7 @@ many_sync_clients(Config) ->
                     F(F, N-1, M, gb_trees:insert(Tag, {Now, Client}, Acc));
                 OtherMsg ->
                     ct:fail("Unexpected response ~p", [OtherMsg])
-            after 1000 ->
+            after 30000 ->
                 ct:fail("All delayed messages did not arrive in time~n")
             end
     end,
@@ -396,7 +396,7 @@ many_sync_clients(Config) ->
     [Num, DistinctPids, (timer:now_diff(os:timestamp(), T1))/1.0e6, (Sum/Num)/1.0e6]).
 
 many_concurrent_clients(Config) ->
-    Procs = 200,
+    Procs = 100,
     Count = lists:seq(1, Procs),
     Me = self(),
     lists:foreach(fun(I) ->
@@ -411,7 +411,7 @@ many_concurrent_clients(Config) ->
                   Count).
 
 concurrent_client(ReportTo, ID, Config) ->
-    Iters = 500,
+    Iters = 200,
     Client = get_client(Config),
     Q = #cql_query{statement="INSERT INTO entries1 (id, name) values (?, ?);", consistency=1},
     lists:foreach(fun(I) ->
