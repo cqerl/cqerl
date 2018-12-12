@@ -13,6 +13,18 @@ jobs:
           name: Run Cassandra
           command: cassandra -R -f
           background: true
+      
+      - restore_cache:
+          key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
+
+      - run:
+          name: Fetch and build dependencies
+          command: rebar3 get-deps && rebar3 compile -d
+        
+      - save_cache:
+          key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
+          paths:
+            - /opt/cqerl/_build
 
       - run:
           name: Build
