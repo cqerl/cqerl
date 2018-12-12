@@ -4,7 +4,7 @@ jobs:
     docker:
       - image: matehat/erlang-and-cassandra
         command: ["/bin/bash"]
-        
+
     environment:
       JVM_OPTS: "-Xmn200M -Xms300M -Xmx512M"
 
@@ -17,19 +17,15 @@ jobs:
       
       - restore_cache:
           key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
-
+      
       - run:
-          name: Fetch and build dependencies
-          command: rebar3 get-deps && rebar3 compile -d
+          name: Build
+          command: rebar3 compile
         
       - save_cache:
           key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
           paths:
             - /opt/cqerl/_build
-
-      - run:
-          name: Build
-          command: rebar3 compile
 
       - run:
           name: Common Test
