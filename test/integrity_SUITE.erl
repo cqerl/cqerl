@@ -4,7 +4,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--include("cqerl.hrl").
 -include("cqerl_protocol.hrl").
 
 -compile(export_all).
