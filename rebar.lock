@@ -2,7 +2,7 @@
 [{<<"lz4">>,{pkg,<<"lz4_erl">>,<<"0.2.2">>},0},
  {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.3">>},0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.4">>},1},
- {<<"re2">>,{pkg,<<"re2">>,<<"1.7.8">>},0},
+ {<<"re2">>,{pkg,<<"re2">>,<<"1.9.5">>},0},
  {<<"semver">>,{pkg,<<"semver_erl">>,<<"0.0.1">>},0},
  {<<"snappy">>,{pkg,<<"snappy">>,<<"1.1.1">>},0},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.4">>},0}]}.
@@ -11,7 +11,7 @@
  {<<"lz4">>, <<"0C07C887A6C3E3DC6C2D0B7BDEDD6A7B5FDE412EF526F221F2431A8FCD8C030F">>},
  {<<"pooler">>, <<"898CD1FA301FC42D4A8ED598CE139B71CA85B54C16AB161152B5CC5FBDCFA1A8">>},
  {<<"quickrand">>, <<"F91F34469D6AC153B951BB34DD9C78029882426BD61E12B85E5EE465850C08ED">>},
- {<<"re2">>, <<"6BF1D821D50B01BA57A4F00E4BF84EA647C55FE7A8B35351D2039E148657EBC4">>},
+ {<<"re2">>, <<"3C419527FB2CC75EDA1657F04DC7E8CEA9864899B43FF6CC3250FA7525431E83">>},
  {<<"semver">>, <<"E1DC99FB20FF071B240A0280611FABA93EEB9C2ADFB02A15E20A06A9F13DFFF4">>},
  {<<"snappy">>, <<"D63449A58F1358046B7ADAEC166AE8929C2B19881E76C4E13284304FE887C39A">>},
  {<<"uuid">>, <<"4EC01367FEDFBAEEB9D9BC88B2D239D42CE5B53AD284741262F86B71EB82FBFA">>}]}
