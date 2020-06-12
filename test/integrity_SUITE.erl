@@ -863,7 +863,7 @@ inserted_rows(N, Q, Acc) ->
 batches_and_pages(Config) ->
     Client = get_client(Config),
     T1 = os:timestamp(),
-    N = 100,
+    N = 90,
     Bsz = 25,
     {ok, void} = cqerl:run_query(Client, "TRUNCATE entries1;"),
     Q = #cql_query{statement = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>},
