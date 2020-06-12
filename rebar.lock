@@ -4,10 +4,7 @@
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"1.7.4">>},1},
  {<<"re2">>,{pkg,<<"re2">>,<<"1.9.5">>},0},
  {<<"semver">>,{pkg,<<"semver_erl">>,<<"0.0.1">>},0},
- {<<"snappy">>,
-  {git,"https://github.com/skunkwerks/snappy-erlang-nif.git",
-       {ref,"e8907ee8e37cfa07d933a070669a88798082c3d7"}},
-  0},
+ {<<"snappy">>,{pkg,<<"snappy">>,<<"1.1.1">>},0},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"1.7.4">>},0}]}.
 [
 {pkg_hash,[
@@ -16,5 +13,6 @@
  {<<"quickrand">>, <<"F91F34469D6AC153B951BB34DD9C78029882426BD61E12B85E5EE465850C08ED">>},
  {<<"re2">>, <<"3C419527FB2CC75EDA1657F04DC7E8CEA9864899B43FF6CC3250FA7525431E83">>},
  {<<"semver">>, <<"E1DC99FB20FF071B240A0280611FABA93EEB9C2ADFB02A15E20A06A9F13DFFF4">>},
+ {<<"snappy">>, <<"D63449A58F1358046B7ADAEC166AE8929C2B19881E76C4E13284304FE887C39A">>},
  {<<"uuid">>, <<"4EC01367FEDFBAEEB9D9BC88B2D239D42CE5B53AD284741262F86B71EB82FBFA">>}]}
 ].
