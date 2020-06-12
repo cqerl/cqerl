@@ -138,12 +138,12 @@ encode_batch_queries([], Acc) ->
 
 
 maybe_compress_body(false, _, Body) ->      {ok, Body};
-maybe_compress_body(true, snappy, Body) ->  snappy:compress(Body);
+maybe_compress_body(true, snappy, Body) ->  snappyer:compress(Body);
 maybe_compress_body(true, lz4, Body) ->     lz4:pack(Body).
 
 
 maybe_decompress_body(false, _, Body) ->        {ok, Body};
-maybe_decompress_body(true, snappy, Body) ->    snappy:decompress(Body);
+maybe_decompress_body(true, snappy, Body) ->    snappyer:decompress(Body);
 maybe_decompress_body(true, lz4, Body) ->       lz4:unpack(Body).
 
 

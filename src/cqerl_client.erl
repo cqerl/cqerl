@@ -838,7 +838,7 @@ choose_compression_type({'COMPRESSION', Choice}) ->
     SupportedCompression = lists:map(fun (CompressionNameBin) -> binary_to_atom(CompressionNameBin, latin1) end, Choice),
     case lists:member(lz4, SupportedCompression) andalso module_exists(lz4) of
         true -> lz4;
-        _ -> case lists:member(snappy, SupportedCompression) andalso module_exists(snappy) of
+        _ -> case lists:member(snappy, SupportedCompression) andalso module_exists(snappyer) of
             true -> snappy;
             _ -> undefined
         end
