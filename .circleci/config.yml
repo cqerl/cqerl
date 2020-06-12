@@ -14,18 +14,10 @@ jobs:
           name: Run Cassandra
           command: cassandra -R -f
           background: true
-      
-      - restore_cache:
-          key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
-      
+    
       - run:
           name: Build
           command: rebar3 compile
-        
-      - save_cache:
-          key: rebar-deps-{{ checksum "/opt/cqerl/rebar.lock" }}
-          paths:
-            - /opt/cqerl/_build
 
       - run:
           name: Common Test
