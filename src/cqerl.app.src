@@ -1,6 +1,6 @@
 {application, cqerl,
   [{description, "Native Erlang CQL client for Cassandra"},
-   {vsn, "1.1.3"},
+   {vsn, "1.1.4"},
    {registered,[cqerl,cqerl_sup,cqerl_cache,cqerl_batch_sup]},
    {applications,[kernel,stdlib,ssl,pooler,re2,semver,snappyer,lz4,
                   uuid]},
