@@ -94,8 +94,9 @@ all() ->
 -define(KEYSPACE, "test_keyspace_3").
 
 init_per_suite(Config) ->
-    Config2 = test_helper:set_mode(hash, Config),
-    test_helper:standard_setup(?KEYSPACE, Config2).
+    application:stop(cqerl),
+    application:start(cqerl),
+    test_helper:standard_setup(?KEYSPACE, Config).
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}

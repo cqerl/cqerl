@@ -6,8 +6,7 @@
          get_client/1,
          maybe_get_client/1,
          create_keyspace/2,
-         requirements/0,
-         set_mode/2
+         requirements/0
         ]).
 
 unroll({ok, Val}) -> Val.
@@ -66,12 +65,7 @@ maybe_get_client(Config) ->
 %        {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}
 %        ]]),
 
-    Fun = case proplists:get_value(mode, Config, pooler) of
-              pooler -> fun cqerl:new_client/2;
-              hash -> fun cqerl:get_client/2
-          end,
-
-    Fun(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
+    cqerl:get_client(Host, [{ssl, SSL}, {auth, Auth}, {keyspace, Keyspace},
                {pool_min_size, PoolMinSize}, {pool_max_size, PoolMaxSize}, 
                {protocol_version, ProtocolVersion} ]).
 
@@ -84,14 +78,7 @@ create_keyspace(KS, Config) ->
         {error, {16#2400, _, {key_space, KS}}} ->
             {ok, #cql_schema_changed{change_type=dropped, keyspace = KS}} = cqerl:run_query(Client, D),
             {ok, #cql_schema_changed{change_type=created, keyspace = KS}} = cqerl:run_query(Client, Q)
-    end,
-    cqerl:close_client(Client).
+    end.
 
 requirements() ->
     [].
-
-set_mode(Mode, Config) ->
-    application:stop(cqerl),
-    application:set_env(cqerl, mode, Mode),
-    application:start(cqerl),
-    [{mode, Mode} | proplists:delete(mode, Config)].

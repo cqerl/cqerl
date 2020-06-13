@@ -24,17 +24,6 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    init(cqerl_app:mode());
-
-init(pooler) ->
-    {ok, { {one_for_one, 5, 10}, [
-      ?CHILD(cqerl, worker),
-      ?CHILD(cqerl_cache, worker),
-      ?CHILD(cqerl_batch_sup, supervisor),
-      ?CHILD(cqerl_processor_sup, supervisor)
-    ]}};
-
-init(hash) ->
     {ok, { {one_for_all, 5, 10}, [
       ?CHILD(cqerl_cache, worker),
       ?CHILD(cqerl_batch_sup, supervisor),

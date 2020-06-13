@@ -40,29 +40,6 @@ If you installed cassandra and didn't change any configuration related to authen
 
 You do not need to close the connection after you've finished using it.
 
-#### Legacy Mode (pooler)
-
-The default mode of operation uses a hash of the user process's PID to allocate
-clients, in a similar way to the system used by [dispcount][9]. 
-
-The old mode used [pooler][1] to manage connections, and
-has been around for quite a while, so is reasonably well tested. It does,
-however, have a couple of performance bottlenecks that may limit scalability on
-larger or more heaviliy loaded systems.
-
-To use the old mode, and be able to use the legacy `new_client/0,1,2` API to get a hold of a
-client process, set
-
-```erlang
-{mode, pooler}
-```
-
-in your application config (see below). In this mode, rather than calling
-`cqerl:get_client/2`, call `cqerl:new_client/2` with the same arguments.
-Calling `cqerl:close_client/1` *is* required in legacy mode.
-
-#### All modes
-
 1. The first argument to `cqerl:get_client/2,1` or `cqerl:new_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
     - If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
@@ -226,8 +203,7 @@ In situations where you do not need to wait for the response at all, it's perfec
 ```erlang
 {ok, Client} = cqerl:get_client(),
 cqerl:send_query(Client, #cql_query{statement="UPDATE secrets SET value = null WHERE id = ?;",
-                                    values=[{id, <<"42">>}]}),
-cqerl:close_client(Client).
+                                    values=[{id, <<"42">>}]}).
 ```
 
 That is, you can grab a client only the send a query, then you can get rid of it. CQErl will still perform it,

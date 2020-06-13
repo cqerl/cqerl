@@ -8,7 +8,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/3, start_link/4, new_user/2, remove_user/1,
+-export([start_link/3, start_link/4, 
          run_query/2, query_async/2, fetch_more/1, fetch_more_async/1,
          prepare_query/2, batch_ready/2, make_key/2]).
 
@@ -54,7 +54,6 @@ end).
     queued,
     available_slots = [] :: list(integer()),
     waiting_preparation = [],
-    mode :: hash | pooler,
     key :: {term(), term()}
 }).
 
@@ -73,22 +72,6 @@ start_link(Inet, Opts, OptGetter) ->
 
 start_link(Inet, Opts, OptGetter, Key) ->
     gen_statem:start_link(?MODULE, [Inet, Opts, OptGetter, Key], []).
-
-new_user(Pid, From) ->
-    case cqerl_app:mode() of
-        pooler ->
-            try
-                gen_statem:call(Pid, {new_user, From}, infinity)
-            catch
-                exit:_ -> {error, {closed, process_died}}
-            end;
-        hash ->
-            ok
-    end.
-
-remove_user({ClientPid, ClientRef}) ->
-    cqerl_app:mode() =:= pooler andalso
-    gen_statem:cast(ClientPid, {remove_user, ClientRef}).
 
 run_query(Client, Query) when ?IS_IOLIST(Query) ->
     run_query(Client, #cql_query{statement=Query});
@@ -157,10 +140,9 @@ init([Inet, Opts, OptGetter, Key]) ->
                 socket=Socket, trans=Transport, inet=Inet,
                 authmod=AuthHandler, authargs=AuthArgs,
                 users=[],
-                sleep=get_sleep_duration(Opts),
+                sleep=infinity,
                 keyspace=normalise_to_atom(proplists:get_value(keyspace, Opts)),
-                key=Key,
-                mode=cqerl_app:mode()
+                key=Key
             },
             send_to_db(State, OptionsFrame),
             activate_socket(State),
@@ -752,25 +734,16 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     {starting, State}.
 
 switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
-                                         inet=Inet, key=Key, mode=Mode}) ->
+                                         inet=Inet, key=Key}) ->
     signal_alive(Inet, Keyspace),
-    UsersTab =
-    case Mode of
-        hash ->
-            cqerl_hash:client_started(Key),
-            undefined;
-        pooler ->
-            T = ets:new(users, [set, private, {keypos, #client_user.ref}]),
-            lists:foreach(fun(From) -> add_user(From, T) end, Users),
-            T
-    end,
+    cqerl_hash:client_started(Key),
     Queries = create_queries_dict(),
     State1 = State#client_state{
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(),
         queries=Queries,
         available_slots = orddict:fetch_keys(Queries),
-        users=UsersTab
+        users=undefined
     },
     State1.
 
@@ -900,24 +873,6 @@ create_queries_dict(N, Acc) ->
 
 
 
-get_sleep_duration(Opts) ->
-    case cqerl_app:mode() of
-        hash -> infinity;
-        _ ->
-            round(case proplists:get_value(sleep_duration, Opts) of
-                      {Amount, sec} -> Amount * 1000;
-                      {Amount, min} -> Amount * 1000 * 60;
-                      {Amount, hour} -> Amount * 1000 * 60 * 60;
-                      Amount when is_integer(Amount) -> Amount
-                  end)
-    end.
-
 stop_during_startup(Reason, State = #client_state{users = Users}) ->
     lists:foreach(fun (From) -> gen_server:reply(From, {error, Reason}) end, Users),
-    % In pooler mode, do a short sleep here before dying - pooler immediately (and
-    % continiously) restarts the process, and in failure states such as setting an
-    % invalid keyspace this leads very quickly to use of all the local ports and
-    % eaddrinuse errors on further attempts (including valid ones) by clients to
-    % connect.
-    cqerl_app:mode() =:= pooler andalso timer:sleep(200),
     {stop, normal, State#client_state{socket=undefined}}.

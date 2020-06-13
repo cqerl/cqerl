@@ -52,7 +52,6 @@ tests() ->
 
 groups() ->
     [
-     {pooler, [sequence], tests()},
      {hash, [sequence], tests()}
     ].
 
@@ -73,7 +72,6 @@ groups() ->
 
 all() ->
     [
-     {group, pooler},
      {group, hash}
     ].
 
@@ -92,7 +90,6 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    test_helper:set_mode(pooler, Config),
     Config1 = test_helper:standard_setup("test_keyspace_1", Config),
     test_helper:create_keyspace(<<"test_keyspace_1">>, Config1),
 
@@ -100,7 +97,6 @@ init_per_suite(Config) ->
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =
     cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
-    cqerl:close_client(Client),
 
     [{pool_min_size, 10}, {pool_max_size, 100} | Config1].
 
@@ -128,10 +124,6 @@ end_per_suite(_Config) ->
 %%
 %% Description: Initialization before each test case group.
 %%--------------------------------------------------------------------
-init_per_group(pooler, Config) ->
-    test_helper:set_mode(pooler, Config);
-init_per_group(hash, Config) ->
-    test_helper:set_mode(hash, Config);
 
 init_per_group(_, Config) ->
     Config.
@@ -296,7 +288,6 @@ many_clients(Config) ->
       receive
         {result, Tag, void} -> 
           {T, Client} = gb_trees:get(Tag, Acc),
-          cqerl:close_client(Client),
           {Pid, _} = Client,
           F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
           
@@ -367,7 +358,6 @@ many_sync_clients(Config) ->
                 {result, Tag} ->
                     {T, Client} = gb_trees:get(Tag, Acc),
                     {Pid, _} = Client,
-                    cqerl:close_client(Client),
                     F(F, N, M-1, gb_trees:update(Tag, {Pid, timer:now_diff(os:timestamp(), T)}, Acc));
                 {sync_request, P, Client} ->
                     Tag = make_ref(),

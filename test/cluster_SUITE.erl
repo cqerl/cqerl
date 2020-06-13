@@ -7,7 +7,6 @@
 
 
 -import(test_helper, [
-                    %  maybe_get_client/1,
                       get_client/1
                      ]).
 
@@ -92,8 +91,6 @@ all() ->
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    test_helper:set_mode(pooler, Config),
-
     Config0 = test_helper:standard_setup("test_keyspace_1", Config),
     test_helper:create_keyspace(<<"test_keyspace_1">>, Config0),
 
@@ -104,9 +101,7 @@ init_per_suite(Config) ->
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_1">>,
                              name = <<"entries1">>}} =
     cqerl:run_query(Client, "CREATE TABLE entries1 (id int PRIMARY KEY, name text);"),
-    cqerl:close_client(Client),
-
-    test_helper:set_mode(hash, Config1).
+    Config1. 
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
@@ -135,8 +130,6 @@ end_per_suite(_Config) ->
 
 
 init_per_group(single, Config) ->
-    test_helper:set_mode(hash, Config),
-
     Host = proplists:get_value(host, Config),
     SSL = proplists:get_value(prepared_ssl, Config),
     Auth = proplists:get_value(auth, Config, undefined),
@@ -149,8 +142,6 @@ init_per_group(single, Config) ->
     cqerl_cluster:add_nodes([ Host ], Opts);
 
 init_per_group(multi, Config) ->
-    test_helper:set_mode(hash, Config),
-
     Host = proplists:get_value(host, Config),
     SSL = proplists:get_value(prepared_ssl, Config),
     Auth = proplists:get_value(auth, Config, undefined),

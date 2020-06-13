@@ -82,11 +82,6 @@ database_tests() ->
 
 groups() ->
     [
-     {pooler,
-      [
-       {connection_pooler, [sequence], connection_tests()},
-       {database_pooler, [sequence], database_tests()}
-      ]},
      {hash,
       [
        {connection_hash, [sequence], connection_tests() -- [random_selection]},
@@ -111,7 +106,6 @@ groups() ->
 all() ->
     [datatypes_test,
      protocol_test,
-     {group, pooler},
      {group, hash}
     ].
 
@@ -163,11 +157,6 @@ init_per_group(NoKeyspace, Config) when NoKeyspace == connection_pooler;
     %% Otherwise, subsequent requests would sometimes fail saying that no keyspace was specified
     [{keyspace, undefined} | proplists:delete(keyspace, Config)];
 
-% Set mode:
-init_per_group(pooler, Config) ->
-    test_helper:set_mode(pooler, Config);
-init_per_group(hash, Config) ->
-    test_helper:set_mode(hash, Config);
 
 init_per_group(_Group, Config) ->
     Config.
@@ -183,11 +172,7 @@ init_per_group(_Group, Config) ->
 %%
 %% Description: Cleanup after each test case group.
 %%--------------------------------------------------------------------
-end_per_group(pooler, Config) ->
-    Client = get_client([{keyspace, undefined}|Config]),
-    % {ok, #cql_schema_changed{change_type=dropped, keyspace = <<"test_keyspace_2">>}} = 
-    %     cqerl:run_query(Client, #cql_query{statement = <<"DROP KEYSPACE test_keyspace_2;">>}),
-    cqerl:close_client(Client);
+
 end_per_group(_, _Config) ->
     ok.
 
@@ -245,8 +230,7 @@ random_selection(Config) ->
         end
     end, [], Clients),
     MaxSize = proplists:get_value(pool_min_size, Config),
-    MaxSize = length(DistinctPids),
-    lists:foreach(fun(Client) -> cqerl:close_client(Client) end, Clients).
+    MaxSize = length(DistinctPids).
 
 failed_connection(Config) ->
     {error, _} = maybe_get_client([{keyspace, <<"not_a_real_keyspace">>} | Config]),
@@ -259,7 +243,6 @@ connect(Config) ->
     {Pid, Ref} = get_client(Config),
     true = is_pid(Pid),
     true = is_reference(Ref),
-    cqerl:close_client({Pid, Ref}),
     ok.
 
 create_keyspace(Config) ->
@@ -270,8 +253,7 @@ create_table(Config) ->
     ct:log("Got client ~w~n", [Client]),
     Q = "CREATE TABLE entries1(id varchar, age int, email varchar, PRIMARY KEY(id));",
     {ok, #cql_schema_changed{change_type=created, keyspace = <<"test_keyspace_2">>, name = <<"entries1">>}} =
-        cqerl:run_query(Client, Q),
-    cqerl:close_client(Client).
+        cqerl:run_query(Client, Q).
 
 simple_insertion_roundtrip(Config) ->
     Client = get_client(Config),
@@ -286,7 +268,6 @@ simple_insertion_roundtrip(Config) ->
     <<"hello">> = proplists:get_value(id, Row),
     18 = proplists:get_value(age, Row),
     <<"mathieu@damours.org">> = proplists:get_value(email, Row),
-    cqerl:close_client(Client),
     Result.
 
 emptiness(Config) ->
@@ -299,8 +280,7 @@ emptiness(Config) ->
                                                     values=[{age, null}]}),
     {ok, Result2} = cqerl:run_query(Client, "select * from entries1 where id = 'hello';"),
     Row2 = cqerl:head(Result2),
-    null = proplists:get_value(age, Row2),
-    cqerl:close_client(Client).
+    null = proplists:get_value(age, Row2).
 
 missing_prepared_query(Config) ->
     Q = <<"INSERT INTO entries1(id, age, email) VALUES (?, ?, ?)">>,
@@ -337,11 +317,7 @@ missing_prepared_query(Config) ->
 
 with_client(Config, Fun) ->
     Client = get_client(Config),
-    try
-        Fun(Client)
-    after
-        cqerl:close_client(Client)
-    end.
+    Fun(Client).
 
 expect_ok_results(0) ->
     ok;
@@ -398,8 +374,6 @@ async_insertion_roundtrip(Config) ->
             ct:fail("Received: ~p~n", [Other])
             
     end,
-    
-    cqerl:close_client(Client),
     Res.
 
 cache_cleanup(Config) ->
@@ -578,7 +552,6 @@ all_datatypes(Config) ->
                     Val = proplists:get_value(Key, Row, null)
             end, ReferenceRow)
     end, [Row1, Row2, Row3]),
-    cqerl:close_client(Client),
     [Row1, Row2, Row3].
 
 custom_encoders(Config) ->
@@ -626,8 +599,6 @@ custom_encoders(Config) ->
     }),
 
     [RRow1, RRow2] = cqerl:all_rows(Result),
-
-    cqerl:close_client(Client),
     ok.
 
 options(Config) ->
@@ -658,7 +629,6 @@ options(Config) ->
     [#{col1 := TextTimeUUID,
        col2 := TextUUID}] = cqerl:all_rows(Result),
 
-    cqerl:close_client(Client),
     application:unset_env(cqerl, maps),
     application:unset_env(cqerl, text_uuids).
 
@@ -699,7 +669,6 @@ collection_types(Config) ->
         ({<<"work">>, <<"555-555-5555">>}) -> ok;
         (_) -> throw(unexpected_value)
     end, proplists:get_value(phones, Row)),
-    cqerl:close_client(Client),
     Row.
 
 counter_type(Config) ->
@@ -727,7 +696,6 @@ counter_type(Config) ->
     Row = cqerl:head(Result),
     <<"First counter">> = proplists:get_value(key, Row),
     28 = proplists:get_value(count, Row),
-    cqerl:close_client(Client),
     Row.
 
 
@@ -899,5 +867,4 @@ batches_and_pages(Config) ->
             N = gb_sets:size(IDs4)
     end,
     ct:log("Time elapsed inserting ~B entries and fetching in batches of ~B: ~B ms",
-           [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]),
-    cqerl:close_client(Client).
+           [N, Bsz, round(timer:now_diff(os:timestamp(), T1)/1000)]).
