@@ -22,3 +22,8 @@ jobs:
       - run:
           name: Common Test
           command: rebar3 ct --sys_config=test/test.config
+
+      - run:
+          name: Common Test (retry failing)
+          command: rebar3 ct --sys_config=test/test.config --retry
+          when: on_fail
