@@ -1,6 +1,6 @@
 # CQErl
 
-[![CircleCI](https://circleci.com/gh/matehat/cqerl.svg?style=svg)](https://circleci.com/gh/matehat/cqerl)
+[![CircleCI](https://circleci.com/gh/cqerl/cqerl.svg?style=svg)](https://circleci.com/gh/cqerl/cqerl)
 
 Native Erlang client for CQL3 over Cassandra's latest binary protocol v4.
 
