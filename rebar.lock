@@ -1,6 +1,5 @@
 {"1.1.0",
 [{<<"lz4">>,{pkg,<<"lz4_erl">>,<<"0.2.4">>},0},
- {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.3">>},0},
  {<<"quickrand">>,{pkg,<<"quickrand">>,<<"2.0.0">>},1},
  {<<"re2">>,{pkg,<<"re2">>,<<"1.9.5">>},0},
  {<<"semver">>,{pkg,<<"semver_erl">>,<<"0.0.1">>},0},
@@ -9,7 +8,6 @@
 [
 {pkg_hash,[
  {<<"lz4">>, <<"FAFC1FA39ED1D034893316852DAEBEDD82F37DF478446224AC096490BE3B4A4D">>},
- {<<"pooler">>, <<"898CD1FA301FC42D4A8ED598CE139B71CA85B54C16AB161152B5CC5FBDCFA1A8">>},
  {<<"quickrand">>, <<"665C49881808DA68A5C58DDEDA16EA60B16BE54DBB719B029EEA5835FD12DAE9">>},
  {<<"re2">>, <<"3C419527FB2CC75EDA1657F04DC7E8CEA9864899B43FF6CC3250FA7525431E83">>},
  {<<"semver">>, <<"E1DC99FB20FF071B240A0280611FABA93EEB9C2ADFB02A15E20A06A9F13DFFF4">>},
