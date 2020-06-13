@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>Module cqerl_protocol</title>
 <link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
@@ -18,9 +18,12 @@
              frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#batch_frame-2">batch_frame/2</a></td><td>Given frame options and batch record (containing a set of queries), produce a
              'BATCH' request frame encoded in the protocol format.</td></tr>
-<tr><td valign="top"><a href="#decode_row-2">decode_row/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#encode_query_values-1">encode_query_values/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_prepared_metadata-1">decode_prepared_metadata/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_result_matrix-4">decode_result_matrix/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_result_metadata-1">decode_result_metadata/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#decode_row-3">decode_row/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#encode_query_values-2">encode_query_values/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#encode_query_values-3">encode_query_values/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#execute_frame-3">execute_frame/3</a></td><td>Given frame options, query parameters and a query, produce a 'EXECUTE' request
              frame encoded in the protocol format.</td></tr>
 <tr><td valign="top"><a href="#options_frame-1">options_frame/1</a></td><td>Given frame options, produce a 'OPTIONS' request frame encoded in the protocol format.</td></tr>
@@ -39,71 +42,101 @@
 <h3 class="function"><a name="auth_frame-2">auth_frame/2</a></h3>
 <div class="spec">
 <p><tt>auth_frame(RequestFrame::#cqerl_frame{}, AuthData::binary()) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options and authentication data, produce a 'AUTH_RESPONSE' request
              frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="batch_frame-2">batch_frame/2</a></h3>
 <div class="spec">
 <p><tt>batch_frame(RequestFrame::#cqerl_frame{}, BatchParameters::#cql_query_batch{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options and batch record (containing a set of queries), produce a
              'BATCH' request frame encoded in the protocol format.</p>
 
-<h3 class="function"><a name="decode_row-2">decode_row/2</a></h3>
+<h3 class="function"><a name="decode_prepared_metadata-1">decode_prepared_metadata/1</a></h3>
 <div class="spec">
-<p><tt>decode_row(Row, ColumnSpecs) -&gt; any()</tt></p>
+<p><tt>decode_prepared_metadata(X1) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="encode_query_values-1">encode_query_values/1</a></h3>
+<h3 class="function"><a name="decode_result_matrix-4">decode_result_matrix/4</a></h3>
 <div class="spec">
-<p><tt>encode_query_values(Values) -&gt; any()</tt></p>
+<p><tt>decode_result_matrix(RowCount, ColumnCount, Binary, Acc) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="decode_result_metadata-1">decode_result_metadata/1</a></h3>
+<div class="spec">
+<p><tt>decode_result_metadata(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="decode_row-3">decode_row/3</a></h3>
+<div class="spec">
+<p><tt>decode_row(Row, ColumnSpecs, Opts) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="encode_query_values-2">encode_query_values/2</a></h3>
 <div class="spec">
-<p><tt>encode_query_values(Values, ColumnSpecs) -&gt; any()</tt></p>
+<p><tt>encode_query_values(Values, Query) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="encode_query_values-3">encode_query_values/3</a></h3>
+<div class="spec">
+<p><tt>encode_query_values(Values, Query, ColumnSpecs) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="execute_frame-3">execute_frame/3</a></h3>
 <div class="spec">
 <p><tt>execute_frame(RequestFrame::#cqerl_frame{}, QueryParameters::#cqerl_query_parameters{}, Query::#cqerl_query{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options, query parameters and a query, produce a 'EXECUTE' request
              frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="options_frame-1">options_frame/1</a></h3>
 <div class="spec">
 <p><tt>options_frame(RequestFrame::#cqerl_frame{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options, produce a 'OPTIONS' request frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="prepare_frame-2">prepare_frame/2</a></h3>
 <div class="spec">
 <p><tt>prepare_frame(RequestFrame::#cqerl_frame{}, CQLStatement::binary()) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options and a CQL query, produce a 'PREPARE' request
              frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="query_frame-3">query_frame/3</a></h3>
 <div class="spec">
 <p><tt>query_frame(RequestFrame::#cqerl_frame{}, QueryParameters::#cqerl_query_parameters{}, Query::#cqerl_query{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options, query parameters and a query, produce a 'QUERY' request
              frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="register_frame-2">register_frame/2</a></h3>
 <div class="spec">
 <p><tt>register_frame(RequestFrame::#cqerl_frame{}, EventList::[atom() | {atom(), boolean()}]) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame options and the list of events, produce a 'REGISTER' request
              frame encoded in the protocol format.</p>
 
 <h3 class="function"><a name="response_frame-2">response_frame/2</a></h3>
 <div class="spec">
 <p><tt>response_frame(ResponseFrame::#cqerl_frame{}, Response::bitstring()) -&gt; {ok, #cqerl_frame{}, any(), binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Decode a response frame coming from the server, expanding the response options and response term.</p>
 
 <h3 class="function"><a name="startup_frame-2">startup_frame/2</a></h3>
 <div class="spec">
 <p><tt>startup_frame(RequestFrame::#cqerl_frame{}, StartupOptions::#cqerl_startup_options{}) -&gt; {ok, binary()} | {error, badarg}</tt><br></p>
+<p> </p>
 </div><p>Given frame and startup options, produce a 'STARTUP' request frame encoded in the protocol format.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Nov 26 2013, 09:49:06.</i></p>
+<p><i>Generated by EDoc</i></p>
 </body>
 </html>

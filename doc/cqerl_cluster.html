@@ -2,35 +2,53 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<title>Module cqerl_cache</title>
+<title>Module cqerl_cluster</title>
 <link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
 <body bgcolor="white">
 <div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
 <hr>
 
-<h1>Module cqerl_cache</h1>
+<h1>Module cqerl_cluster</h1>
 <ul class="index"><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
 
-<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
 
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#add_nodes-1">add_nodes/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#add_nodes-2">add_nodes/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#add_nodes-3">add_nodes/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_any_client-0">get_any_client/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_any_client-1">get_any_client/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#lookup-1">lookup/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#lookup-2">lookup/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#lookup_many-2">lookup_many/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#query_preparation_failed-2">query_preparation_failed/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#query_was_prepared-2">query_was_prepared/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#remove-1">remove/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#node_down-1">node_down/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#node_up-1">node_up/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr>
 <tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
 </table>
 
 <h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="add_nodes-1">add_nodes/1</a></h3>
+<div class="spec">
+<p><tt>add_nodes(ClientKeys) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="add_nodes-2">add_nodes/2</a></h3>
+<div class="spec">
+<p><tt>add_nodes(ClientKeys, Opts) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="add_nodes-3">add_nodes/3</a></h3>
+<div class="spec">
+<p><tt>add_nodes(Key, ClientKeys, Opts0) -&gt; any()</tt></p>
+<p> </p>
+</div>
 
 <h3 class="function"><a name="code_change-3">code_change/3</a></h3>
 <div class="spec">
@@ -38,9 +56,21 @@
 <p> </p>
 </div>
 
+<h3 class="function"><a name="get_any_client-0">get_any_client/0</a></h3>
+<div class="spec">
+<p><tt>get_any_client() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_any_client-1">get_any_client/1</a></h3>
+<div class="spec">
+<p><tt>get_any_client(Key) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
 <h3 class="function"><a name="handle_call-3">handle_call/3</a></h3>
 <div class="spec">
-<p><tt>handle_call(Request, From, State) -&gt; any()</tt></p>
+<p><tt>handle_call(Msg, From, State) -&gt; any()</tt></p>
 <p> </p>
 </div>
 
@@ -52,49 +82,25 @@
 
 <h3 class="function"><a name="handle_info-2">handle_info/2</a></h3>
 <div class="spec">
-<p><tt>handle_info(Info, State) -&gt; any()</tt></p>
+<p><tt>handle_info(Msg, State) -&gt; any()</tt></p>
 <p> </p>
 </div>
 
 <h3 class="function"><a name="init-1">init/1</a></h3>
 <div class="spec">
-<p><tt>init(Args) -&gt; any()</tt></p>
+<p><tt>init(X1) -&gt; any()</tt></p>
 <p> </p>
 </div>
 
-<h3 class="function"><a name="lookup-1">lookup/1</a></h3>
+<h3 class="function"><a name="node_down-1">node_down/1</a></h3>
 <div class="spec">
-<p><tt>lookup(Query::#cql_query{}) -&gt; queued | uncached | #cqerl_cached_query{}</tt><br></p>
+<p><tt>node_down(Node) -&gt; any()</tt></p>
 <p> </p>
 </div>
 
-<h3 class="function"><a name="lookup-2">lookup/2</a></h3>
+<h3 class="function"><a name="node_up-1">node_up/1</a></h3>
 <div class="spec">
-<p><tt>lookup(ClientPid, Cql_query) -&gt; any()</tt></p>
-<p> </p>
-</div>
-
-<h3 class="function"><a name="lookup_many-2">lookup_many/2</a></h3>
-<div class="spec">
-<p><tt>lookup_many(ClientPid, Queries) -&gt; any()</tt></p>
-<p> </p>
-</div>
-
-<h3 class="function"><a name="query_preparation_failed-2">query_preparation_failed/2</a></h3>
-<div class="spec">
-<p><tt>query_preparation_failed(Query, Reason) -&gt; any()</tt></p>
-<p> </p>
-</div>
-
-<h3 class="function"><a name="query_was_prepared-2">query_was_prepared/2</a></h3>
-<div class="spec">
-<p><tt>query_was_prepared(Key, Result) -&gt; any()</tt></p>
-<p> </p>
-</div>
-
-<h3 class="function"><a name="remove-1">remove/1</a></h3>
-<div class="spec">
-<p><tt>remove(Q::#cql_query{} | [#cql_query{}]) -&gt; ok</tt><br></p>
+<p><tt>node_up(Node) -&gt; any()</tt></p>
 <p> </p>
 </div>
 

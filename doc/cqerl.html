@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>Module cqerl</title>
 <link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
@@ -23,27 +23,32 @@
 
 
 <h3 class="typedecl"><a name="type-inet">inet()</a></h3>
-<p><tt>inet() = {<a href="inet.html#type-ip_address">inet:ip_address()</a> | string(), Port::integer()}</tt></p>
+<p><tt>inet() = {<a href="inet.html#type-ip_address">inet:ip_address()</a> | string(), Port::integer()} | <a href="inet.html#type-ip_address">inet:ip_address()</a> | string() | binary() | {}</tt></p>
 
 
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#close_client-1">close_client/1</a></td><td>Close a client that was previously allocated with <a href="#new_client-0"><code>new_client/0</code></a> or <a href="#new_client-1"><code>new_client/1</code></a>.</td></tr>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all_rows-1">all_rows/1</a></td><td>Returns a list of rows as property lists.</td></tr>
+<tr><td valign="top"><a href="#all_rows-2">all_rows/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#fetch_more-1">fetch_more/1</a></td><td>Fetch the next page of result from Cassandra for a given continuation.</td></tr>
 <tr><td valign="top"><a href="#fetch_more_async-1">fetch_more_async/1</a></td><td>Asynchronously fetch the next page of result from cassandra for a given continuation.</td></tr>
+<tr><td valign="top"><a href="#get_client-0">get_client/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_client-1">get_client/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_client-2">get_client/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_global_opts-0">get_global_opts/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_protocol_version-0">get_protocol_version/0</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#has_more_pages-1">has_more_pages/1</a></td><td>Check to see if there are more result available.</td></tr>
 <tr><td valign="top"><a href="#head-1">head/1</a></td><td>Returns the first row of result, as a property list.</td></tr>
+<tr><td valign="top"><a href="#head-2">head/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#new_client-0">new_client/0</a></td><td></td></tr>
-<tr><td valign="top"><a href="#new_client-1">new_client/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#new_client-2">new_client/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#make_option_getter-2">make_option_getter/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#next-1">next/1</a></td><td>Returns a tuple of <code>{HeadRow, ResultTail}</code>.</td></tr>
-<tr><td valign="top"><a href="#prepare_client-1">prepare_client/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#prepare_client-2">prepare_client/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#run_query-2">run_query/2</a></td><td>Fetch the next page of result from Cassandra for a given continuation.</td></tr>
+<tr><td valign="top"><a href="#prepare_node_info-1">prepare_node_info/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#put_protocol_version-1">put_protocol_version/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#run_query-2">run_query/2</a></td><td>Send a query to cassandra for execution.</td></tr>
 <tr><td valign="top"><a href="#send_query-2">send_query/2</a></td><td>Send a query to be executed asynchronously.</td></tr>
 <tr><td valign="top"><a href="#size-1">size/1</a></td><td>The number of rows in a result set.</td></tr>
 <tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td></td></tr>
@@ -53,105 +58,150 @@
 
 <h2><a name="functions">Function Details</a></h2>
 
-<h3 class="function"><a name="close_client-1">close_client/1</a></h3>
+<h3 class="function"><a name="all_rows-1">all_rows/1</a></h3>
 <div class="spec">
-<p><tt>close_client(ClientRef::<a href="#type-client">client()</a>) -&gt; no_return()</tt><br></p>
-</div><p><p>Close a client that was previously allocated with <a href="#new_client-0"><code>new_client/0</code></a> or <a href="#new_client-1"><code>new_client/1</code></a>.</p>
- 
-  This function will return immediately no matter if the client has already been closed or not.</p>
+<p><tt>all_rows(Cql_result) -&gt; any()</tt></p>
+<p> </p>
+</div><p>Returns a list of rows as property lists</p>
+
+<h3 class="function"><a name="all_rows-2">all_rows/2</a></h3>
+<div class="spec">
+<p><tt>all_rows(Cql_result, Opts) -&gt; any()</tt></p>
+<p> </p>
+</div>
 
 <h3 class="function"><a name="code_change-3">code_change/3</a></h3>
 <div class="spec">
 <p><tt>code_change(OldVsn, State, Extra) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="fetch_more-1">fetch_more/1</a></h3>
 <div class="spec">
-<p><tt>fetch_more(Continuation::#cql_result{}) -&gt; no_more_result | #cql_result{}</tt><br></p>
+<p><tt>fetch_more(Continuation::#cql_result{}) -&gt; no_more_result | {ok, #cql_result{}}</tt><br></p>
+<p> </p>
 </div><p>Fetch the next page of result from Cassandra for a given continuation. The function will
              return with the result from Cassandra (synchronously).</p>
 
 <h3 class="function"><a name="fetch_more_async-1">fetch_more_async/1</a></h3>
 <div class="spec">
 <p><tt>fetch_more_async(Continuation::#cql_result{}) -&gt; reference() | no_more_result</tt><br></p>
+<p> </p>
 </div><p><p>Asynchronously fetch the next page of result from cassandra for a given continuation.</p>
  
   A success or error message will be sent in response some time later (see <a href="#send_query-2"><code>send_query/2</code></a> for details) unless the
   connection is dropped.</p>
 
+<h3 class="function"><a name="get_client-0">get_client/0</a></h3>
+<div class="spec">
+<p><tt>get_client() -&gt; {ok, <a href="#type-client">client()</a>} | {error, term()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_client-1">get_client/1</a></h3>
+<div class="spec">
+<p><tt>get_client(ClusterKeyOrInet::atom() | <a href="#type-inet">inet()</a>) -&gt; {ok, <a href="#type-client">client()</a>} | {error, term()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_client-2">get_client/2</a></h3>
+<div class="spec">
+<p><tt>get_client(Inet::<a href="#type-inet">inet()</a>, Opts::[tuple() | atom()]) -&gt; {ok, <a href="#type-client">client()</a>} | {error, term()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_global_opts-0">get_global_opts/0</a></h3>
+<div class="spec">
+<p><tt>get_global_opts() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_protocol_version-0">get_protocol_version/0</a></h3>
+<div class="spec">
+<p><tt>get_protocol_version() -&gt; integer()</tt><br></p>
+<p> </p>
+</div>
+
 <h3 class="function"><a name="handle_call-3">handle_call/3</a></h3>
 <div class="spec">
 <p><tt>handle_call(Msg, From, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="handle_cast-2">handle_cast/2</a></h3>
 <div class="spec">
 <p><tt>handle_cast(Msg, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="handle_info-2">handle_info/2</a></h3>
 <div class="spec">
 <p><tt>handle_info(Msg, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="has_more_pages-1">has_more_pages/1</a></h3>
 <div class="spec">
 <p><tt>has_more_pages(Continuation::#cql_result{}) -&gt; true | false</tt><br></p>
+<p> </p>
 </div><p>Check to see if there are more result available</p>
 
 <h3 class="function"><a name="head-1">head/1</a></h3>
 <div class="spec">
 <p><tt>head(Cql_result) -&gt; any()</tt></p>
+<p> </p>
 </div><p>Returns the first row of result, as a property list</p>
+
+<h3 class="function"><a name="head-2">head/2</a></h3>
+<div class="spec">
+<p><tt>head(Cql_result, Opts) -&gt; any()</tt></p>
+<p> </p>
+</div>
 
 <h3 class="function"><a name="init-1">init/1</a></h3>
 <div class="spec">
 <p><tt>init(X1) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="new_client-0">new_client/0</a></h3>
+<h3 class="function"><a name="make_option_getter-2">make_option_getter/2</a></h3>
 <div class="spec">
-<p><tt>new_client() -&gt; <a href="#type-client">client()</a></tt><br></p>
-</div>
-
-<h3 class="function"><a name="new_client-1">new_client/1</a></h3>
-<div class="spec">
-<p><tt>new_client(Inet::<a href="#type-inet">inet()</a>) -&gt; <a href="#type-client">client()</a></tt><br></p>
-</div>
-
-<h3 class="function"><a name="new_client-2">new_client/2</a></h3>
-<div class="spec">
-<p><tt>new_client(Inet::<a href="#type-inet">inet()</a>, Opts::[tuple() | atom()]) -&gt; <a href="#type-client">client()</a> | {error, no_client_available}</tt><br></p>
+<p><tt>make_option_getter(Local, Global) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="next-1">next/1</a></h3>
 <div class="spec">
 <p><tt>next(Cql_result) -&gt; any()</tt></p>
+<p> </p>
 </div><p><p>Returns a tuple of <code>{HeadRow, ResultTail}</code>.</p>
  
   This can be used to iterate over a result set efficiently. Successively
   call this function over the result set to go through all rows, until it
   returns the <code>empty_dataset</code> atom.</p>
 
-<h3 class="function"><a name="prepare_client-1">prepare_client/1</a></h3>
+<h3 class="function"><a name="prepare_node_info-1">prepare_node_info/1</a></h3>
 <div class="spec">
-<p><tt>prepare_client(Inet::<a href="#type-inet">inet()</a>) -&gt; ok</tt><br></p>
+<p><tt>prepare_node_info(NodeInfo::any()) -&gt; Node::<a href="#type-inet">inet()</a></tt><br></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="prepare_client-2">prepare_client/2</a></h3>
+<h3 class="function"><a name="put_protocol_version-1">put_protocol_version/1</a></h3>
 <div class="spec">
-<p><tt>prepare_client(Inet::<a href="#type-inet">inet()</a>, Opts::[tuple() | atom()]) -&gt; ok</tt><br></p>
+<p><tt>put_protocol_version(Val::integer()) -&gt; ok</tt><br></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="run_query-2">run_query/2</a></h3>
 <div class="spec">
-<p><tt>run_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; #cql_result{}</tt><br></p>
-</div><p><p>Fetch the next page of result from Cassandra for a given continuation. The function will
-             return with the result from Cassandra (synchronously).
-  The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record</p>
+<p><tt>run_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{} | #cql_query_batch{}) -&gt; {ok, void} | {ok, #cql_result{}} | {error, term()}</tt><br></p>
+<p> </p>
+</div><p><p>Send a query to cassandra for execution. The function will return with the result from Cassandra (synchronously).</p>
+ 
+  <p>The <code>Query</code> parameter can be a string, a binary UTF8 string or a <code>#cql_query{}</code> record</p>
  
   <pre>#cql_query{
-      query :: binary(),
+      statement :: binary(),
       reusable :: boolean(),
       consistency :: consistency_level(),
       named :: boolean(),
@@ -162,17 +212,18 @@
   later executions of the <strong>same query</strong> to be performed faster. This parameter is <code>true</code> by default when you provide bindings in the query (positional <code>?</code>
   parameters or named <code>:var</code> parameters), and <code>false</code> by default when you don't. You can override the defaults.</p>
  
-  <p><em>Consistency</em> one of constants defined in <code>cqerl.hrl</code>, namely <code>?CQERL_CONSISTENCY_[Const]</code> where <code>Const</code> can be <code>ANY</code>, <code>ONE</code>,
-  <code>TWO</code>, <code>THREE</code>, <code>QUORUM</code>, <code>ALL</code>, <code>LOCAL_QUORUM</code>, <code>EACH_QUORUM</code>, <code>SERIAL</code>,
-  <code>LOCAL_SERIAL</code> or <code>LOCAL_ONE</code>.</p>
+  <p><em>Consistency</em> is represented as an atom and can be any of <code>any</code>, <code>one</code>,
+  <code>two</code>, <code>three</code>, <code>quorum</code>, <code>all</code>, <code>local_quorum</code>, <code>each_quorum</code>, <code>serial</code>,
+  <code>local_serial</code> or <code>local_one</code>.</p>
  
-  How <em>bindings</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
-  they are assumed to be positional (<code>?</code>). In the first case, <em>bindings</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) where keys match the
-  parameter names. In the latter case, <em>bindings</em> should be a simple list of values.</p>
+  How <em>values</em> is used depends on the <em>named</em> value. <em>Named</em> is a boolean value indicating whether the parameters in the query are named parameters (<code>:var1</code>). Otherwise,
+  they are assumed to be positional (<code>?</code>). In both cases, <em>values</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) or map, where keys match the
+  parameter names.</p>
 
 <h3 class="function"><a name="send_query-2">send_query/2</a></h3>
 <div class="spec">
-<p><tt>send_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{}) -&gt; reference()</tt><br></p>
+<p><tt>send_query(ClientRef::<a href="#type-client">client()</a>, Query::binary() | string() | #cql_query{} | #cql_query_batch{}) -&gt; reference()</tt><br></p>
+<p> </p>
 </div><p><p>Send a query to be executed asynchronously. This method returns immediately with a unique tag.</p>
  
   <p>When a successful response is received from cassandra, a <code>{result, Tag, Result :: #cql_result{}}</code>  
@@ -186,25 +237,29 @@ message is sent to the calling process.</p>
 <h3 class="function"><a name="size-1">size/1</a></h3>
 <div class="spec">
 <p><tt>size(Cql_result) -&gt; any()</tt></p>
+<p> </p>
 </div><p>The number of rows in a result set</p>
 
 <h3 class="function"><a name="start_link-0">start_link/0</a></h3>
 <div class="spec">
 <p><tt>start_link() -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="tail-1">tail/1</a></h3>
 <div class="spec">
 <p><tt>tail(Cql_result) -&gt; any()</tt></p>
+<p> </p>
 </div><p>Returns all rows of result, except the first one</p>
 
 <h3 class="function"><a name="terminate-2">terminate/2</a></h3>
 <div class="spec">
 <p><tt>terminate(Reason, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Nov 26 2013, 09:49:06.</i></p>
+<p><i>Generated by EDoc</i></p>
 </body>
 </html>

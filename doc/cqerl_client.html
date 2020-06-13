@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>Module cqerl_client</title>
 <link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
@@ -12,28 +12,23 @@
 <h1>Module cqerl_client</h1>
 <ul class="index"><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
 
-<p><b>Behaviours:</b> <a href="gen_fsm.html"><tt>gen_fsm</tt></a>.</p>
+<p><b>Behaviours:</b> <a href="gen_statem.html"><tt>gen_statem</tt></a>.</p>
 
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#batch_ready-2">batch_ready/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#callback_mode-0">callback_mode/0</a></td><td></td></tr>
 <tr><td valign="top"><a href="#code_change-4">code_change/4</a></td><td></td></tr>
 <tr><td valign="top"><a href="#fetch_more-1">fetch_more/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#fetch_more_async-1">fetch_more_async/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#handle_event-3">handle_event/3</a></td><td></td></tr>
-<tr><td valign="top"><a href="#handle_info-3">handle_info/3</a></td><td></td></tr>
-<tr><td valign="top"><a href="#handle_sync_event-4">handle_sync_event/4</a></td><td></td></tr>
 <tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#live-2">live/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#live-3">live/3</a></td><td></td></tr>
-<tr><td valign="top"><a href="#new_user-2">new_user/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#make_key-2">make_key/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#prepare_query-2">prepare_query/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#query-2">query/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#query_async-2">query_async/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#remove_user-1">remove_user/1</a></td><td></td></tr>
-<tr><td valign="top"><a href="#sleep-2">sleep/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#run_query-2">run_query/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#sleep-3">sleep/3</a></td><td></td></tr>
-<tr><td valign="top"><a href="#start_link-2">start_link/2</a></td><td></td></tr>
-<tr><td valign="top"><a href="#starting-2">starting/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start_link-3">start_link/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start_link-4">start_link/4</a></td><td></td></tr>
 <tr><td valign="top"><a href="#starting-3">starting/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#terminate-3">terminate/3</a></td><td></td></tr>
 </table>
@@ -42,111 +37,102 @@
 
 <h3 class="function"><a name="batch_ready-2">batch_ready/2</a></h3>
 <div class="spec">
-<p><tt>batch_ready(ClientPid, QueryBatch) -&gt; any()</tt></p>
+<p><tt>batch_ready(X1, QueryBatch) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="callback_mode-0">callback_mode/0</a></h3>
+<div class="spec">
+<p><tt>callback_mode() -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="code_change-4">code_change/4</a></h3>
 <div class="spec">
 <p><tt>code_change(OldVsn, StateName, State, Extra) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="fetch_more-1">fetch_more/1</a></h3>
 <div class="spec">
 <p><tt>fetch_more(Continuation) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="fetch_more_async-1">fetch_more_async/1</a></h3>
 <div class="spec">
 <p><tt>fetch_more_async(Continuation) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="handle_event-3">handle_event/3</a></h3>
-<div class="spec">
-<p><tt>handle_event(Event, StateName, State) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="handle_info-3">handle_info/3</a></h3>
-<div class="spec">
-<p><tt>handle_info(Info, StateName, State) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="handle_sync_event-4">handle_sync_event/4</a></h3>
-<div class="spec">
-<p><tt>handle_sync_event(Event, From, StateName, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="init-1">init/1</a></h3>
 <div class="spec">
 <p><tt>init(X1) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="live-2">live/2</a></h3>
-<div class="spec">
-<p><tt>live(Event, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="live-3">live/3</a></h3>
 <div class="spec">
-<p><tt>live(Event, From, State) -&gt; any()</tt></p>
+<p><tt>live(X1, Event, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="new_user-2">new_user/2</a></h3>
+<h3 class="function"><a name="make_key-2">make_key/2</a></h3>
 <div class="spec">
-<p><tt>new_user(Pid, From) -&gt; any()</tt></p>
+<p><tt>make_key(Node, Opts) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="prepare_query-2">prepare_query/2</a></h3>
 <div class="spec">
 <p><tt>prepare_query(ClientPid, Query) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="query-2">query/2</a></h3>
-<div class="spec">
-<p><tt>query(X1, Query) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="query_async-2">query_async/2</a></h3>
 <div class="spec">
 <p><tt>query_async(Client, Query) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="remove_user-1">remove_user/1</a></h3>
+<h3 class="function"><a name="run_query-2">run_query/2</a></h3>
 <div class="spec">
-<p><tt>remove_user(X1) -&gt; any()</tt></p>
-</div>
-
-<h3 class="function"><a name="sleep-2">sleep/2</a></h3>
-<div class="spec">
-<p><tt>sleep(Event, State) -&gt; any()</tt></p>
+<p><tt>run_query(Client, Query) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="sleep-3">sleep/3</a></h3>
 <div class="spec">
-<p><tt>sleep(Event, From, State) -&gt; any()</tt></p>
+<p><tt>sleep(X1, Event, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="start_link-2">start_link/2</a></h3>
+<h3 class="function"><a name="start_link-3">start_link/3</a></h3>
 <div class="spec">
-<p><tt>start_link(Inet, Opts) -&gt; any()</tt></p>
+<p><tt>start_link(Inet, Opts, OptGetter) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
-<h3 class="function"><a name="starting-2">starting/2</a></h3>
+<h3 class="function"><a name="start_link-4">start_link/4</a></h3>
 <div class="spec">
-<p><tt>starting(Event, State) -&gt; any()</tt></p>
+<p><tt>start_link(Inet, Opts, OptGetter, Key) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="starting-3">starting/3</a></h3>
 <div class="spec">
-<p><tt>starting(Event, From, State) -&gt; any()</tt></p>
+<p><tt>starting(X1, Event, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 
 <h3 class="function"><a name="terminate-3">terminate/3</a></h3>
 <div class="spec">
 <p><tt>terminate(Reason, X2, State) -&gt; any()</tt></p>
+<p> </p>
 </div>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Nov 26 2013, 09:49:06.</i></p>
+<p><i>Generated by EDoc</i></p>
 </body>
 </html>
