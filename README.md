@@ -40,12 +40,12 @@ If you installed cassandra and didn't change any configuration related to authen
 
 You do not need to close the connection after you've finished using it.
 
-1. The first argument to `cqerl:get_client/2,1` or `cqerl:new_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
+1. The first argument to `cqerl:get_client/2,1` is the node to which you wish to connect as `{Ip, Port}`. If empty, it defaults to `{"127.0.0.1", 9042}`, and `Ip` can be given as a string, or as a tuple of components, either IPv4 or IPv6.
 
     - If the default port is used, you can provide just the IP address as the first argument, either as a tuple, list or binary.
     - If both the default port and localhost are used, you can just provide an empty tuple as the first argument.
 
-2. The second possible argument (when using `cqerl:get_client/2` or `cqerl:new_client/2`) is a list of options, that include:
+2. The second possible argument (when using `cqerl:get_client/2`) is a list of options, that include:
 
     - `keyspace` which determines in which keyspace all subsequent requests operate, on that connection.
     - `auth` (mentionned below)
