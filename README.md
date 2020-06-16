@@ -52,10 +52,6 @@ You do not need to close the connection after you've finished using it.
     - `ssl` (which is `false` by default, but can be set to a list of SSL options) and `keyspace` (string or binary). 
     - `protocol_version` to [connect to older Cassandra instances](#connecting-to-older-cassandra-instances).
 
-    Other options include `pool_max_size`, `pool_min_size`, and `pool_cull_interval` which are used to configure [pooler][1] (see its documentation to understand those options)
-
-
-
     If you've set simple username/password authentication scheme on Cassandra, you can provide those to CQErl
 
     ```erlang
