@@ -362,12 +362,12 @@ encode_data({date, Date={_Year, _Month, _Day}}, _Query) ->
     ThisDayCount = calendar:date_to_gregorian_days(Date) - RefDayCount + trunc(math:pow(2, 31)),
     << ThisDayCount:32/big-unsigned-integer >>;
 
-encode_data({TextType, Val}, _Query) when TextType == text orelse TextType == varchar ->
+encode_data({TextType, Val}, _Query) when TextType == ascii; TextType == text; TextType == varchar ->
     Res = if  
         is_binary(Val) -> 
             Val;
         is_list(Val) -> 
-            list_to_binary(Val);
+            unicode:characters_to_binary(Val);
         is_atom(Val) -> 
             atom_to_binary(Val, utf8);
         true ->
@@ -530,9 +530,13 @@ decode_data({date, 4, Bin}, _Opts) ->
     Date = calendar:gregorian_days_to_date(GregorianDays),
     {Date, Rest};
 
-decode_data({TextType, Size, Bin}, _Opts) when TextType == ascii orelse
-                                        TextType == varchar ->
+decode_data({TextType, Size, Bin}, _Opts) when TextType == ascii ->
     << Text:Size/binary, Rest/binary >> = Bin,
+    {Text, Rest};
+
+decode_data({TextType, Size, Bin}, _Opts) when TextType == varchar; TextType == text ->
+    << TextBin:Size/binary, Rest/binary >> = Bin,
+    Text = unicode:characters_to_list(TextBin),
     {Text, Rest};
 
 decode_data({blob, Size, Bin}, _Opts) when Size < 0 ->
