@@ -733,7 +733,7 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     send_to_db(State, Frame),
     {starting, State}.
 
-switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
+switch_to_live_state(State=#client_state{keyspace=Keyspace,
                                          inet=Inet, key=Key}) ->
     signal_alive(Inet, Keyspace),
     cqerl_hash:client_started(Key),
@@ -742,8 +742,7 @@ switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(),
         queries=Queries,
-        available_slots = orddict:fetch_keys(Queries),
-        users=undefined
+        available_slots = orddict:fetch_keys(Queries)
     },
     State1.
 
