@@ -733,7 +733,7 @@ maybe_set_keyspace(State=#client_state{keyspace=Keyspace}) ->
     send_to_db(State, Frame),
     {starting, State}.
 
-switch_to_live_state(State=#client_state{users=Users, keyspace=Keyspace,
+switch_to_live_state(State=#client_state{users=_Users, keyspace=Keyspace,
                                          inet=Inet, key=Key}) ->
     signal_alive(Inet, Keyspace),
     cqerl_hash:client_started(Key),

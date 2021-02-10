@@ -372,6 +372,8 @@ varchar               | **binary**, string
 varint                | **integer** (arbitrary precision)
 timeuuid              | **binary**, `now`
 inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
+list                  | **list**
+set                   | **set**
 
 
 ### Connecting to older Cassandra instances
