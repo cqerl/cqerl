@@ -536,7 +536,7 @@ decode_data({TextType, Size, Bin}, _Opts) when TextType == ascii ->
 
 decode_data({TextType, Size, Bin}, _Opts) when TextType == varchar; TextType == text ->
     << TextBin:Size/binary, Rest/binary >> = Bin,
-    Text = unicode:characters_to_list(TextBin),
+    Text = unicode:characters_to_binary(TextBin),
     {Text, Rest};
 
 decode_data({blob, Size, Bin}, _Opts) when Size < 0 ->
