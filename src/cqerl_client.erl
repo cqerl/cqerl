@@ -742,8 +742,7 @@ switch_to_live_state(State=#client_state{keyspace=Keyspace,
         authstate=undefined, authargs=undefined, delayed = <<>>,
         queued=queue:new(),
         queries=Queries,
-        available_slots = orddict:fetch_keys(Queries),
-        users=undefined
+        available_slots = orddict:fetch_keys(Queries)
     },
     State1.
 

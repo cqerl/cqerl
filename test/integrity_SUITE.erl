@@ -754,7 +754,7 @@ varint_test_ranges() ->
               {-100000000000000000000000000000000000000000000111,
                -100000000000000000000000000000000000000000000005}
              ],
-    lists:flatten([lists:seq(L, H) || {L, H} <- Ranges]).
+    lists:flatten([[L, H] || {L, H} <- Ranges]).
 
 check_extract_varints(Rows) ->
     Ints = [proplists:get_value(key, Row) || Row <- Rows],
@@ -779,6 +779,7 @@ decimal_type(Config) ->
                  VALUES (?, ?, ?)",
 
     TestVals = decimal_test_ranges(),
+    ct:log("Inserting : ~p~n", [TestVals]),
     lists:foreach(fun({U, S}) ->
       {ok, void} =
       cqerl:run_query(Client,
