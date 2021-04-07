@@ -1,0 +1,6 @@
+[
+{ "file"      : "c_src/re2_nif.cc"
+, "directory" : "/home/portasynthinca3/cqerl/_build/default/lib/re2"
+, "command"   : "c++ -c -g -Wall -fPIC -MMD -I\"/usr/lib64/erlang/lib/erl_interface-3.12/include\" -I\"/usr/lib64/erlang/erts-10.4.4/include\" -std=c++11 -Wall -Wextra -Wpedantic -O3 -Ic_src/re2 c_src/re2_nif.cc -o c_src/re2_nif.o"
+}
+]
