@@ -54,6 +54,8 @@
 -opaque client() :: {pid(), reference()}.
 
 -type inet() :: { inet:ip_address() | string(), Port :: integer() } | inet:ip_address() | string() | binary() | {}.
+-type cas_query() :: binary() | string() | #cql_query{} | #cql_query_batch{}.
+-type response() :: {ok, void} | {ok, #cql_result{}} | {error, term()} | {set_keyspace, binary()}.
 
 -export_type([client/0, inet/0]).
 
@@ -134,11 +136,11 @@ get_client(Spec, Opts) ->
 %% they are assumed to be positional (<code>?</code>). In both cases, <em>values</em> is a property list (see <a href="http://www.erlang.org/doc/man/proplists.html">proplists</a>) or map, where keys match the
 %% parameter names.
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+-spec run_query(ClientRef :: client(), Query :: cas_query()) -> response().
 run_query(ClientRef, Query) ->
     run_query(ClientRef, Query, ?DEFAULT_QUERY_RETRY).
 
--spec run_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}, non_neg_integer()) -> {ok, void} | {ok, #cql_result{}} | {error, term()}.
+-spec run_query(ClientRef :: client(), Query :: cas_query(), non_neg_integer()) -> response().
 run_query(ClientRef, Query, Retry) when Retry =< 0->
     cqerl_client:run_query(ClientRef, Query);
 
@@ -186,7 +188,7 @@ fetch_more(Continuation) ->
 %% Neither of these messages will be sent if the connection is dropped before receiving a response (see {@link new_client/0} for
 %% how to handle this case).
 
--spec send_query(ClientRef :: client(), Query :: binary() | string() | #cql_query{} | #cql_query_batch{}) -> reference().
+-spec send_query(ClientRef :: client(), Query :: cas_query()) -> reference().
 send_query(ClientRef, Query) ->
     cqerl_client:query_async(ClientRef, Query).
 

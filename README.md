@@ -362,17 +362,26 @@ bigint                | **integer** (signed 64-bit)
 blob                  | **binary**
 boolean               | `true`, `false`
 counter               | **integer** (signed 64-bit)
+date                  | **calendar:date()**
 decimal               | `{Unscaled :: integer(), Scale :: integer()}`
 double                | **float** (signed 64-bit)
 float                 | **float** (signed 32-bit)
+`frozen<thing>`       | same as **`<thing>`**
 int                   | **integer** (signed 32-bit)
+time                  | **integer** (milliseconds, signed 64-bit), `now`, [binary or string][6]
 timestamp             | **integer** (milliseconds, signed 64-bit), `now`, [binary or string][6]
+UDTs                  | **proplist** or **map** depending on the `maps` option
 uuid                  | **binary**, `new`
 varchar               | **binary**, string
 varint                | **integer** (arbitrary precision)
 timeuuid              | **binary**, `now`
 inet                  | `{X1, X2, X3, X4}` (IPv4), `{Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8}` (IPv6), string or binary
-
+list                  | **list**
+map                   | **proplist** or **map** depending on the `maps` option
+set                   | **list**
+smallint              | **integer**
+text                  | **binary**, string
+tinyint               | **integer**
 
 ### Connecting to older Cassandra instances
 

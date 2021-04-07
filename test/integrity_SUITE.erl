@@ -359,15 +359,11 @@ async_insertion_roundtrip(Config) ->
     }),
     receive {result, Ref, void} -> ok end,
     
-    Ref2 = cqerl:send_query(Client, #cql_query{statement = <<"SELECT * FROM entries1;">>}),
+    Ref2 = cqerl:send_query(Client, #cql_query{statement = <<"SELECT * FROM entries1 WHERE id='1234123'">>}),
     receive
         {result, Ref2, Result=#cql_result{}} ->
-            {_Row, Result2} = cqerl:next(Result),
-            Row = cqerl:head(Result2),
-            <<"1234123">> = proplists:get_value(id, Row),
-            45 = proplists:get_value(age, Row),
-            <<"yvon@damours.org">> = proplists:get_value(email, Row),
-            Res = Row;
+            Res=[{id, <<"1234123">>}, {age, 45}, {email, <<"yvon@damours.org">>}]
+                = cqerl:head(Result);
             
         Other ->
             Res = undefined,
