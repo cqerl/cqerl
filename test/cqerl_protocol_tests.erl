@@ -37,7 +37,9 @@ query_consistency_level_encoding_test() ->
     assert_query_consistency(?CQERL_CONSISTENCY_ALL,          all),
     assert_query_consistency(?CQERL_CONSISTENCY_LOCAL_QUORUM, local_quorum),
     assert_query_consistency(?CQERL_CONSISTENCY_EACH_QUORUM,  each_quorum),
-    assert_query_consistency(?CQERL_CONSISTENCY_LOCAL_ONE,    local_one).
+    assert_query_consistency(?CQERL_CONSISTENCY_LOCAL_ONE,    local_one),
+    assert_query_consistency(?CQERL_CONSISTENCY_LOCAL_SERIAL, local_serial),
+    assert_query_consistency(?CQERL_CONSISTENCY_SERIAL,       serial).
 
 query_serial_consistency_encoding_test() ->
     assert_query_serial_consistency(0,                               undefined),
@@ -53,7 +55,9 @@ batch_consistency_level_encoding_test() ->
     assert_batch_consistency(?CQERL_CONSISTENCY_ALL,          all),
     assert_batch_consistency(?CQERL_CONSISTENCY_LOCAL_QUORUM, local_quorum),
     assert_batch_consistency(?CQERL_CONSISTENCY_EACH_QUORUM,  each_quorum),
-    assert_batch_consistency(?CQERL_CONSISTENCY_LOCAL_ONE,    local_one).
+    assert_batch_consistency(?CQERL_CONSISTENCY_LOCAL_ONE,    local_one),
+    assert_batch_consistency(?CQERL_CONSISTENCY_LOCAL_SERIAL, local_serial),
+    assert_batch_consistency(?CQERL_CONSISTENCY_SERIAL,       serial).
 
 batch_mode_encoding_test() ->
     assert_batch_mode(?CQERL_BATCH_COUNTER,  counter),

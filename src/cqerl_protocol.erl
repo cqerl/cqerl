@@ -52,7 +52,9 @@ encode_consistency_name(quorum)       -> ?CQERL_CONSISTENCY_QUORUM;
 encode_consistency_name(all)          -> ?CQERL_CONSISTENCY_ALL;
 encode_consistency_name(local_quorum) -> ?CQERL_CONSISTENCY_LOCAL_QUORUM;
 encode_consistency_name(each_quorum)  -> ?CQERL_CONSISTENCY_EACH_QUORUM;
-encode_consistency_name(local_one)    -> ?CQERL_CONSISTENCY_LOCAL_ONE.
+encode_consistency_name(local_one)    -> ?CQERL_CONSISTENCY_LOCAL_ONE;
+encode_consistency_name(local_serial) -> ?CQERL_CONSISTENCY_LOCAL_SERIAL;
+encode_consistency_name(serial)       -> ?CQERL_CONSISTENCY_SERIAL.
 
 -spec encode_serial_consistency_name(serial_consistency() | serial_consistency_int() | undefined) -> 0 | serial_consistency_int().
 encode_serial_consistency_name(Name) when is_integer(Name) -> Name;
