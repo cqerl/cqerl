@@ -1,6 +1,6 @@
 [
 { "file"      : "c_src/re2_nif.cc"
-, "directory" : "/home/portasynthinca3/cqerl/_build/default/lib/re2"
-, "command"   : "c++ -c -g -Wall -fPIC -MMD -I\"/usr/lib64/erlang/lib/erl_interface-3.12/include\" -I\"/usr/lib64/erlang/erts-10.4.4/include\" -std=c++11 -Wall -Wextra -Wpedantic -O3 -Ic_src/re2 c_src/re2_nif.cc -o c_src/re2_nif.o"
+, "directory" : "/mnt/f/work/code/cqerl/_build/default/lib/re2"
+, "command"   : "c++ -c -g -Wall -fPIC -MMD -I\"/home/kyle/.asdf/installs/erlang/26.2.5.4/lib/erl_interface-5.5.1/include\" -I\"/home/kyle/.asdf/installs/erlang/26.2.5.4/erts-14.2.5.4/include\" -std=c++11 -Wall -Wextra -Wpedantic -O3 -Ic_src/re2 c_src/re2_nif.cc -o c_src/re2_nif.o"
 }
 ]
